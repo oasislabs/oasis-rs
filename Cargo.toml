@@ -1,0 +1,20 @@
+[package]
+name = "owasm-std"
+version = "0.20.0"
+license = "MIT/Apache-2.0"
+description = "A standard library for interacting with the Oasis platform."
+repository = "https://github.com/oasislabs/owasm-std.git"
+authors = ["Oasis Labs <info@oasislabs.com>"]
+edition = "2018"
+readme = "README.md"
+keywords = ["oasis", "owasm"]
+categories = ["os", "wasm"]
+
+[dependencies]
+fixed-hash = { version = "0.3.0", default-features = false }
+serde = "1.0.87"
+serde_derive = "1.0.87"
+uint = { version = "0.6.1", default-features = false }
+
+[features]
+platform-alloc = []

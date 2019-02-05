@@ -1,0 +1,3 @@
+[dependencies]
+core = {}
+std = { stage = 1, features = ["wasm_syscall"] }

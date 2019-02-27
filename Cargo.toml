@@ -13,7 +13,7 @@ categories = ["os", "wasm"]
 [dependencies]
 failure = "0.1"
 fixed-hash = { version = "0.3", default-features = false }
-owasm-abi-derive = { version = "0.3.0", path = "abi_derive" }
+owasm-abi-derive = { version = "0.4.0", path = "abi_derive" }
 serde = "1.0"
 serde_derive = "1.0"
 uint = { version = "0.6", default-features = false }

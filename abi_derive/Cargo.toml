@@ -1,6 +1,6 @@
 [package]
 name = "owasm-abi-derive"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["NikVolf <nikvolf@gmail.com>", "Alexey Frolov <alexey@parity.io>"]
 license = "MIT/Apache-2.0"
 readme = "README.md"

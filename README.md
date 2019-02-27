@@ -1,4 +1,4 @@
-# owasm-std
+# oasis-std
 
 A crate of utilities for developing programs for the Oasis platform.
 
@@ -9,7 +9,7 @@ Compile using `--target=wasm32-unknown-unknown` to use Rust implementaitons for 
 
 ## Usage
 
-1. Add `oasis = { git = "https://github.com/oasislabs/oasis-rs" }` to your contract's Cargo.toml.
+1. Add `oasis-std = "0.1"` to your contract's Cargo.toml.
    Pass `features = ["platform-alloc"]` to use the Oasis platform allocator.
 2. Copy `Xargo.toml` to your contract crate root
 3. `xargo build --target=wasm32-unknown-unknown`

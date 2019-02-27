@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
-use oasis_std::abi::EndpointInterface;
-use owasm_abi_derive::eth_abi;
+use oasis_std::{abi::EndpointInterface, derive::eth_abi};
 
 #[eth_abi(DoubleArrayEndpoint, DoubleArrayClient)]
 pub trait DoubleArrayContract {

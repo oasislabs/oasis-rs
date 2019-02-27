@@ -1,4 +1,4 @@
-#[owasm_abi_derive::contract]
+#[oasis_std::contract]
 trait TestContract {
     fn constructor(&mut self) {}
 

@@ -1,8 +1,8 @@
 use oasis_std::{
     abi::EndpointInterface,
+    derive::eth_abi,
     types::{Address, U256},
 };
-use owasm_abi_derive::eth_abi;
 
 #[eth_abi(TestEndpoint, Client)]
 pub trait TestContract {
@@ -153,9 +153,7 @@ fn boo_dispatch() {
 
 #[allow(dead_code)]
 mod contract {
-    use owasm_abi_derive::eth_abi;
-
-    #[eth_abi(EmptyEndpoint, _EmptyClient)]
+    #[oasis_std::derive::eth_abi(EmptyEndpoint, _EmptyClient)]
     trait EmptyContract {
         fn constructor(&mut self, _p: bool);
     }

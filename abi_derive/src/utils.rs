@@ -1,4 +1,3 @@
-use oasis_std::types::H256;
 use tiny_keccak::Keccak;
 
 pub struct SignatureIterator<'a> {
@@ -184,11 +183,11 @@ pub fn canonicalize_fn(name: &syn::Ident, method_sig: &syn::MethodSig) -> String
 }
 
 /// Returns the Keccak hash (256-bits) of the given byte slice.
-pub fn keccak(bytes: &[u8]) -> H256 {
+pub fn keccak(bytes: &[u8]) -> [u8; 32] {
     let mut keccak = Keccak::new_keccak256();
-    let mut res = H256::zero();
+    let mut res = [0; 32];
     keccak.update(bytes);
-    keccak.finalize(res.as_mut());
+    keccak.finalize(&mut res);
     res
 }
 

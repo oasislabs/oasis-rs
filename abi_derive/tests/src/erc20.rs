@@ -2,10 +2,12 @@ mod contract {
     #![allow(non_snake_case)]
     #![allow(dead_code)]
 
-    use oasis_std::types::{Address, U256};
-    use owasm_abi_derive::eth_abi;
-
     use std::collections::HashMap;
+
+    use oasis_std::{
+        derive::eth_abi,
+        types::{Address, U256},
+    };
 
     #[eth_abi(Endpoint, Client)]
     pub trait TokenContract {

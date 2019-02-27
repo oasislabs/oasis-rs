@@ -1,9 +1,6 @@
 #![allow(dead_code)]
-// Minimal interface test/example
 
-use owasm_abi_derive::eth_abi;
-
-#[eth_abi(Endpoint, Client)]
+#[oasis_std::derive::eth_abi(Endpoint, Client)]
 pub trait Contract {
     fn constructor(&mut self, _p: bool);
     fn sam(&mut self, _p1: Vec<u8>) -> u32;

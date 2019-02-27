@@ -12,7 +12,6 @@ categories = ["no-std", "embedded"]
 edition = "2018"
 
 [dependencies]
-oasis-std = { version = "0.1.0", path = ".." }
 proc-macro2 = "0.4"
 quote = "0.6"
 serde = "1.0"

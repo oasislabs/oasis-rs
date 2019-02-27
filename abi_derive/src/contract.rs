@@ -13,10 +13,12 @@ pub fn contract(
     let method_impls = contract.method_impls;
 
     proc_macro::TokenStream::from(quote! {
-      use oasis_std::prelude::*;
-      use oasis_std::abi::EndpointInterface;
+      use oasis_std::{
+          abi::EndpointInterface,
+          prelude::*,
+      };
 
-      #[owasm_abi_derive::eth_abi(#contract_ep, #contract_client)]
+      #[oasis_std::derive::eth_abi(#contract_ep, #contract_client)]
       pub trait #trait_name {
         #(#method_sigs)*
       }

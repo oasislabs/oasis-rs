@@ -47,6 +47,7 @@ mod eth {
             code_len: u32,
             result_ptr: *mut u8,
         ) -> i32;
+        #[cfg(feature = "create2")]
         pub fn create2(
             endowment: *const u8,
             salt: *const u8,
@@ -115,6 +116,7 @@ pub fn create(endowment: U256, code: &[u8]) -> Result<Address, ExtCallError> {
 
 /// Create a new account with the given code and salt.
 /// Returns an error if the contract constructor failed.
+#[cfg(feature = "create2")]
 pub fn create2(endowment: U256, salt: H256, code: &[u8]) -> Result<Address, ExtCallError> {
     let mut endowment_arr = [0u8; 32];
     endowment.to_big_endian(&mut endowment_arr);

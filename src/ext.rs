@@ -1,10 +1,6 @@
 //! Safe wrappers around interpreter intrinsics.
 
-use crate::types::*;
-
-/// Generic wasm error
-#[derive(Debug)]
-pub struct Error;
+use crate::{errors::ExtCallError, types::*};
 
 mod eth {
     extern "C" {
@@ -97,13 +93,8 @@ pub fn balance(address: &Address) -> U256 {
 }
 
 /// Create a new account with the given code
-///
-/// # Errors
-///
-/// Returns [`Error`] in case contract constructor failed.
-///
-/// [`Error`]: struct.Error.html
-pub fn create(endowment: U256, code: &[u8]) -> Result<Address, Error> {
+/// Returns an error if the contract constructor failed.
+pub fn create(endowment: U256, code: &[u8]) -> Result<Address, ExtCallError> {
     let mut endowment_arr = [0u8; 32];
     endowment.to_big_endian(&mut endowment_arr);
     let mut result = Address::zero();
@@ -117,19 +108,14 @@ pub fn create(endowment: U256, code: &[u8]) -> Result<Address, Error> {
         {
             Ok(result)
         } else {
-            Err(Error)
+            Err(ExtCallError)
         }
     }
 }
 
 /// Create a new account with the given code and salt.
-///
-/// # Errors
-///
-/// Returns [`Error`] in case contract constructor failed.
-///
-/// [`Error`]: struct.Error.html
-pub fn create2(endowment: U256, salt: H256, code: &[u8]) -> Result<Address, Error> {
+/// Returns an error if the contract constructor failed.
+pub fn create2(endowment: U256, salt: H256, code: &[u8]) -> Result<Address, ExtCallError> {
     let mut endowment_arr = [0u8; 32];
     endowment.to_big_endian(&mut endowment_arr);
     let mut result = Address::zero();
@@ -144,31 +130,26 @@ pub fn create2(endowment: U256, salt: H256, code: &[u8]) -> Result<Address, Erro
         {
             Ok(result)
         } else {
-            Err(Error)
+            Err(ExtCallError)
         }
     }
 }
 
-///	Message-call into an account
+/// Message-call into an account
 ///
-///	# Arguments:
-///	* `gas`- a gas limit for a call. A call execution will halt if call exceed this amount
+///  # Arguments:
+/// * `gas`- a gas limit for a call. A call execution will halt if call exceed this amount
 /// * `address` - an address of contract to send a call
 /// * `value` - a value in Wei to send with a call
 /// * `input` - a data to send with a call
 /// * `result` - a mutable reference to be filled with a result data
-///
-///	# Returns:
-///
-/// Call is succeed if it returns `Result::Ok(())`
-/// If call returns `Result::Err(Error)` it means tha call was failed due to execution halting
 pub fn call(
     gas: u64,
     address: &Address,
     value: U256,
     input: &[u8],
     result: &mut [u8],
-) -> Result<(), Error> {
+) -> Result<(), ExtCallError> {
     let mut value_arr = [0u8; 32];
     value.to_big_endian(&mut value_arr);
     unsafe {
@@ -184,23 +165,21 @@ pub fn call(
         {
             Ok(())
         } else {
-            Err(Error)
+            Err(ExtCallError)
         }
     }
 }
 
-/// Like [`call`], but with code at the given `address`
+/// Like `call`, but with code at the given `address`
 ///
 /// Effectively this function is like calling current account but with
 /// different code (i.e. like `DELEGATECALL` EVM instruction).
-///
-/// [`call`]: fn.call.html
 pub fn call_code(
     gas: u64,
     address: &Address,
     input: &[u8],
     result: &mut [u8],
-) -> Result<(), Error> {
+) -> Result<(), ExtCallError> {
     unsafe {
         if eth::dcall(
             gas as i64,
@@ -213,22 +192,19 @@ pub fn call_code(
         {
             Ok(())
         } else {
-            Err(Error)
+            Err(ExtCallError)
         }
     }
 }
 
-/// Like [`call`], but this call and any of it's subcalls are disallowed to modify any storage.
-///
+/// Like `call`, but this call and any of it's subcalls are disallowed to modify any storage.
 /// It will return an error in this case.
-///
-/// [`call`]: fn.call.html
 pub fn static_call(
     gas: u64,
     address: &Address,
     input: &[u8],
     result: &mut [u8],
-) -> Result<(), Error> {
+) -> Result<(), ExtCallError> {
     unsafe {
         if eth::scall(
             gas as i64,
@@ -241,7 +217,7 @@ pub fn static_call(
         {
             Ok(())
         } else {
-            Err(Error)
+            Err(ExtCallError)
         }
     }
 }
@@ -295,7 +271,7 @@ pub fn gas_left() -> u64 {
 /// Get caller address
 ///
 /// This is the address of the account that is directly responsible for this execution.
-/// Use [`origin`] to get an address of external account - an original initiator of a transaction
+/// Use `origin` to get an address of external account - an original initiator of a transaction
 pub fn sender() -> Address {
     unsafe { fetch_address(|x| eth::sender(x)) }
 }
@@ -318,12 +294,9 @@ pub fn address() -> Address {
     unsafe { fetch_address(|x| eth::address(x)) }
 }
 
-/// Creates log entry with given topics and data.
-///
-/// There could be only up to 4 topics.
+/// Creates log entry with up to four topics and data.
 ///
 /// # Panics
-///
 /// If `topics` contains more than 4 elements then this function will trap.
 pub fn log(topics: &[H256], data: &[u8]) {
     unsafe {
@@ -336,9 +309,8 @@ pub fn log(topics: &[H256], data: &[u8]) {
     }
 }
 
-/// Allocates and requests [`call`] arguments (input)
-///
-/// Input data comes either with external transaction or from [`call`] input value.
+/// Allocates and requests `call` arguments (input)
+/// Input data comes either with external transaction or from `call` input value.
 pub fn input() -> Vec<u8> {
     let len = unsafe { eth::input_length() };
 
@@ -355,10 +327,8 @@ pub fn input() -> Vec<u8> {
     }
 }
 
-/// Sets a [`call`] return value
-///
+/// Sets a `call` return value
 /// Pass return data to the runtime. Runtime SHOULD trap the execution.
-///
 pub fn ret(data: &[u8]) -> ! {
     unsafe {
         eth::ret(data.as_ptr(), data.len() as u32);

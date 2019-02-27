@@ -1,10 +1,13 @@
 #[macro_use]
+extern crate failure;
+#[macro_use]
 extern crate fixed_hash;
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate uint;
 
+pub mod errors;
 pub mod ext;
 pub mod types;
 
@@ -12,5 +15,5 @@ pub mod types;
 include!("alloc.rs");
 
 pub mod prelude {
-    pub use crate::{ext::*, types::*};
+    pub use crate::{errors::*, ext::*, types::*};
 }

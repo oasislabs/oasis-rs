@@ -10,7 +10,7 @@ mod stream;
 mod tests;
 mod util;
 
-pub use self::{sink::Sink, stream::Stream};
+pub use self::{log::AsLog, sink::Sink, stream::Stream};
 use crate::errors::AbiError;
 
 /// Abi type trait

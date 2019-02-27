@@ -1,9 +1,9 @@
 [package]
-name = "owasm-std"
-version = "0.20.1"
+name = "oasis-std"
+version = "0.1.0"
 license = "MIT/Apache-2.0"
 description = "A standard library for interacting with the Oasis platform."
-repository = "https://github.com/oasislabs/owasm-std.git"
+repository = "https://github.com/oasislabs/oasis-std.git"
 authors = ["Oasis Labs <info@oasislabs.com>"]
 edition = "2018"
 readme = "README.md"
@@ -11,11 +11,14 @@ keywords = ["oasis", "owasm"]
 categories = ["os", "wasm"]
 
 [dependencies]
-failure = "0.1.5"
-fixed-hash = { version = "0.3.0", default-features = false }
-serde = "1.0.88"
-serde_derive = "1.0.88"
-uint = { version = "0.6.1", default-features = false }
+failure = "0.1"
+fixed-hash = { version = "0.3", default-features = false }
+serde = "1.0"
+serde_derive = "1.0"
+uint = { version = "0.6", default-features = false }
+
+[workspace]
+members = [".", "abi_derive", "abi_derive/tests"]
 
 [features]
 platform-alloc = []

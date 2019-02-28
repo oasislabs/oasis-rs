@@ -70,10 +70,19 @@ mod eth {
     }
 }
 
-extern "C" {
-    // oasis platform functions
-    fn storage_read(key: *const u8, dst: *mut u8);
-    fn storage_write(key: *const u8, src: *const u8);
+mod oasis {
+    extern "C" {
+        // oasis platform functions
+        pub fn storage_read(key: *const u8, dst: *mut u8);
+        pub fn storage_write(key: *const u8, src: *const u8);
+
+        // Key must be 32 bytes.
+        pub fn get_bytes(key: *const u8, result: *mut u8);
+        // Key must be 32 bytes.
+        pub fn get_bytes_len(key: *const u8) -> u64;
+        // Key must be 32 bytes.
+        pub fn set_bytes(key: *const u8, bytes: *const u8, bytes_len: u64);
+    }
 }
 
 /// Halt execution and register account for deletion.
@@ -341,7 +350,7 @@ pub fn ret(data: &[u8]) -> ! {
 pub fn read(key: &H256) -> [u8; 32] {
     let mut dst = [0u8; 32];
     unsafe {
-        storage_read(key.as_ptr(), dst.as_mut_ptr());
+        oasis::storage_read(key.as_ptr(), dst.as_mut_ptr());
     }
     dst
 }
@@ -349,8 +358,32 @@ pub fn read(key: &H256) -> [u8; 32] {
 /// Performs write to the storage
 pub fn write(key: &H256, val: &[u8; 32]) {
     unsafe {
-        storage_write(key.as_ptr(), val.as_ptr());
+        oasis::storage_write(key.as_ptr(), val.as_ptr());
     }
+}
+
+/// Retrieve data directly from the contract storage trie.
+pub fn get_bytes(key: &H256) -> Result<Vec<u8>, ExtCallError> {
+    let result_len = get_bytes_len(key)?;
+    let mut result = Vec::with_capacity(result_len as usize);
+    result.resize(result_len as usize, 0u8);
+    unsafe {
+        oasis::get_bytes(key.as_ptr(), result.as_mut_ptr());
+    }
+    Ok(result)
+}
+
+fn get_bytes_len(key: &H256) -> Result<u32, ExtCallError> {
+    unsafe { Ok(oasis::get_bytes_len(key.as_ptr()) as u32) }
+}
+
+/// Store data directly into the contract storage trie.
+pub fn set_bytes(key: &H256, bytes: &[u8]) -> Result<(), ExtCallError> {
+    let len = bytes.len() as u64;
+    unsafe {
+        oasis::set_bytes(key.as_ptr(), bytes.as_ptr(), len);
+    }
+    Ok(())
 }
 
 unsafe fn fetch_address<F: Fn(*mut u8)>(f: F) -> Address {

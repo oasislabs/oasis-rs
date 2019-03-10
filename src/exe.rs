@@ -6,12 +6,12 @@ use crate::{
 /// A type that can be stored in Oasis Storage.
 pub trait Storage = serde::Serialize + serde::de::DeserializeOwned;
 
-pub trait Contract<T> {
+pub trait Contract {
     /// Builds a contract struct from items in Storage.
-    fn coalesce() -> T;
+    fn coalesce() -> Self;
 
     /// Stores a contract struct to Storage.
-    fn sunder(c: T);
+    fn sunder(c: Self);
 }
 
 /// The context of the current RPC call.

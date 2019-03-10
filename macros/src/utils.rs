@@ -23,6 +23,8 @@ macro_rules! check_next_arg {
     };
 }
 
+/// Checks whether struct derives a trait.
+/// Currently fails if trait is a path instead of an ident (@see syn#597)
 fn has_derive(s: &syn::ItemStruct, derive: &syn::Ident) -> bool {
     s.attrs.iter().any(|attr| match attr.parse_meta() {
         Ok(syn::Meta::List(l)) => {
@@ -36,6 +38,7 @@ fn has_derive(s: &syn::ItemStruct, derive: &syn::Ident) -> bool {
     })
 }
 
+/// Checks if `impl T` is for a given ident `U`
 fn is_impl_of(imp: &syn::ItemImpl, typ: &syn::Ident) -> bool {
     match &*imp.self_ty {
         syn::Type::Path(tp) if &tp.path.segments.last().unwrap().value().ident == typ => true,
@@ -44,24 +47,22 @@ fn is_impl_of(imp: &syn::ItemImpl, typ: &syn::Ident) -> bool {
 }
 
 struct LazyInserter {}
-
 impl syn::visit_mut::VisitMut for LazyInserter {
     fn visit_field_value_mut(&mut self, fv: &mut syn::FieldValue) {
         match fv.expr {
-            syn::Expr::Macro(ref m) => {
+            syn::Expr::Macro(ref m)
                 if m.mac
                     .path
                     .segments
                     .last()
                     .map(|punct| punct.value().ident == parse_quote!(lazy): syn::Ident)
-                    .unwrap_or(false)
-                {
-                    let field = &fv.member;
-                    let field = format!("{}", quote!( #field ));
-                    let key = quote! { tiny_keccak::keccak256(#field.as_bytes()) };
-                    let val = &m.mac.tts;
-                    fv.expr = parse_quote!(Lazy::new(H256::from(#key), #val));
-                }
+                    .unwrap_or(false) =>
+            {
+                let field = &fv.member;
+                let field = format!("{}", quote!( #field ));
+                let key = quote! { tiny_keccak::keccak256(#field.as_bytes()) };
+                let val = &m.mac.tts;
+                fv.expr = parse_quote!(Lazy::new(H256::from(#key), #val));
             }
             _ => (),
         }
@@ -181,9 +182,7 @@ impl<'a> RPC<'a> {
     fn structify_inps(&self) -> Vec<proc_macro2::TokenStream> {
         self.inputs
             .iter()
-            .map(|(name, ty)| {
-                quote! { #name: #ty }
-            })
+            .map(|(name, ty)| quote!( #name: #ty ))
             .collect()
     }
 

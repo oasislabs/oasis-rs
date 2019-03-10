@@ -1,7 +1,7 @@
 #[proc_macro]
 pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let contract_def = parse_macro_input!(input as syn::File);
-    let def_span = contract_def.span().unwrap();
+    let def_span = contract_def.span().unwrap(); // save this for error reporting later
 
     let mut contracts: Vec<syn::ItemStruct> = Vec::new();
     let mut other_items: Vec<syn::Item> = Vec::new();
@@ -27,6 +27,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let contract = contracts.into_iter().nth(0).unwrap();
     let contract_name = &contract.ident;
 
+    // transform `lazy!(val)` into `Lazy::new(key, val)`
     other_items.iter_mut().for_each(|item| {
         LazyInserter {}.visit_item_mut(item);
     });
@@ -57,12 +58,14 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         .map(|rpc| {
             let ident = rpc.ident;
             let inps = rpc.structify_inps();
+            // e.g., `my_method { my_input: String, my_other_input: u64 }`
             quote! {
-                #ident{ #(#inps),* }
+                #ident { #(#inps),* }
             }
         })
         .collect();
 
+    // generate match arms to statically dispatch RPCs based on deserialized payload
     let call_tree: Vec<proc_macro2::TokenStream> = rpcs
         .iter()
         .map(|rpc| {

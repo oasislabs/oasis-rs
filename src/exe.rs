@@ -16,10 +16,11 @@ pub trait Contract {
     fn sunder(c: Self);
 }
 
-/// The context of the current RPC call.
+/// The context of the current RPC.
 pub struct Context {}
 
 impl Context {
+    /// Returns the `Address` of the sender of the current RPC.
     pub fn sender(&self) -> Address {
         sender()
     }
@@ -83,19 +84,44 @@ impl<T: Storage> Lazy<T> {
         }
     }
 
-    pub fn get(&self) -> &T {
+    fn ensure_val(&self) -> &mut Option<T> {
         let val = unsafe { &mut *self.val.get() };
         if val.is_none() {
             val.replace(serde_cbor::from_slice(&get_bytes(&self.key).unwrap()).unwrap());
         }
-        val.as_ref().unwrap()
+        val
+    }
+
+    /// Returns a reference to the value loaded from Storage.
+    pub fn get(&self) -> &T {
+        self.ensure_val().as_ref().unwrap()
+    }
+
+    /// Returns a mutable reference to the value loaded from Storage.
+    pub fn get_mut(&mut self) -> &mut T {
+        self.ensure_val().as_mut().unwrap()
     }
 }
 
-// in reality, this is just a marker for inserting a `Lazy::new`
+/// A marker for inserting a `Lazy::new`.
+/// Works in tandem with `oasis_macros::LazyInserter`.
+///
+/// ```
+/// fn new(ctx: Context) -> Self {
+///    Self { the_field: lazy!(the_val) }
+/// }
+/// ```
+/// expands to
+/// ```
+/// fn new(ctx: Context) -> Self {
+///    Self {
+///        the_field: Lazy::new(H256::from(keccak256("the_field".as_bytes())), the_val)
+///    }
+/// }
+/// ```
 #[macro_export]
 macro_rules! lazy {
     ($val:expr) => {
-        compile_error!("`lazy!` used outside of `return Self { ... }`")
+        compile_error!("`lazy!` used outside of struct expr.")
     };
 }

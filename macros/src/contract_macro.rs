@@ -27,45 +27,63 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let contract = contracts.into_iter().nth(0).unwrap();
     let contract_name = &contract.ident;
 
-    // TODO: generate RPC enum, dispatch tree
-    let rpc_methods: Vec<proc_macro2::TokenStream> = other_items
+    let (ctor, rpcs): (Vec<RPC>, Vec<RPC>) = other_items
         .iter()
         .filter_map(|item| match item {
             syn::Item::Impl(imp) if is_impl_of(&imp, contract_name) => Some(imp),
             _ => None,
         })
-        .map(|imp| {
-            let rpc_methods: Vec<proc_macro2::TokenStream> = imp
-                .items
-                .iter()
-                .filter_map(|item| match item {
-                    syn::ImplItem::Method(
-                        m @ syn::ImplItemMethod {
-                            vis: syn::Visibility::Public(_),
-                            ..
-                        },
-                    ) => Some(m),
-                    _ => None,
-                })
-                .inspect(|m| check_rpc_call(&imp, m))
-                .map(|method| {
-                    let rpc_name = format!("_call_{}", method.sig.ident);
-                    // println!("{:#?}", method.sig.decl);
-                    quote! {
-                        fn #rpc_name(metho) {
-                        }
-                    }
-                })
-                .collect();
+        .flat_map(|imp| {
+            imp.items.iter().filter_map(move |item| match item {
+                syn::ImplItem::Method(
+                    m @ syn::ImplItemMethod {
+                        vis: syn::Visibility::Public(_),
+                        ..
+                    },
+                ) => Some(RPC::new(imp, m)),
+                _ => None,
+            })
+        })
+        .partition(|rpc| rpc.ident == &parse_quote!(new): &syn::Ident);
 
-            let typ = &*imp.self_ty;
+    let ctor = ctor.into_iter().nth(0);
+
+    let rpc_defs: Vec<proc_macro2::TokenStream> = rpcs
+        .iter()
+        .map(|rpc| {
+            let ident = rpc.ident;
+            let inps = rpc.structify_inps();
             quote! {
-                impl #typ {
-                    // fn _call_#
+                #ident{ #(#inps),* }
+            }
+        })
+        .collect();
+
+    let call_tree: Vec<proc_macro2::TokenStream> = rpcs
+        .iter()
+        .map(|rpc| {
+            let ident = rpc.ident;
+            let arg_names = rpc.input_names();
+            let call_names = arg_names.clone();
+            quote! {
+                RPC::#ident { #(#arg_names),* } => {
+                    serde_cbor::to_vec(&contract.#ident(Context {}, #(#call_names),*))
                 }
             }
         })
         .collect();
+
+    let (ctor_inps, ctor_args) = ctor
+        .map(|ctor| (ctor.structify_inps(), ctor.input_names()))
+        .unwrap_or((Vec::new(), Vec::new()));
+    let deploy_payload = match ctor_inps.len() > 0 {
+        true => quote! {
+            let payload: Ctor = serde_cbor::from_slice(&oasis::input()).unwrap();
+        },
+        false => {
+            quote! {}
+        }
+    };
 
     let deploy_mod_ident = format_ident!("_deploy_{}", contract_name);
     proc_macro::TokenStream::from(quote! {
@@ -76,17 +94,15 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         #(#other_items)*
 
         #[cfg(feature = "deploy")]
+        #[allow(non_snake_case)]
         mod #deploy_mod_ident {
             use super::*;
 
             #[derive(serde::Serialize, serde::Deserialize)]
             #[serde(tag = "method", content = "payload")]
+            #[allow(non_camel_case_types)]
             enum RPC {
-                get_links(),
-                add_link {
-                    olink: String,
-                    url: String,
-                },
+                #(#rpc_defs),*
             }
 
             #[no_mangle]
@@ -94,15 +110,20 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 let mut contract = <#contract_name>::coalesce();
                 let payload: RPC = serde_cbor::from_slice(&oasis::input()).unwrap();
                 let result = match payload {
-                    RPC::get_links() => {
-                        serde_cbor::to_vec(&contract.get_links())
-                    }
-                    RPC::add_link { olink, url } => {
-                        serde_cbor::to_vec(&contract.add_link(olink, url))
-                    }
+                    #(#call_tree),*
                 }.unwrap();
                 OLinks::sunder(contract);
-                oasis::ret(result);
+                oasis::ret(&result);
+            }
+
+            struct Ctor {
+                #(#ctor_inps),*
+            }
+
+            #[no_mangle]
+            pub fn deploy() {
+                #deploy_payload
+                #contract_name::sunder(#contract_name::new(Context {}, #(payload.#ctor_args),*));
             }
         }
     })

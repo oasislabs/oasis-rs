@@ -43,6 +43,32 @@ fn is_impl_of(imp: &syn::ItemImpl, typ: &syn::Ident) -> bool {
     }
 }
 
+struct LazyInserter {}
+
+impl syn::visit_mut::VisitMut for LazyInserter {
+    fn visit_field_value_mut(&mut self, fv: &mut syn::FieldValue) {
+        match fv.expr {
+            syn::Expr::Macro(ref m) => {
+                if m.mac
+                    .path
+                    .segments
+                    .last()
+                    .map(|punct| punct.value().ident == parse_quote!(lazy): syn::Ident)
+                    .unwrap_or(false)
+                {
+                    let field = &fv.member;
+                    let field = format!("{}", quote!( #field ));
+                    let key = quote! { tiny_keccak::keccak256(#field.as_bytes()) };
+                    let val = &m.mac.tts;
+                    fv.expr = parse_quote!(Lazy::new(H256::from(#key), #val));
+                }
+            }
+            _ => (),
+        }
+        syn::visit_mut::visit_field_value_mut(self, fv);
+    }
+}
+
 struct RPC<'a> {
     ident: &'a syn::Ident,
     inputs: Vec<(&'a syn::Pat, &'a syn::Type)>,
@@ -51,6 +77,7 @@ struct RPC<'a> {
 impl<'a> RPC<'a> {
     fn new(imp: &'a syn::ItemImpl, m: &'a syn::ImplItemMethod) -> Self {
         let sig = &m.sig;
+        let ident = &sig.ident;
         if let Some(abi) = &sig.abi {
             emit_err!(abi, "RPC methods cannot declare an ABI.");
         }
@@ -68,7 +95,6 @@ impl<'a> RPC<'a> {
             emit_err!(variadic, "RPC methods may not be variadic.");
         }
 
-        let ident = &sig.ident;
         let typ = &*imp.self_ty;
         let mut inps = decl.inputs.iter().peekable();
         if ident == &parse_quote!(new): &syn::Ident {

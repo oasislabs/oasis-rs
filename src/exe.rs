@@ -44,7 +44,7 @@ impl Context {
 ///        Self {
 ///           player_name,
 ///           inventory: Vec::new(),
-///           bank: Lazy::new(HashMap::new()),
+///           bank: lazy!(HashMap::new()),
 ///        }
 ///    }
 ///
@@ -67,14 +67,18 @@ impl Context {
 /// }
 /// }
 /// ```
+#[derive(Debug)]
 pub struct Lazy<T: Storage> {
+    key: H256,
     val: UnsafeCell<Option<T>>,
 }
 
 impl<T: Storage> Lazy<T> {
     /// Creates a Lazy value with initial contents.
-    pub fn new(val: T) -> Self {
+    /// This function is for internal use. Clients should use the `lazy!` macro.
+    pub fn new(key: H256, val: T) -> Self {
         Self {
+            key,
             val: UnsafeCell::new(Some(val)),
         }
     }
@@ -82,10 +86,16 @@ impl<T: Storage> Lazy<T> {
     pub fn get(&self) -> &T {
         let val = unsafe { &mut *self.val.get() };
         if val.is_none() {
-            val.replace(
-                serde_cbor::from_slice(&get_bytes(&H256::zero() /* TODO */).unwrap()).unwrap(),
-            );
+            val.replace(serde_cbor::from_slice(&get_bytes(&self.key).unwrap()).unwrap());
         }
         val.as_ref().unwrap()
     }
+}
+
+// in reality, this is just a marker for inserting a `Lazy::new`
+#[macro_export]
+macro_rules! lazy {
+    ($val:expr) => {
+        compile_error!("`lazy!` used outside of `return Self { ... }`")
+    };
 }

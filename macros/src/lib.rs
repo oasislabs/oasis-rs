@@ -7,7 +7,7 @@ extern crate quote;
 #[macro_use]
 extern crate syn;
 
-use syn::spanned::Spanned;
+use syn::{spanned::Spanned, visit_mut::VisitMut};
 
 include!("utils.rs");
 include!("contract_macro.rs");

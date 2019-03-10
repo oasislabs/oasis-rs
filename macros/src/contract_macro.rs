@@ -27,6 +27,10 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let contract = contracts.into_iter().nth(0).unwrap();
     let contract_name = &contract.ident;
 
+    other_items.iter_mut().for_each(|item| {
+        LazyInserter {}.visit_item_mut(item);
+    });
+
     let (ctor, rpcs): (Vec<RPC>, Vec<RPC>) = other_items
         .iter()
         .filter_map(|item| match item {
@@ -86,6 +90,9 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
     let deploy_mod_ident = format_ident!("_deploy_{}", contract_name);
     proc_macro::TokenStream::from(quote! {
+        #[macro_use]
+        extern crate oasis_std;
+
         use oasis_std::prelude::*;
 
         #contract

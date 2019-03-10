@@ -24,10 +24,17 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             "Contract definition must contain exactly one #[derive(Contract)] struct. Second occurrence here:"
         );
     }
-    let contract = contracts.into_iter().nth(0).unwrap();
+    let contract = match contracts.into_iter().nth(0) {
+        Some(contract) => contract,
+        None => {
+            return proc_macro::TokenStream::from(quote! {
+                #(#other_items)*
+            });
+        }
+    };
     let contract_name = &contract.ident;
 
-    // transform `lazy!(val)` into `Lazy::new(key, val)`
+    // transform `lazy!(val)` into `Lazy::_new(key, val)`
     other_items.iter_mut().for_each(|item| {
         LazyInserter {}.visit_item_mut(item);
     });

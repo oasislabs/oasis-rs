@@ -1,6 +1,18 @@
+macro_rules! emit_diagnostic {
+    ($level:ident, $tok:expr, $msg:expr) => {
+        $tok.span().unwrap().$level($msg).emit();
+    };
+}
+
 macro_rules! emit_err {
     ($tok:expr, $msg:expr $(,)?) => {
-        $tok.span().unwrap().error($msg).emit();
+        emit_diagnostic!(error, $tok, $msg);
+    };
+}
+
+macro_rules! emit_warning {
+    ($tok:expr, $msg:expr $(,)?) => {
+        emit_diagnostic!(warning, $tok, $msg);
     };
 }
 
@@ -46,6 +58,11 @@ fn is_impl_of(imp: &syn::ItemImpl, typ: &syn::Ident) -> bool {
     }
 }
 
+fn keccak_key(ident: &syn::Ident) -> proc_macro2::TokenStream {
+    let ident = format!("{}", quote!( #ident ));
+    quote! { H256::from(tiny_keccak::keccak256(#ident.as_bytes())) }
+}
+
 struct LazyInserter {}
 impl syn::visit_mut::VisitMut for LazyInserter {
     fn visit_field_value_mut(&mut self, fv: &mut syn::FieldValue) {
@@ -58,11 +75,12 @@ impl syn::visit_mut::VisitMut for LazyInserter {
                     .map(|punct| punct.value().ident == parse_quote!(lazy): syn::Ident)
                     .unwrap_or(false) =>
             {
-                let field = &fv.member;
-                let field = format!("{}", quote!( #field ));
-                let key = quote! { tiny_keccak::keccak256(#field.as_bytes()) };
+                let key = match fv.member {
+                    syn::Member::Named(ref ident) => keccak_key(ident),
+                    syn::Member::Unnamed(syn::Index { index, .. }) => quote! { H256::from(#index) },
+                };
                 let val = &m.mac.tts;
-                fv.expr = parse_quote!(Lazy::new(H256::from(#key), #val));
+                fv.expr = parse_quote!(Lazy::_new(H256::from(#key), #val));
             }
             _ => (),
         }

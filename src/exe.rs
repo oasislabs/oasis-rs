@@ -77,10 +77,18 @@ pub struct Lazy<T: Storage> {
 impl<T: Storage> Lazy<T> {
     /// Creates a Lazy value with initial contents.
     /// This function is for internal use. Clients should use the `lazy!` macro.
-    pub fn new(key: H256, val: T) -> Self {
+    pub fn _new(key: H256, val: T) -> Self {
         Self {
             key,
             val: UnsafeCell::new(Some(val)),
+        }
+    }
+
+    /// Creates an empty Lazy. This function is for internal use.
+    pub fn _uninitialized(key: H256) -> Self {
+        Self {
+            key,
+            val: UnsafeCell::new(None),
         }
     }
 
@@ -100,6 +108,10 @@ impl<T: Storage> Lazy<T> {
     /// Returns a mutable reference to the value loaded from Storage.
     pub fn get_mut(&mut self) -> &mut T {
         self.ensure_val().as_mut().unwrap()
+    }
+
+    pub fn is_initialized(&self) -> bool {
+        unsafe { &*self.val.get() }.is_some()
     }
 }
 

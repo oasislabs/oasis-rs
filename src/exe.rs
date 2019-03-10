@@ -3,14 +3,25 @@ use crate::{
     types::{Address, H256},
 };
 
+/// A type that can be stored in Oasis Storage.
 pub trait Storage = serde::Serialize + serde::de::DeserializeOwned;
 
 pub trait Contract<T> {
+    /// Builds a contract struct from items in Storage.
     fn coalesce() -> T;
+
+    /// Stores a contract struct to Storage.
     fn sunder(c: T);
 }
 
+/// The context of the current RPC call.
 pub struct Context {}
+
+impl Context {
+    pub fn sender(&self) -> Address {
+        sender()
+    }
+}
 
 /// Container for contrat state that is lazily loaded from storage.
 /// Currently can only be used as a top-level type (e.g., `Lazy<Vec<T>>`, not `Vec<Lazy<T>>`).
@@ -31,7 +42,7 @@ pub struct Context {}
 ///        Self {
 ///           player_name,
 ///           inventory: Vec::new(),
-///           bank: Lazy::init(HashMap::new()),
+///           bank: Lazy::new(HashMap::new()),
 ///        }
 ///    }
 ///
@@ -60,9 +71,11 @@ pub struct Lazy<T: Storage> {
 }
 
 impl<T: Storage> Lazy<T> {
-    pub fn init(val: T) -> Self {
+    /// Creates a Lazy value with initial contents.
+    pub fn new(val: T) -> Self {
         Self { val: Some(val) }
     }
+
     pub fn get(&self) -> &T {
         if self.val.is_none() {
             unsafe {
@@ -72,11 +85,5 @@ impl<T: Storage> Lazy<T> {
             }
         }
         self.val.as_ref().unwrap()
-    }
-}
-
-impl Context {
-    pub fn sender(&self) -> Address {
-        sender()
     }
 }

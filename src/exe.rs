@@ -1,3 +1,5 @@
+use std::cell::UnsafeCell;
+
 use crate::{
     ext::{get_bytes, sender},
     types::{Address, H256},
@@ -65,25 +67,25 @@ impl Context {
 /// }
 /// }
 /// ```
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct Lazy<T: Storage> {
-    val: Option<T>,
+    val: UnsafeCell<Option<T>>,
 }
 
 impl<T: Storage> Lazy<T> {
     /// Creates a Lazy value with initial contents.
     pub fn new(val: T) -> Self {
-        Self { val: Some(val) }
+        Self {
+            val: UnsafeCell::new(Some(val)),
+        }
     }
 
     pub fn get(&self) -> &T {
-        if self.val.is_none() {
-            unsafe {
-                (*(self as *const Self as *mut Self)).val.replace(
-                    serde_cbor::from_slice(&get_bytes(&H256::zero() /* TODO */).unwrap()).unwrap(),
-                );
-            }
+        let val = unsafe { &mut *self.val.get() };
+        if val.is_none() {
+            val.replace(
+                serde_cbor::from_slice(&get_bytes(&H256::zero() /* TODO */).unwrap()).unwrap(),
+            );
         }
-        self.val.as_ref().unwrap()
+        val.as_ref().unwrap()
     }
 }

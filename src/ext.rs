@@ -365,8 +365,7 @@ pub fn write(key: &H256, val: &[u8; 32]) {
 /// Retrieve data directly from the contract storage trie.
 pub fn get_bytes(key: &H256) -> Result<Vec<u8>, ExtCallError> {
     let result_len = get_bytes_len(key)?;
-    let mut result = Vec::with_capacity(result_len as usize);
-    result.resize(result_len as usize, 0u8);
+    let mut result = vec![0; result_len as usize];
     unsafe {
         oasis::get_bytes(key.as_ptr(), result.as_mut_ptr());
     }

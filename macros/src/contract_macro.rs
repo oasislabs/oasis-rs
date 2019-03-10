@@ -14,7 +14,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         };
     }
 
-    if contracts.len() == 0 {
+    if contracts.is_empty() {
         def_span
             .error("Contract definition must contain a #[derive(Contract)] struct.")
             .emit();
@@ -76,12 +76,11 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let (ctor_inps, ctor_args) = ctor
         .map(|ctor| (ctor.structify_inps(), ctor.input_names()))
         .unwrap_or((Vec::new(), Vec::new()));
-    let deploy_payload = match ctor_inps.len() > 0 {
-        true => quote! {
+    let deploy_payload = if ctor_inps.is_empty() {
+        quote! {}
+    } else {
+        quote! {
             let payload: Ctor = serde_cbor::from_slice(&oasis::input()).unwrap();
-        },
-        false => {
-            quote! {}
         }
     };
 

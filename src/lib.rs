@@ -10,7 +10,6 @@ extern crate serde_derive;
 #[macro_use]
 extern crate uint;
 
-pub mod abi;
 pub mod errors;
 pub mod exe;
 pub mod ext;

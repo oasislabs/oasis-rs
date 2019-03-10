@@ -23,3 +23,5 @@ pub mod prelude {
     pub use crate::{errors::*, exe::*, ext as oasis, types::*};
     pub use macros::{contract, Contract};
 }
+
+pub use macros::contract;

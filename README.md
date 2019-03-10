@@ -1,5 +1,8 @@
 # oasis-std
 
+[![Latest Version](https://img.shields.io/crates/v/oasis-std.svg)](https://crates.io/crates/oasis-std)
+[![docs](https://docs.rs/oasis-std/badge.svg)](https://docs.rs/oasis-std)
+
 A crate of utilities for developing programs for the Oasis platform.
 
 The `Xargo.toml` can be used to create a custom Rust `libstd` that has wasm syscalls enabled.

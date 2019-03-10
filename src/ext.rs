@@ -378,7 +378,8 @@ fn get_bytes_len(key: &H256) -> Result<u32, ExtCallError> {
 }
 
 /// Store data directly into the contract storage trie.
-pub fn set_bytes(key: &H256, bytes: &[u8]) -> Result<(), ExtCallError> {
+pub fn set_bytes<T: AsRef<[u8]>>(key: &H256, bytes: T) -> Result<(), ExtCallError> {
+    let bytes = bytes.as_ref();
     let len = bytes.len() as u64;
     unsafe {
         oasis::set_bytes(key.as_ptr(), bytes.as_ptr(), len);

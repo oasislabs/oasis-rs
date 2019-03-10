@@ -1,0 +1,19 @@
+[package]
+name = "oasis-macros"
+version = "0.1.0"
+authors = ["Oasis Labs <info@oasislabs.com>"]
+license = "Apache-2.0"
+repository = "https://github.com/oasislabs/oasis-std"
+description = "Macros for conveniently using the Oasis platform"
+keywords = ["oasis", "blockchain", "heavy magic"]
+edition = "2018"
+
+[dependencies]
+proc-macro2 = "0.4"
+quote = "0.6"
+serde = "1.0"
+serde_derive = "1.0"
+syn = { version = "0.15", features = ["full", "extra-traits"] }
+
+[lib]
+proc-macro = true

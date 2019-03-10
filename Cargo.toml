@@ -1,7 +1,7 @@
 [package]
 name = "oasis-std"
 version = "0.1.0"
-license = "MIT/Apache-2.0"
+license = "Apache-2.0"
 description = "A standard library for interacting with the Oasis platform."
 repository = "https://github.com/oasislabs/oasis-std.git"
 authors = ["Oasis Labs <info@oasislabs.com>"]
@@ -13,13 +13,14 @@ categories = ["os", "wasm"]
 [dependencies]
 failure = "0.1"
 fixed-hash = { version = "0.3", default-features = false }
-owasm-abi-derive = { version = "0.4.0", path = "abi_derive" }
+oasis-macros = { version = "0.1.0", path = "macros" }
 serde = "1.0"
+serde_cbor = "0.9"
 serde_derive = "1.0"
 uint = { version = "0.6", default-features = false }
 
 [workspace]
-members = [".", "abi_derive", "abi_derive/tests"]
+members = [".", "macros"]
 
 [features]
 platform-alloc = []

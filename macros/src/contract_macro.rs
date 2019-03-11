@@ -19,7 +19,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             .error("Contract definition must contain a #[derive(Contract)] struct.")
             .emit();
     } else if contracts.len() > 1 {
-        emit!(
+        err!(
             contracts[1],
             "Contract definition must contain exactly one #[derive(Contract)] struct. Second occurrence here:"
         );
@@ -174,20 +174,20 @@ impl<'a> RPC<'a> {
         let sig = &m.sig;
         let ident = &sig.ident;
         if let Some(abi) = &sig.abi {
-            emit!(abi, "RPC methods cannot declare an ABI.");
+            err!(abi, "RPC methods cannot declare an ABI.");
         }
         if let Some(unsafe_) = sig.unsafety {
-            emit!(unsafe_, "RPC methods may not be unsafe.");
+            err!(unsafe_, "RPC methods may not be unsafe.");
         }
         let decl = &sig.decl;
         if decl.generics.type_params().count() > 0 {
-            emit!(
+            err!(
                 decl.generics,
                 "RPC methods may not have generic type parameters.",
             );
         }
         if let Some(variadic) = decl.variadic {
-            emit!(variadic, "RPC methods may not be variadic.");
+            err!(variadic, "RPC methods may not be variadic.");
         }
 
         let typ = &*imp.self_ty;
@@ -205,7 +205,7 @@ impl<'a> RPC<'a> {
             match &decl.output {
                 syn::ReturnType::Type(_, t) if &**t == typ || t == &parse_quote!(Self) => (),
                 ret => {
-                    emit!(ret, "`{}::new` must return `Self`", quote!(#typ));
+                    err!(ret, "`{}::new` must return `Self`", quote!(#typ));
                 }
             }
             Self {
@@ -262,11 +262,11 @@ impl<'a> RPC<'a> {
         match arg {
             syn::FnArg::Captured(syn::ArgCaptured { pat, ty, .. }) => Some((pat, ty)),
             syn::FnArg::Ignored(_) => {
-                emit!(arg, "Arguments to RPCs must have explicit names.");
+                err!(arg, "Arguments to RPCs must have explicit names.");
                 None
             }
             syn::FnArg::Inferred(_) => {
-                emit!(arg, "Arguments to RPCs must have explicit types.");
+                err!(arg, "Arguments to RPCs must have explicit types.");
                 None
             }
             _ => None,

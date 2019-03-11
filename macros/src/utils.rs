@@ -1,8 +1,8 @@
-macro_rules! emit {
+macro_rules! err {
     ($tok:expr, $fstr:literal$(,)? $( $arg:expr ),*) => {
-        emit!(error, $tok, $fstr, $($arg),*)
+        err!([error] $tok, $fstr, $($arg),*)
     };
-    ($level:ident, $tok:expr, $fstr:literal$(,)? $( $arg:expr ),*) => {
+    ([ $level:ident ] $tok:expr, $fstr:literal$(,)? $( $arg:expr ),*) => {
         $tok.span().unwrap().$level(format!($fstr, $($arg),*)).emit();
     };
 }

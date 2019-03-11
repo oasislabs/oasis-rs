@@ -11,7 +11,7 @@ pub fn contract_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
             syn::Fields::Unit => (true, empty_punct.iter()),
         },
         _ => {
-            emit!(
+            err!(
                 input,
                 "`#[derive(Contract)]` can only be applied to structs."
             );
@@ -21,7 +21,7 @@ pub fn contract_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
 
     match input.vis {
         syn::Visibility::Public(_) => {}
-        _ => emit!(
+        _ => err!(
             input.vis,
             "`struct {}` should have `pub` visibility.",
             contract
@@ -29,7 +29,7 @@ pub fn contract_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
     }
 
     if input.generics.type_params().count() > 0 {
-        emit!(input.generics, "Contract cannot contain generic types.")
+        err!(input.generics, "Contract cannot contain generic types.")
     }
 
     let (sers, des): (Vec<proc_macro2::TokenStream>, Vec<proc_macro2::TokenStream>) = fields
@@ -37,7 +37,7 @@ pub fn contract_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
         .map(|(i, field)| {
             match field.vis {
                 syn::Visibility::Inherited => {}
-                _ => emit!(warning, field, "Field should have no visibility marker."),
+                _ => err!([warning] field, "Field should have no visibility marker."),
             }
             get_type_serde(i, field.ident.as_ref(), &field.ty)
         })
@@ -104,7 +104,7 @@ fn get_type_serde(
             }
         }
         ty => {
-            emit!(ty, "Contract field must be a POD type.");
+            err!(ty, "Contract field must be a POD type.");
             (quote!(compile_error!()), quote!(compile_error!()))
         }
     }

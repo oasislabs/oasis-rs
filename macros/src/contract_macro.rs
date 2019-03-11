@@ -19,10 +19,9 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             .error("Contract definition must contain a #[derive(Contract)] struct.")
             .emit();
     } else if contracts.len() > 1 {
-        err!(
-            contracts[1],
-            "Contract definition must contain exactly one #[derive(Contract)] struct. Second occurrence here:"
-        );
+        contracts.iter().skip(1).for_each(|c| {
+            err!(c: "Contract definition must contain exactly one #[derive(Contract)] struct.");
+        });
     }
     let contract = match contracts.into_iter().nth(0) {
         Some(contract) => contract,
@@ -174,20 +173,20 @@ impl<'a> RPC<'a> {
         let sig = &m.sig;
         let ident = &sig.ident;
         if let Some(abi) = &sig.abi {
-            err!(abi, "RPC methods cannot declare an ABI.");
+            err!(abi: "RPC methods cannot declare an ABI.");
         }
         if let Some(unsafe_) = sig.unsafety {
-            err!(unsafe_, "RPC methods may not be unsafe.");
+            err!(unsafe_: "RPC methods may not be unsafe.");
         }
         let decl = &sig.decl;
         if decl.generics.type_params().count() > 0 {
             err!(
-                decl.generics,
+                decl.generics:
                 "RPC methods may not have generic type parameters.",
             );
         }
         if let Some(variadic) = decl.variadic {
-            err!(variadic, "RPC methods may not be variadic.");
+            err!(variadic: "RPC methods may not be variadic.");
         }
 
         let typ = &*imp.self_ty;
@@ -197,15 +196,13 @@ impl<'a> RPC<'a> {
                 decl,
                 inps,
                 RPC::is_context,
-                format!(
-                    "`{}::new` must take `Context` as its first argument",
-                    quote!(#typ)
-                )
+                "`{}::new` must take `Context` as its first argument",
+                typ
             );
             match &decl.output {
                 syn::ReturnType::Type(_, t) if &**t == typ || t == &parse_quote!(Self) => (),
                 ret => {
-                    err!(ret, "`{}::new` must return `Self`", quote!(#typ));
+                    err!(ret: "`{}::new` must return `Self`", quote!(#typ));
                 }
             }
             Self {
@@ -217,21 +214,17 @@ impl<'a> RPC<'a> {
                 decl,
                 inps,
                 RPC::is_self_ref,
-                format!(
-                    "First argument to `{}::{}` should be &[mut ]self.",
-                    quote!(#typ),
-                    quote!(ident)
-                )
+                "First argument to `{}::{}` should be `&self` or `&mut self`.",
+                typ,
+                ident
             );
             check_next_arg!(
                 decl,
                 inps,
                 RPC::is_context,
-                format!(
-                    "Second argument to `{}::{}` should be &Context.",
-                    quote!(#typ),
-                    quote!(ident)
-                )
+                "Second argument to `{}::{}` should be `Context`.",
+                typ,
+                ident
             );
             Self {
                 ident,
@@ -262,11 +255,11 @@ impl<'a> RPC<'a> {
         match arg {
             syn::FnArg::Captured(syn::ArgCaptured { pat, ty, .. }) => Some((pat, ty)),
             syn::FnArg::Ignored(_) => {
-                err!(arg, "Arguments to RPCs must have explicit names.");
+                err!(arg: "Arguments to RPCs must have explicit names.");
                 None
             }
             syn::FnArg::Inferred(_) => {
-                err!(arg, "Arguments to RPCs must have explicit types.");
+                err!(arg: "Arguments to RPCs must have explicit types.");
                 None
             }
             _ => None,

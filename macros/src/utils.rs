@@ -1,21 +1,21 @@
 macro_rules! err {
-    ($tok:expr, $fstr:literal$(,)? $( $arg:expr ),*) => {
-        err!([error] $tok, $fstr, $($arg),*)
+    ($( $tok:ident ).+ : $fstr:literal$(,)? $( $arg:expr ),*) => {
+        err!([error] $($tok).+ : $fstr, $($arg),*)
     };
-    ([ $level:ident ] $tok:expr, $fstr:literal$(,)? $( $arg:expr ),*) => {
-        $tok.span().unwrap().$level(format!($fstr, $($arg),*)).emit();
+    ([ $level:ident ] $( $tok:ident ).+ : $fstr:literal$(,)? $( $arg:expr ),*) => {
+        $($tok).+.span().unwrap().$level(format!($fstr, $($arg),*)).emit();
     };
 }
 
 macro_rules! check_next_arg {
-    ($decl:ident, $inps:ident, $cond:expr, $err_msg:expr) => {
+    ($decl:ident, $inps:ident, $cond:expr, $err_msg:expr, $( $arg:ident ),*) => {
         let err_loc = match $inps.peek() {
             Some(inp) => inp.span(),
             None => $decl.inputs.span(),
         }
         .unwrap();
         if !$inps.next().map($cond).unwrap_or(false) {
-            err_loc.error($err_msg).emit();
+            err_loc.error(format!($err_msg, $( quote!(#$arg) ),*)).emit();
         }
     };
 }

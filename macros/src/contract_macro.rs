@@ -7,7 +7,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut other_items: Vec<syn::Item> = Vec::new();
     for item in contract_def.items.into_iter() {
         match item {
-            syn::Item::Struct(s) if has_derive(&s, &parse_quote!(Contract)) => {
+            syn::Item::Struct(s) if has_derive(&s, "Contract") => {
                 contracts.push(s);
             }
             _ => other_items.push(item),
@@ -19,7 +19,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             .error("Contract definition must contain a #[derive(Contract)] struct.")
             .emit();
     } else if contracts.len() > 1 {
-        emit_err!(
+        emit!(
             contracts[1],
             "Contract definition must contain exactly one #[derive(Contract)] struct. Second occurrence here:"
         );
@@ -56,7 +56,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 _ => None,
             })
         })
-        .partition(|rpc| rpc.ident == &parse_quote!(new): &syn::Ident);
+        .partition(|rpc| rpc.ident == "new");
 
     let ctor = ctor.into_iter().nth(0);
 
@@ -98,7 +98,8 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         }
     };
 
-    let deploy_mod_ident = format_ident!("_deploy_{}", contract_name);
+    let deploy_mod_ident =
+        syn::Ident::new(&format!("_deploy_{}", contract_name), contract_name.span());
     proc_macro::TokenStream::from(quote! {
         #[macro_use]
         extern crate oasis_std;
@@ -149,14 +150,7 @@ struct LazyInserter {}
 impl syn::visit_mut::VisitMut for LazyInserter {
     fn visit_field_value_mut(&mut self, fv: &mut syn::FieldValue) {
         match fv.expr {
-            syn::Expr::Macro(ref m)
-                if m.mac
-                    .path
-                    .segments
-                    .last()
-                    .map(|punct| punct.value().ident == parse_quote!(lazy): syn::Ident)
-                    .unwrap_or(false) =>
-            {
+            syn::Expr::Macro(ref m) if m.mac.path.is_ident("lazy") => {
                 let key = match fv.member {
                     syn::Member::Named(ref ident) => keccak_key(ident),
                     syn::Member::Unnamed(syn::Index { index, .. }) => quote! { H256::from(#index) },
@@ -180,25 +174,25 @@ impl<'a> RPC<'a> {
         let sig = &m.sig;
         let ident = &sig.ident;
         if let Some(abi) = &sig.abi {
-            emit_err!(abi, "RPC methods cannot declare an ABI.");
+            emit!(abi, "RPC methods cannot declare an ABI.");
         }
         if let Some(unsafe_) = sig.unsafety {
-            emit_err!(unsafe_, "RPC methods may not be unsafe.");
+            emit!(unsafe_, "RPC methods may not be unsafe.");
         }
         let decl = &sig.decl;
         if decl.generics.type_params().count() > 0 {
-            emit_err!(
+            emit!(
                 decl.generics,
                 "RPC methods may not have generic type parameters.",
             );
         }
         if let Some(variadic) = decl.variadic {
-            emit_err!(variadic, "RPC methods may not be variadic.");
+            emit!(variadic, "RPC methods may not be variadic.");
         }
 
         let typ = &*imp.self_ty;
         let mut inps = decl.inputs.iter().peekable();
-        if ident == &parse_quote!(new): &syn::Ident {
+        if ident == "new" {
             check_next_arg!(
                 decl,
                 inps,
@@ -211,7 +205,7 @@ impl<'a> RPC<'a> {
             match &decl.output {
                 syn::ReturnType::Type(_, t) if &**t == typ || t == &parse_quote!(Self) => (),
                 ret => {
-                    emit_err!(ret, format!("`{}::new` must return `Self`", quote!(#typ)));
+                    emit!(ret, "`{}::new` must return `Self`", quote!(#typ));
                 }
             }
             Self {
@@ -268,11 +262,11 @@ impl<'a> RPC<'a> {
         match arg {
             syn::FnArg::Captured(syn::ArgCaptured { pat, ty, .. }) => Some((pat, ty)),
             syn::FnArg::Ignored(_) => {
-                emit_err!(arg, "Arguments to RPCs must have explicit names.");
+                emit!(arg, "Arguments to RPCs must have explicit names.");
                 None
             }
             syn::FnArg::Inferred(_) => {
-                emit_err!(arg, "Arguments to RPCs must have explicit types.");
+                emit!(arg, "Arguments to RPCs must have explicit types.");
                 None
             }
             _ => None,

@@ -1,24 +1,9 @@
-macro_rules! emit_diagnostic {
-    ($level:ident, $tok:expr, $msg:expr) => {
-        $tok.span().unwrap().$level($msg).emit();
+macro_rules! emit {
+    ($tok:expr, $fstr:literal$(,)? $( $arg:expr ),*) => {
+        emit!(error, $tok, $fstr, $($arg),*)
     };
-}
-
-macro_rules! emit_err {
-    ($tok:expr, $msg:expr $(,)?) => {
-        emit_diagnostic!(error, $tok, $msg);
-    };
-}
-
-macro_rules! emit_warning {
-    ($tok:expr, $msg:expr $(,)?) => {
-        emit_diagnostic!(warning, $tok, $msg);
-    };
-}
-
-macro_rules! format_ident {
-    ($fstr:literal, $ident:expr) => {
-        syn::Ident::new(&format!($fstr, $ident), $ident.span())
+    ($level:ident, $tok:expr, $fstr:literal$(,)? $( $arg:expr ),*) => {
+        $tok.span().unwrap().$level(format!($fstr, $($arg),*)).emit();
     };
 }
 
@@ -37,10 +22,10 @@ macro_rules! check_next_arg {
 
 /// Checks whether struct derives a trait.
 /// Currently fails if trait is a path instead of an ident (@see syn#597)
-fn has_derive(s: &syn::ItemStruct, derive: &syn::Ident) -> bool {
+fn has_derive(s: &syn::ItemStruct, derive: &str) -> bool {
     s.attrs.iter().any(|attr| match attr.parse_meta() {
         Ok(syn::Meta::List(l)) => {
-            l.ident == parse_quote!(derive): syn::Ident
+            l.ident == "derive"
                 && l.nested.iter().any(|nest| match nest {
                     syn::NestedMeta::Meta(m) => &m.name() == derive,
                     _ => false,
@@ -59,9 +44,10 @@ fn is_impl_of(imp: &syn::ItemImpl, typ: &syn::Ident) -> bool {
 }
 
 fn keccak_key(ident: &syn::Ident) -> proc_macro2::TokenStream {
-    let ident = format!("{}", quote!( #ident ));
-    let key =
-        syn::parse_str::<syn::Expr>(&format!("{:?}", tiny_keccak::keccak256(ident.as_bytes())))
-            .unwrap();
+    let key = syn::parse_str::<syn::Expr>(&format!(
+        "{:?}",
+        tiny_keccak::keccak256(ident.to_string().as_bytes())
+    ))
+    .unwrap();
     quote! { H256::from(&#key) }
 }

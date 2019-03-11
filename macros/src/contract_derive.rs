@@ -32,7 +32,6 @@ pub fn contract_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
     }
 
     let (sers, des): (Vec<proc_macro2::TokenStream>, Vec<proc_macro2::TokenStream>) = fields
-        .cloned()
         .enumerate()
         .map(|(i, field)| {
             match field.vis {

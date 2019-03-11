@@ -92,22 +92,22 @@ impl<T: Storage> Lazy<T> {
         }
     }
 
-    fn ensure_val(&self) -> &mut Option<T> {
+    fn ensure_val(&self) -> &mut T {
         let val = unsafe { &mut *self.val.get() };
         if val.is_none() {
             val.replace(serde_cbor::from_slice(&get_bytes(&self.key).unwrap()).unwrap());
         }
-        val
+        val.as_mut().unwrap()
     }
 
     /// Returns a reference to the value loaded from Storage.
     pub fn get(&self) -> &T {
-        self.ensure_val().as_ref().unwrap()
+        self.ensure_val()
     }
 
     /// Returns a mutable reference to the value loaded from Storage.
     pub fn get_mut(&mut self) -> &mut T {
-        self.ensure_val().as_mut().unwrap()
+        self.ensure_val()
     }
 
     pub fn is_initialized(&self) -> bool {

@@ -33,7 +33,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     };
     let contract_name = &contract.ident;
 
-    // transform `lazy!(val)` into `Lazy::_new(key, val)`
+    // Transform `lazy!(val)` into `Lazy::_new(key, val)`.
     other_items.iter_mut().for_each(|item| {
         LazyInserter {}.visit_item_mut(item);
     });
@@ -71,7 +71,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         })
         .collect();
 
-    // generate match arms to statically dispatch RPCs based on deserialized payload
+    // Generate match arms to statically dispatch RPCs based on deserialized payload.
     let call_tree: Vec<proc_macro2::TokenStream> = rpcs
         .iter()
         .map(|rpc| {

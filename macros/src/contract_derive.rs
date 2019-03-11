@@ -55,7 +55,7 @@ pub fn contract_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
     })
 }
 
-/// Returns the serializer and deserializer for a (possibly lazy) Type
+/// Returns the serializer and deserializer for a (possibly lazy) Type.
 fn get_type_serde(
     index: usize,
     field: Option<&syn::Ident>,

@@ -26,8 +26,9 @@ impl Context {
     }
 }
 
-/// Container for contrat state that is lazily loaded from storage.
+/// Container for contract state that is lazily loaded from storage.
 /// Currently can only be used as a top-level type (e.g., `Lazy<Vec<T>>`, not `Vec<Lazy<T>>`).
+/// where the entire Vec will be lazily instantiated (as opposed to each individual element).
 ///
 /// ## Example
 ///

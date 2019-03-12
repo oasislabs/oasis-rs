@@ -8,10 +8,10 @@ macro_rules! err {
 }
 
 macro_rules! check_next_arg {
-    ($decl:ident, $inps:ident, $cond:expr, $err_msg:expr, $( $arg:ident ),*) => {
+    ($sig:ident, $inps:ident, $cond:expr, $err_msg:expr, $( $arg:ident ),*) => {
         let err_loc = match $inps.peek() {
             Some(inp) => inp.span(),
-            None => $decl.inputs.span(),
+            None => $sig.ident.span(),
         }
         .unwrap();
         if !$inps.next().map($cond).unwrap_or(false) {

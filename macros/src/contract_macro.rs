@@ -38,26 +38,39 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         LazyInserter {}.visit_item_mut(item);
     });
 
-    let (ctor, rpcs): (Vec<RPC>, Vec<RPC>) = other_items
+    let impls: Vec<&syn::ItemImpl> = other_items
         .iter()
         .filter_map(|item| match item {
             syn::Item::Impl(imp) if is_impl_of(&imp, contract_name) => Some(imp),
             _ => None,
         })
+        .collect();
+
+    let (ctor, rpcs): (Vec<RPC>, Vec<RPC>) = impls
+        .iter()
         .flat_map(|imp| {
             imp.items.iter().filter_map(move |item| match item {
-                syn::ImplItem::Method(
-                    m @ syn::ImplItemMethod {
-                        vis: syn::Visibility::Public(_),
-                        ..
-                    },
-                ) => Some(RPC::new(imp, m)),
+                syn::ImplItem::Method(m) => match m.vis {
+                    syn::Visibility::Public(_) => Some(RPC::new(imp, m)),
+                    _ if m.sig.ident == "new" => {
+                        err!(m: "`{}::new` should have public visibility", contract_name);
+                        Some(RPC::new(imp, m))
+                    }
+                    _ => None,
+                },
                 _ => None,
             })
         })
         .partition(|rpc| rpc.ident == "new");
 
-    let ctor = ctor.into_iter().nth(0);
+    let empty_new = syn::Ident::new("new", proc_macro2::Span::call_site());
+    let ctor = ctor.into_iter().nth(0).unwrap_or_else(|| {
+        err!(contract_name: "Missing implementation for `{}::new`.", contract_name);
+        RPC {
+            ident: &empty_new,
+            inputs: Vec::new(),
+        }
+    });
 
     let rpc_defs: Vec<proc_macro2::TokenStream> = rpcs
         .iter()
@@ -86,15 +99,12 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         })
         .collect();
 
-    let (ctor_inps, ctor_args) = ctor
-        .map(|ctor| (ctor.structify_inps(), ctor.input_names()))
-        .unwrap_or((Vec::new(), Vec::new()));
+    let (ctor_inps, ctor_args) = (ctor.structify_inps(), ctor.input_names());
+
     let deploy_payload = if ctor_inps.is_empty() {
         quote! {}
     } else {
-        quote! {
-            let payload: Ctor = serde_cbor::from_slice(&oasis::input()).unwrap();
-        }
+        quote! { let payload: Ctor = serde_cbor::from_slice(&oasis::input()).unwrap(); }
     };
 
     let deploy_mod_ident =
@@ -102,6 +112,9 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     proc_macro::TokenStream::from(quote! {
         #[macro_use]
         extern crate oasis_std;
+
+        #[macro_use]
+        extern crate serde;
 
         use oasis_std::prelude::*;
 
@@ -193,7 +206,7 @@ impl<'a> RPC<'a> {
         let mut inps = decl.inputs.iter().peekable();
         if ident == "new" {
             check_next_arg!(
-                decl,
+                sig,
                 inps,
                 RPC::is_context,
                 "`{}::new` must take `Context` as its first argument",
@@ -211,7 +224,7 @@ impl<'a> RPC<'a> {
             }
         } else {
             check_next_arg!(
-                decl,
+                sig,
                 inps,
                 RPC::is_self_ref,
                 "First argument to `{}::{}` should be `&self` or `&mut self`.",
@@ -219,7 +232,7 @@ impl<'a> RPC<'a> {
                 ident
             );
             check_next_arg!(
-                decl,
+                sig,
                 inps,
                 RPC::is_context,
                 "Second argument to `{}::{}` should be `Context`.",

@@ -1,6 +1,3 @@
-///! Provides primitive fixed size hash types.
-///! Based on https://github.com/paritytech/pwasm-std/blob/61db712/src/types.rs
-
 construct_uint! {
     /// A 256-bits (4 64-bit word) fixed-size bigint type.
     #[derive(Serialize, Deserialize)]

@@ -1,12 +1,13 @@
 [package]
 name = "oasis-macros"
 version = "0.1.0"
-authors = ["Oasis Labs <info@oasislabs.com>"]
 license = "Apache-2.0"
-repository = "https://github.com/oasislabs/oasis-std"
 description = "Macros for conveniently using the Oasis platform"
-keywords = ["oasis", "blockchain", "heavy magic"]
 edition = "2018"
+repository = "https://github.com/oasislabs/oasis-rs.git"
+authors = ["Oasis Labs <info@oasislabs.com>"]
+readme = "README.md"
+keywords = ["oasis", "blockchain", "heavy magic"]
 
 [dependencies]
 proc-macro2 = "0.4"
@@ -19,7 +20,8 @@ tiny-keccak = "1.4"
 [dev-dependencies]
 compiletest_rs = "0.3"
 either = "1.5"
-oasis-std = { path = ".." }
+oasis-std = { path = "../oasis-std" }
+oasis-test = { path = "../oasis-test" }
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.9"
 

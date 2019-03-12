@@ -49,3 +49,19 @@ impl<'a> From<&'a H256> for U256 {
         U256::from(hash.as_bytes())
     }
 }
+
+macro_rules! impl_hash_from_prim {
+    ($( $prim:ty ),+) => {
+        $(
+            impl From<$prim> for H256 {
+                fn from(prim: $prim) -> Self {
+                    let mut hash = Self::zero();
+                    hash.0.as_mut().copy_from_slice(&prim.to_be_bytes());
+                    hash
+                }
+            }
+        )+
+    };
+}
+
+impl_hash_from_prim!(i8, u8, i16, u16, i32, u32, i64, u64, i128, u128);

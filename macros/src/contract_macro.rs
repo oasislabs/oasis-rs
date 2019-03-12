@@ -208,7 +208,7 @@ impl<'a> RPC<'a> {
             check_next_arg!(
                 sig,
                 inps,
-                RPC::is_context,
+                Self::is_context,
                 "`{}::new` must take `Context` as its first argument",
                 typ
             );
@@ -226,7 +226,7 @@ impl<'a> RPC<'a> {
             check_next_arg!(
                 sig,
                 inps,
-                RPC::is_self_ref,
+                Self::is_self_ref,
                 "First argument to `{}::{}` should be `&self` or `&mut self`.",
                 typ,
                 ident
@@ -234,7 +234,7 @@ impl<'a> RPC<'a> {
             check_next_arg!(
                 sig,
                 inps,
-                RPC::is_context,
+                Self::is_context,
                 "Second argument to `{}::{}` should be `Context`.",
                 typ,
                 ident

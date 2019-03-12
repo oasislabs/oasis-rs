@@ -17,12 +17,18 @@ pub trait Contract {
 }
 
 /// The context of the current RPC.
+#[derive(Default, Clone)]
 pub struct Context {}
 
 impl Context {
     /// Returns the `Address` of the sender of the current RPC.
     pub fn sender(&self) -> Address {
         sender()
+    }
+
+    // #[cfg(test)]
+    pub fn set_sender(&mut self, sender: Address) -> &mut Self {
+        unimplemented!();
     }
 }
 

@@ -63,11 +63,11 @@ impl Forum {
         }
     }
 
-    pub fn get_posts(&self, ctx: Context) -> Vec<ForumPost> {
+    pub fn get_posts(&self, ctx: Context) -> Vec<&ForumPost> {
         self.users
             .iter()
             .find(|user| user.id == ctx.sender())
-            .map(|_| self.posts.clone()) // doesn't actually need `clone` since it'll be serialized
+            .map(|_| self.posts.iter().collect()) // doesn't actually need `clone` since it'll be serialized
             .unwrap_or(Vec::new())
     }
 
@@ -83,14 +83,14 @@ impl Forum {
         &self,
         ctx: Context,
         with: Option<UserId>,
-    ) -> Either<Vec<String>, Vec<(UserId, Vec<String>)>> {
+    ) -> Either<Vec<&String>, Vec<(&UserId, &Vec<String>)>> {
         match self.users.iter().find(|user| user.id == ctx.sender()) {
             Some(_) => match with {
                 Some(with) => Either::Left(
                     self.chats
                         .get()
                         .get(&(ctx.sender(), with))
-                        .cloned()
+                        .map(|chats| chats.iter().collect())
                         .unwrap_or(Vec::new()),
                 ),
                 None => Either::Right(
@@ -99,7 +99,7 @@ impl Forum {
                         .iter()
                         .filter_map(|((from, to), messages)| {
                             if from == &ctx.sender() {
-                                Some((to.to_owned(), messages.clone()))
+                                Some((to, messages))
                             } else {
                                 None
                             }

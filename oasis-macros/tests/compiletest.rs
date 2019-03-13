@@ -1,8 +1,7 @@
-#[test]
-fn compile_test() {
+fn run_mode(mode: &'static str) {
     let mut config = compiletest_rs::Config {
-        mode: compiletest_rs::common::Mode::Ui,
-        src_base: std::path::PathBuf::from("tests/ui"),
+        mode: mode.parse().expect("Invalid mode."),
+        src_base: std::path::PathBuf::from(format!("tests/{}", mode.replace("-", "_"))),
         target_rustcflags: Some(
             "--edition=2018 \
              -Z unstable-options \
@@ -17,4 +16,10 @@ fn compile_test() {
     config.clean_rmeta();
 
     compiletest_rs::run_tests(&config);
+}
+
+#[test]
+fn compile_test() {
+    run_mode("run-pass");
+    run_mode("ui");
 }

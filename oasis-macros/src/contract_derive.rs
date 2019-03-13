@@ -23,28 +23,31 @@ pub fn contract_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
 fn get_serde(
     input: &syn::DeriveInput,
 ) -> Result<(proc_macro2::TokenStream, proc_macro2::TokenStream), ()> {
+    if input.generics.type_params().count() > 0 {
+        err!(input.generics: "Contract cannot contain generic types.");
+        // early return because `impl Contract` won't have generics which will
+        // result in additional, confusing error messages.
+        return Err(());
+    }
+
     let empty_punct = syn::punctuated::Punctuated::<_, syn::Token![,]>::new();
     let (named, fields) = match &input.data {
-        syn::Data::Struct(syn::DataStruct { fields, .. }) => match fields {
-            syn::Fields::Named(syn::FieldsNamed { named, .. }) => (true, named.iter()),
-            syn::Fields::Unnamed(syn::FieldsUnnamed { unnamed, .. }) => (false, unnamed.iter()),
-            syn::Fields::Unit => (true, empty_punct.iter()),
-        },
+        syn::Data::Struct(s) => {
+            match input.vis {
+                syn::Visibility::Public(_) => {}
+                _ => err!(s.struct_token: "`struct {}` should have `pub` visibility.", input.ident),
+            }
+            match &s.fields {
+                syn::Fields::Named(syn::FieldsNamed { named, .. }) => (true, named.iter()),
+                syn::Fields::Unnamed(syn::FieldsUnnamed { unnamed, .. }) => (false, unnamed.iter()),
+                syn::Fields::Unit => (true, empty_punct.iter()),
+            }
+        }
         _ => {
             err!(input: "`#[derive(Contract)]` can only be applied to structs.");
             return Err(());
         }
     };
-
-    match input.vis {
-        syn::Visibility::Public(_) => {}
-        _ => err!(input.vis: "`struct {}` should have `pub` visibility.", input.ident),
-    }
-
-    if input.generics.type_params().count() > 0 {
-        err!(input.generics: "Contract cannot contain generic types.");
-        return Err(());
-    }
 
     let (sers, des): (Vec<proc_macro2::TokenStream>, Vec<proc_macro2::TokenStream>) = fields
         .enumerate()

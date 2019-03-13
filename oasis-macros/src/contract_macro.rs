@@ -63,7 +63,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 syn::ImplItem::Method(m) => match m.vis {
                     syn::Visibility::Public(_) => Some(RPC::new(imp, m)),
                     _ if m.sig.ident == "new" => {
-                        err!(m: "`{}::new` should have public visibility", contract_name);
+                        err!(m: "`{}::new` should have `pub` visibility", contract_name);
                         Some(RPC::new(imp, m))
                     }
                     _ => None,

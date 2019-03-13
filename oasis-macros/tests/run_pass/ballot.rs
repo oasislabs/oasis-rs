@@ -8,14 +8,6 @@ pub struct Ballot {
 }
 
 impl Ballot {
-    pub fn new(ctx: Context, options: Vec<String>) -> Self {
-        Self {
-            owner: ctx.sender(),
-            options,
-            votes: Vec::new(),
-        }
-    }
-
     pub fn get_options(&self, _ctx: Context) -> &Vec<String> {
         &self.options
     }
@@ -37,6 +29,16 @@ impl Ballot {
             }
         }
         results
+    }
+}
+
+impl Ballot {
+    pub fn new(ctx: Context, options: Vec<String>) -> Self {
+        Self {
+            owner: ctx.sender(),
+            options,
+            votes: Vec::new(),
+        }
     }
 }
 

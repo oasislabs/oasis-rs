@@ -1,0 +1,8 @@
+error: Contract cannot contain generic types.
+ --> $DIR/generic_state.rs:4:17
+  |
+4 | pub struct State<T>(Option<T>);
+  |                 ^
+
+error: aborting due to previous error
+

@@ -1,0 +1,8 @@
+error: `Counter::new` should have public visibility
+  --> $DIR/private_new.rs:10:5
+   |
+10 |     fn new(ctx: Context) -> Self {
+   |     ^^
+
+error: aborting due to previous error
+

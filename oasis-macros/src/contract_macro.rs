@@ -1,32 +1,42 @@
 #[proc_macro]
 pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let contract_def = parse_macro_input!(input as syn::File);
-    let def_span = contract_def.span().unwrap(); // save this for error reporting later
 
-    let mut contracts: Vec<syn::ItemStruct> = Vec::new();
+    let mut contract: Option<syn::ItemStruct> = None;
     let mut other_items: Vec<syn::Item> = Vec::new();
     for item in contract_def.items.into_iter() {
         match item {
             syn::Item::Struct(s) if has_derive(&s, "Contract") => {
-                contracts.push(s);
+                if contract.is_none() {
+                    contract.replace(s);
+                } else {
+                    err!(s: "`contract!` must contain exactly one #[derive(Contract)] struct. Additional occurrence here:");
+                    other_items.push(s.into());
+                }
             }
             _ => other_items.push(item),
         };
     }
 
-    if contracts.is_empty() {
-        def_span
-            .error("Contract definition must contain a #[derive(Contract)] struct.")
-            .emit();
-    } else if contracts.len() > 1 {
-        contracts.iter().skip(1).for_each(|c| {
-            err!(c: "Contract definition must contain exactly one #[derive(Contract)] struct.");
-        });
-    }
-    let contract = match contracts.into_iter().nth(0) {
+    let preamble = quote! {
+        #[macro_use]
+        extern crate oasis_std;
+
+        #[macro_use]
+        extern crate serde;
+
+        use oasis_std::prelude::*;
+    };
+
+    let contract = match contract {
         Some(contract) => contract,
         None => {
+            proc_macro::Span::call_site()
+                .error("Contract definition must contain a #[derive(Contract)] struct.")
+                .emit();
             return proc_macro::TokenStream::from(quote! {
+                #preamble
+
                 #(#other_items)*
             });
         }
@@ -110,13 +120,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let deploy_mod_ident =
         syn::Ident::new(&format!("_deploy_{}", contract_name), contract_name.span());
     proc_macro::TokenStream::from(quote! {
-        #[macro_use]
-        extern crate oasis_std;
-
-        #[macro_use]
-        extern crate serde;
-
-        use oasis_std::prelude::*;
+        #preamble
 
         #contract
 
@@ -165,7 +169,9 @@ impl syn::visit_mut::VisitMut for LazyInserter {
             syn::Expr::Macro(ref m) if m.mac.path.is_ident("lazy") => {
                 let key = match fv.member {
                     syn::Member::Named(ref ident) => keccak_key(ident),
-                    syn::Member::Unnamed(syn::Index { index, .. }) => quote! { H256::from(#index) },
+                    syn::Member::Unnamed(syn::Index { index, .. }) => {
+                        quote! { H256::from(#index as u32) }
+                    }
                 };
                 let val = &m.mac.tts;
                 fv.expr = parse_quote!(Lazy::_new(H256::from(#key), #val));

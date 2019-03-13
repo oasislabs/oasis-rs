@@ -1,0 +1,8 @@
+error: Second argument to `Counter::incr` should be `Context`.
+  --> $DIR/rpc_no_ctx.rs:11:28
+   |
+11 |     pub fn incr(&mut self, amount: u32) {
+   |                            ^^^^^^
+
+error: aborting due to previous error
+

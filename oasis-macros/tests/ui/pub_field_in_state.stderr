@@ -1,0 +1,6 @@
+warning: Field should have no visibility marker.
+ --> $DIR/pub_field_in_state.rs:5:5
+  |
+5 |     pub count: u32
+  |     ^^^
+

@@ -1,0 +1,8 @@
+error: `struct Counter` should have `pub` visibility.
+ --> $DIR/private_state.rs:3:10
+  |
+3 | #[derive(Contract)]
+  |          ^^^^^^^^
+
+error: aborting due to previous error
+

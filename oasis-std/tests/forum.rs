@@ -2,7 +2,11 @@ oasis_macros::contract! { // TODO: rustfmt needs to work inside of macros
 
 use std::collections::HashMap;
 
-use either::Either;
+#[derive(Clone, Serialize, Deserialize)]
+pub enum Either<L, R> {
+    Left(L),
+    Right(R),
+}
 
 #[derive(Contract)]
 pub struct Forum {
@@ -33,25 +37,29 @@ pub struct ForumPost {
 }
 
 impl Forum {
-    pub fn new(_ctx: Context) -> Self {
+    pub fn new(ctx: &Context, admin_username: String) -> Self {
         // Default::default() is not yet possible because Lazy can't `impl Default`
         // this can be solved using a const generic when those are implemented: `Lazy<T, "key">`
         Self {
-            users: Vec::new(),
+            users: vec![User {
+                id: ctx.sender(),
+                name: admin_username,
+                reputation: 9001,
+            }],
             posts: Vec::new(),
             chats: lazy!(HashMap::new()),
         }
     }
 
-    pub fn signup(&mut self, ctx: Context, name: String) {
+    pub fn signup(&mut self, ctx: &Context, name: &str) {
         self.users.push(User {
             id: ctx.sender(),
-            name,
+            name: name.to_string(),
             reputation: 0,
         })
     }
 
-    pub fn post(&mut self, ctx: Context, title: String, message: String) {
+    pub fn post(&mut self, ctx: &Context, title: String, message: String) {
         if let Some(mut user) = self.users.iter_mut().find(|user| user.id == ctx.sender()) {
             self.posts.push(ForumPost {
                 author: ctx.sender(),
@@ -63,7 +71,7 @@ impl Forum {
         }
     }
 
-    pub fn get_posts(&self, ctx: Context) -> Vec<&ForumPost> {
+    pub fn get_posts(&self, ctx: &Context) -> Vec<&ForumPost> {
         self.users
             .iter()
             .find(|user| user.id == ctx.sender())
@@ -71,25 +79,25 @@ impl Forum {
             .unwrap_or(Vec::new())
     }
 
-    pub fn dm(&mut self, ctx: Context, to: UserId, message: String) {
+    pub fn dm(&mut self, ctx: &Context, to: &UserId, message: &str) {
         self.chats
             .get_mut()
-            .entry((ctx.sender(), to))
+            .entry((ctx.sender(), *to))
             .or_default()
-            .push(message)
+            .push(message.to_string())
     }
 
     pub fn get_chats(
         &self,
-        ctx: Context,
-        with: Option<UserId>,
+        ctx: &Context,
+        with: &Option<UserId>,
     ) -> Either<Vec<&String>, Vec<(&UserId, &Vec<String>)>> {
         match self.users.iter().find(|user| user.id == ctx.sender()) {
             Some(_) => match with {
                 Some(with) => Either::Left(
                     self.chats
                         .get()
-                        .get(&(ctx.sender(), with))
+                        .get(&(ctx.sender(), *with))
                         .map(|chats| chats.iter().collect())
                         .unwrap_or(Vec::new()),
                 ),
@@ -115,41 +123,46 @@ impl Forum {
     }
 }
 
-} // TODO: TaG
+}
 
-#[test]
-// #[oasis_test::test] // TODO
-fn test() {
-    use oasis_std::prelude::*;
+macro_rules! find_user {
+    ($bb:ident, $ctx:ident) => {
+        $bb.users
+            .iter()
+            .find(|user| user.id == $ctx.sender())
+            .expect("`signup` failed")
+    };
+}
 
-    let mut ctx = oasis_std::exe::Context::default();
-    ctx.set_sender(Address::from([42u8; 20]));
+speculate::speculate! {
 
-    // TODO: derive client that looks like struct
-    let mut bb = Forum::new(ctx.clone());
+    describe "forum" {
+        before {
+            oasis_test::init!();
+        }
 
-    let username = "boarhunter69";
-    bb.signup(ctx.clone(), username.to_string()); // technically the client can accept AsRef<T>
-                                                  // are ergonomics worth the type mismatch?
+        it "should work" {
+            use oasis_std::prelude::*;
 
-    macro_rules! find_user {
-        () => {
-            bb.users
-                .iter()
-                .find(|user| user.id == ctx.sender())
-                .expect("`signup` failed")
-        };
+            let mut ctx = Context::default();
+
+            ctx.set_sender(Address::from([42u8; 20]));
+            let mut bb = Forum::new(&ctx, "admin".to_string());
+
+            let username = "boarhunter69";
+            ctx.set_sender(Address::from([69u8; 20]));
+            bb.signup(&ctx, username);
+
+            let user = find_user!(bb, ctx);
+            assert_eq!(user.name, username.to_string());
+            assert_eq!(user.reputation, 0);
+
+            let title = "Rust is the best!";
+            let message = "👆 title says it all";
+            bb.post(&ctx, title.to_string(), message.to_string());
+
+            let user = find_user!(bb, ctx);
+            assert_eq!(user.reputation, 1);
+        }
     }
-
-    let user = find_user!();
-    assert_eq!(user.name, username.to_string());
-    assert_eq!(user.reputation, 0);
-    std::mem::drop(user);
-
-    let title = "Rust is the best!";
-    let message = "👆 title says it all";
-    bb.post(ctx.clone(), title.to_string(), message.to_string());
-
-    let user = find_user!();
-    assert_eq!(user.reputation, 1);
 }

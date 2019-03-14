@@ -126,7 +126,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
         #(#other_items)*
 
-        #[cfg(feature = "deploy")]
+        #[cfg(any(feature = "deploy", test))]
         #[allow(non_snake_case)]
         mod #deploy_mod_ident {
             use super::*;

@@ -11,10 +11,3 @@ keywords = ["oasis", "test", "testing"]
 
 [dependencies]
 oasis-std = { version = "0.1", path = "../oasis-std" }
-
-# [dev-dependencies]
-# compiletest_rs = "0.3"
-# either = "1.5"
-# oasis-test = { path = "../oasis-test" }
-# serde = { version = "1.0", features = ["derive"] }
-# serde_cbor = "0.9"

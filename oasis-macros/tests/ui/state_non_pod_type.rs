@@ -4,7 +4,7 @@ oasis_std::contract! {
 pub struct NonPOD(*const u8);
 
 impl NonPOD {
-    pub fn new(ctx: Context) -> Self {
+    pub fn new(ctx: &Context) -> Self {
         Self(std::ptr::null())
     }
 }

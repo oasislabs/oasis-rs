@@ -4,7 +4,7 @@ oasis_std::contract! {
 pub struct State<T>(Option<T>);
 
 impl<T: Default> State<T> {
-    pub fn new(ctx: Context) -> Self {
+    pub fn new(ctx: &Context) -> Self {
         Default::default()
     }
 

@@ -1,7 +1,7 @@
 error: `Counter::new` should have `pub` visibility
   --> $DIR/private_new.rs:10:5
    |
-10 |     pub(crate) fn new(ctx: Context) -> Self {
+10 |     pub(crate) fn new(ctx: &Context) -> Self {
    |     ^^^
 
 error: aborting due to previous error

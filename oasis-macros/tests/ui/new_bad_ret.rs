@@ -5,7 +5,7 @@ oasis_std::contract! {
 pub struct Counter(u32);
 
 impl Counter {
-    pub fn new(ctx: Context, start_count: u32) -> () {
+    pub fn new(ctx: &Context, start_count: u32) -> () {
         Self(start_count);
     }
 }

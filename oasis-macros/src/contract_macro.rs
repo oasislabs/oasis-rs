@@ -100,21 +100,21 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         .map(|rpc| {
             let ident = rpc.ident;
             let arg_names = rpc.input_names();
-            let call_names = arg_names.clone();
+            let call_args = rpc.call_args();
             quote! {
                 RPC::#ident { #(#arg_names),* } => {
-                    serde_cbor::to_vec(&contract.#ident(Context {}, #(#call_names),*))
+                    serde_cbor::to_vec(&contract.#ident(&Context {}, #(#call_args),*))
                 }
             }
         })
         .collect();
 
-    let (ctor_inps, ctor_args) = (ctor.structify_inps(), ctor.input_names());
-
-    let deploy_payload = if ctor_inps.is_empty() {
+    let (ctor_inps, ctor_args) = (ctor.structify_inps(), ctor.call_args());
+    let deploy_payload = if ctor_args.is_empty() {
         quote! {}
     } else {
-        quote! { let payload: Ctor = serde_cbor::from_slice(&oasis::input()).unwrap(); }
+        let args = ctor_args.clone();
+        quote! { let Ctor { #(#args)* } = serde_cbor::from_slice(&oasis::input()).unwrap(); }
     };
 
     let deploy_mod_ident =
@@ -139,24 +139,25 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             }
 
             #[no_mangle]
-            fn call() {
+            pub extern "C" fn call() {
                 let mut contract = <#contract_name>::coalesce();
                 let payload: RPC = serde_cbor::from_slice(&oasis::input()).unwrap();
                 let result = match payload {
                     #(#call_tree),*
                 }.unwrap();
-                OLinks::sunder(contract);
+                #contract_name::sunder(contract);
                 oasis::ret(&result);
             }
 
+            #[derive(serde::Deserialize)]
             struct Ctor {
                 #(#ctor_inps),*
             }
 
             #[no_mangle]
-            pub fn deploy() {
+            pub extern "C" fn deploy() {
                 #deploy_payload
-                #contract_name::sunder(#contract_name::new(Context {}, #(payload.#ctor_args),*));
+                #contract_name::sunder(#contract_name::new(&Context {}, #(#ctor_args),*));
             }
         }
     })
@@ -214,8 +215,8 @@ impl<'a> RPC<'a> {
             check_next_arg!(
                 sig,
                 inps,
-                Self::is_context,
-                "`{}::new` must take `Context` as its first argument",
+                Self::is_context_ref,
+                "`{}::new` must take `&Context` as its first argument",
                 typ
             );
             match &decl.output {
@@ -240,8 +241,8 @@ impl<'a> RPC<'a> {
             check_next_arg!(
                 sig,
                 inps,
-                Self::is_context,
-                "Second argument to `{}::{}` should be `Context`.",
+                Self::is_context_ref,
+                "Second argument to `{}::{}` should be `&Context`.",
                 typ,
                 ident
             );
@@ -252,10 +253,10 @@ impl<'a> RPC<'a> {
         }
     }
 
-    fn is_context(arg: &syn::FnArg) -> bool {
+    fn is_context_ref(arg: &syn::FnArg) -> bool {
         match arg {
             syn::FnArg::Captured(syn::ArgCaptured { ty, .. })
-                if ty == &parse_quote!(Context) || ty == &parse_quote!(oasis_std::Context) =>
+                if ty == &parse_quote!(&Context) || ty == &parse_quote!(&oasis_std::Context) =>
             {
                 true
             }
@@ -286,9 +287,21 @@ impl<'a> RPC<'a> {
     }
 
     fn structify_inps(&self) -> Vec<proc_macro2::TokenStream> {
+        let string_type = parse_quote!(String);
         self.inputs
             .iter()
-            .map(|(name, ty)| quote!( #name: #ty ))
+            .map(|(name, ty)| {
+                let owned_ty = match ty {
+                    syn::Type::Reference(syn::TypeReference { elem, .. }) => match &**elem {
+                        syn::Type::Path(syn::TypePath { path, .. }) if path.is_ident("str") => {
+                            &string_type
+                        }
+                        _ => &**elem,
+                    },
+                    _ => *ty,
+                };
+                quote!( #name: #owned_ty )
+            })
             .collect()
     }
 
@@ -296,6 +309,16 @@ impl<'a> RPC<'a> {
         self.inputs
             .iter()
             .map(|(name, _ty)| quote!( #name ))
+            .collect()
+    }
+
+    fn call_args(&self) -> Vec<proc_macro2::TokenStream> {
+        self.inputs
+            .iter()
+            .map(|(name, ty)| match ty {
+                syn::Type::Reference(_) => quote! { &#name },
+                _ => quote! { #name },
+            })
             .collect()
     }
 }

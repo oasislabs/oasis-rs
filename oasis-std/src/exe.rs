@@ -25,11 +25,6 @@ impl Context {
     pub fn sender(&self) -> Address {
         sender()
     }
-
-    // #[cfg(test)]
-    pub fn set_sender(&mut self, sender: Address) -> &mut Self {
-        unimplemented!();
-    }
 }
 
 /// Container for contract state that is lazily loaded from storage.
@@ -48,7 +43,7 @@ impl Context {
 /// }
 ///
 /// impl SinglePlayerRPG {
-///    pub fn new(player_name: String) -> Self {
+///    pub fn new(_ctx: &Context, player_name: String) -> Self {
 ///        Self {
 ///           player_name,
 ///           inventory: Vec::new(),
@@ -56,15 +51,15 @@ impl Context {
 ///        }
 ///    }
 ///
-///    pub fn get_inventory(&self) -> Vec<InventoryItem> {
+///    pub fn get_inventory(&self, _ctx: &Context) -> Vec<InventoryItem> {
 ///        self.inventory.clone()
 ///    }
 ///
-///    pub fn get_bank(&self) -> Vec<InventoryItem> {
+///    pub fn get_bank(&self, _ctx: &Context) -> Vec<InventoryItem> {
 ///        self.bank.get().clone()
 ///    }
 ///
-///    pub fn move_item_to_inventory(&mut self, item: InventoryItem) {
+///    pub fn move_item_to_inventory(&mut self, _ctx: &Context, item: InventoryItem) {
 ///        self.bank.get_mut().entry(&item).and_modify(|count| {
 ///            if count > 0 {
 ///                 self.inventory.push(item);
@@ -126,13 +121,13 @@ impl<T: Storage> Lazy<T> {
 /// Works in tandem with `oasis_macros::LazyInserter`.
 ///
 /// ```
-/// fn new(ctx: Context) -> Self {
+/// fn new(ctx: &Context) -> Self {
 ///    Self { the_field: lazy!(the_val) }
 /// }
 /// ```
 /// expands to
 /// ```
-/// fn new(ctx: Context) -> Self {
+/// fn new(ctx: &Context) -> Self {
 ///    Self {
 ///        the_field: Lazy::new(H256::from(keccak256("the_field".as_bytes())), the_val)
 ///    }

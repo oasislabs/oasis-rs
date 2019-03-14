@@ -6,7 +6,7 @@ pub struct Counter {
 }
 
 impl Counter {
-    pub fn new(ctx: Context) -> Self {
+    pub fn new(ctx: &Context) -> Self {
         Default::default()
     }
 }

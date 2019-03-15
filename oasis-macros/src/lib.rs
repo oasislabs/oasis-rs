@@ -1,4 +1,9 @@
-#![feature(bind_by_move_pattern_guards, proc_macro_diagnostic, type_ascription)]
+#![feature(
+    bind_by_move_pattern_guards,
+    box_patterns,
+    proc_macro_diagnostic,
+    type_ascription
+)]
 #![recursion_limit = "128"]
 
 extern crate proc_macro;

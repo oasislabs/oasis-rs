@@ -1,12 +1,9 @@
 oasis_macros::contract! { // TODO: rustfmt needs to work inside of macros
 
-use std::collections::HashMap;
+#[macro_use]
+extern crate failure;
 
-#[derive(Clone, Serialize, Deserialize)]
-pub enum Either<L, R> {
-    Left(L),
-    Right(R),
-}
+use std::collections::HashMap;
 
 #[derive(Contract)]
 pub struct Forum {
@@ -36,11 +33,19 @@ pub struct ForumPost {
     replies: Vec<String>,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub enum Either<L, R> {
+    Left(L),
+    Right(R),
+}
+
+pub type Result<T> = std::result::Result<T, failure::Error>;
+
 impl Forum {
-    pub fn new(ctx: &Context, admin_username: String) -> Self {
+    pub fn new(ctx: &Context, admin_username: String) -> Result<Self> {
         // Default::default() is not yet possible because Lazy can't `impl Default`
         // this can be solved using a const generic when those are implemented: `Lazy<T, "key">`
-        Self {
+        Ok(Self {
             users: vec![User {
                 id: ctx.sender(),
                 name: admin_username,
@@ -48,82 +53,82 @@ impl Forum {
             }],
             posts: Vec::new(),
             chats: lazy!(HashMap::new()),
-        }
+        })
     }
 
-    pub fn signup(&mut self, ctx: &Context, name: &str) {
+    pub fn signup(&mut self, ctx: &Context, name: &str) -> Result<()> {
         self.users.push(User {
             id: ctx.sender(),
             name: name.to_string(),
             reputation: 0,
-        })
+        });
+        Ok(())
     }
 
-    pub fn post(&mut self, ctx: &Context, title: String, message: String) {
-        if let Some(mut user) = self.users.iter_mut().find(|user| user.id == ctx.sender()) {
-            self.posts.push(ForumPost {
-                author: ctx.sender(),
-                title,
-                message,
-                replies: Vec::new(),
-            });
-            user.reputation += 1;
+    pub fn post(&mut self, ctx: &Context, title: String, message: String) -> Result<()> {
+        match self.users.iter_mut().find(|user| user.id == ctx.sender()) {
+            Some(mut user) => {
+                self.posts.push(ForumPost {
+                    author: ctx.sender(),
+                    title,
+                    message,
+                    replies: Vec::new(),
+                });
+                user.reputation += 1;
+                Ok(())
+            }
+            None => Err(format_err!("403")),
         }
     }
 
-    pub fn get_posts(&self, ctx: &Context) -> Vec<&ForumPost> {
-        self.users
-            .iter()
-            .find(|user| user.id == ctx.sender())
-            .map(|_| self.posts.iter().collect()) // doesn't actually need `clone` since it'll be serialized
-            .unwrap_or(Vec::new())
+    pub fn get_posts(&self, ctx: &Context) -> Result<Vec<&ForumPost>> {
+        if !self.users.iter().any(|user| user.id == ctx.sender()) {
+            return Err(format_err!("403"));
+        }
+        Ok(self.posts.iter().collect())
     }
 
-    pub fn dm(&mut self, ctx: &Context, to: &UserId, message: &str) {
+    pub fn dm(&mut self, ctx: &Context, to: &UserId, message: &str) -> Result<()> {
         self.chats
             .get_mut()
             .entry((ctx.sender(), *to))
             .or_default()
-            .push(message.to_string())
+            .push(message.to_string());
+        Ok(())
     }
 
     pub fn get_chats(
         &self,
         ctx: &Context,
         with: &Option<UserId>,
-    ) -> Either<Vec<&String>, Vec<(&UserId, &Vec<String>)>> {
+    ) -> Result<Either<Vec<&String>, Vec<(&UserId, &Vec<String>)>>> {
         match self.users.iter().find(|user| user.id == ctx.sender()) {
             Some(_) => match with {
-                Some(with) => Either::Left(
-                    self.chats
-                        .get()
-                        .get(&(ctx.sender(), *with))
-                        .map(|chats| chats.iter().collect())
-                        .unwrap_or(Vec::new()),
-                ),
-                None => Either::Right(
-                    self.chats
-                        .get()
-                        .iter()
-                        .filter_map(|((from, to), messages)| {
-                            if from == &ctx.sender() {
-                                Some((to, messages))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect(),
-                ),
+                Some(with) => Ok(Either::Left(self
+                    .chats
+                    .get()
+                    .get(&(ctx.sender(), *with))
+                    .map(|chats| chats.iter().collect())
+                    .unwrap_or(Vec::new()))),
+                None => Ok(Either::Right(self
+                    .chats
+                    .get()
+                    .iter()
+                    .filter_map(|((from, to), messages)| {
+                        if from == &ctx.sender() {
+                            Some((to, messages))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect())),
             },
-            None => match with {
-                Some(_) => Either::Left(Vec::new()),
-                None => Either::Right(Vec::new()),
-            },
+            None => Err(format_err!("403")),
         }
     }
 }
 
-}
+} // TODO
 
 macro_rules! find_user {
     ($bb:ident, $ctx:ident) => {
@@ -147,11 +152,11 @@ speculate::speculate! {
             let mut ctx = Context::default();
 
             ctx.set_sender(Address::from([42u8; 20]));
-            let mut bb = Forum::new(&ctx, "admin".to_string());
+            let mut bb = Forum::new(&ctx, "admin".to_string()).unwrap();
 
             let username = "boarhunter69";
             ctx.set_sender(Address::from([69u8; 20]));
-            bb.signup(&ctx, username);
+            bb.signup(&ctx, username).unwrap();
 
             let user = find_user!(bb, ctx);
             assert_eq!(user.name, username.to_string());
@@ -159,7 +164,7 @@ speculate::speculate! {
 
             let title = "Rust is the best!";
             let message = "👆 title says it all";
-            bb.post(&ctx, title.to_string(), message.to_string());
+            bb.post(&ctx, title.to_string(), message.to_string()).unwrap();
 
             let user = find_user!(bb, ctx);
             assert_eq!(user.reputation, 1);

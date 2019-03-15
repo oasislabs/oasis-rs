@@ -51,3 +51,13 @@ fn keccak_key(ident: &syn::Ident) -> proc_macro2::TokenStream {
     .unwrap();
     quote! { H256::from(&#key) }
 }
+
+fn mark_ctx_unused(sig: &mut syn::MethodSig) {
+    sig.decl.inputs.iter_mut().for_each(|inp| {
+        if let syn::FnArg::Captured(syn::ArgCaptured { ty, pat, .. }) = inp {
+            if ty == &parse_quote!(&Context) {
+                *pat = parse_quote!(_);
+            }
+        }
+    });
+}

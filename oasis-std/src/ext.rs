@@ -154,15 +154,10 @@ pub fn create2(endowment: U256, salt: H256, code: &[u8]) -> Result<Address, ExtC
 /// * `value` - a value in Wei to send with a call
 /// * `input` - a data to send with a call
 /// * `result` - a mutable reference to be filled with a result data
-pub fn call(
-    gas: u64,
-    address: &Address,
-    value: U256,
-    input: &[u8],
-    result: &mut [u8],
-) -> Result<(), ExtCallError> {
+pub fn call(gas: u64, address: &Address, value: U256, input: &[u8]) -> Result<(), ExtCallError> {
     let mut value_arr = [0u8; 32];
     value.to_big_endian(&mut value_arr);
+    let mut result = vec![0; 256]; // TODO: returndatasize
     unsafe {
         if eth::ccall(
             gas as i64,

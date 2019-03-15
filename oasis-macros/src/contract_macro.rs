@@ -1,9 +1,12 @@
+include!("rpc.rs");
+
 #[proc_macro]
 pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let contract_def = parse_macro_input!(input as syn::File);
 
-    let mut contract: Option<syn::ItemStruct> = None;
-    let mut other_items: Vec<syn::Item> = Vec::new();
+    let mut contract = None;
+    let mut impls = Vec::new();
+    let mut other_items = Vec::new();
     for item in contract_def.items.into_iter() {
         match item {
             syn::Item::Struct(s) if has_derive(&s, "Contract") => {
@@ -14,6 +17,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                     other_items.push(s.into());
                 }
             }
+            syn::Item::Impl(i) => impls.push(i),
             _ => other_items.push(item),
         };
     }
@@ -43,20 +47,21 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     };
     let contract_name = &contract.ident;
 
+    let mut contract_impls = Vec::new();
+    for imp in impls.into_iter() {
+        if is_impl_of(&imp, contract_name) {
+            contract_impls.push(imp);
+        } else {
+            other_items.push(imp.into());
+        }
+    }
+
     // Transform `lazy!(val)` into `Lazy::_new(key, val)`.
-    other_items.iter_mut().for_each(|item| {
-        LazyInserter {}.visit_item_mut(item);
+    contract_impls.iter_mut().for_each(|item| {
+        LazyInserter {}.visit_item_impl_mut(item);
     });
 
-    let impls: Vec<&syn::ItemImpl> = other_items
-        .iter()
-        .filter_map(|item| match item {
-            syn::Item::Impl(imp) if is_impl_of(&imp, contract_name) => Some(imp),
-            _ => None,
-        })
-        .collect();
-
-    let (ctor, rpcs): (Vec<RPC>, Vec<RPC>) = impls
+    let (ctor, rpcs): (Vec<RPC>, Vec<RPC>) = contract_impls
         .iter()
         .flat_map(|imp| {
             imp.items.iter().filter_map(move |item| match item {
@@ -71,13 +76,17 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 _ => None,
             })
         })
-        .partition(|rpc| rpc.ident == "new");
+        .partition(|rpc| rpc.sig.ident == "new");
 
-    let empty_new = syn::Ident::new("new", proc_macro2::Span::call_site());
+    let empty_new: syn::ImplItemMethod = parse_quote!(
+        pub fn new() -> Result<Self> {
+            unreachable!()
+        }
+    );
     let ctor = ctor.into_iter().nth(0).unwrap_or_else(|| {
         err!(contract_name: "Missing implementation for `{}::new`.", contract_name);
         RPC {
-            ident: &empty_new,
+            sig: &empty_new.sig,
             inputs: Vec::new(),
         }
     });
@@ -85,7 +94,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let rpc_defs: Vec<proc_macro2::TokenStream> = rpcs
         .iter()
         .map(|rpc| {
-            let ident = rpc.ident;
+            let ident = &rpc.sig.ident;
             let inps = rpc.structify_inps();
             // e.g., `my_method { my_input: String, my_other_input: u64 }`
             quote! {
@@ -98,68 +107,183 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let call_tree: Vec<proc_macro2::TokenStream> = rpcs
         .iter()
         .map(|rpc| {
-            let ident = rpc.ident;
+            let ident = &rpc.sig.ident;
             let arg_names = rpc.input_names();
             let call_args = rpc.call_args();
             quote! {
-                RPC::#ident { #(#arg_names),* } => {
-                    serde_cbor::to_vec(&contract.#ident(&Context {}, #(#call_args),*))
+                RpcPayload::#ident { #(#arg_names),* } => {
+                    let result = contract.#ident(&Context {}, #(#call_args),*);
+                    match result {
+                        Ok(ret) => serde_cbor::to_vec(&ret),
+                        Err(err) =>  serde_cbor::to_vec(&err.to_string())
+                    }
                 }
             }
         })
         .collect();
 
+    let mut ctor_sig = ctor.sig.clone();
+    mark_ctx_unused(&mut ctor_sig);
     let (ctor_inps, ctor_args) = (ctor.structify_inps(), ctor.call_args());
+    let ctor_payload_inps: Vec<proc_macro2::TokenStream> = ctor_args
+        .iter()
+        .map(|arg| {
+            let arg = arg.clone();
+            quote! {
+                #arg: #arg.to_owned()
+            }
+        })
+        .collect();
+    let ctor_new_args = ctor_args.clone();
     let deploy_payload = if ctor_args.is_empty() {
         quote! {}
     } else {
         let args = ctor_args.clone();
-        quote! { let Ctor { #(#args)* } = serde_cbor::from_slice(&oasis::input()).unwrap(); }
+        quote! { let CtorPayload { #(#args)* } = serde_cbor::from_slice(&oasis::input()).unwrap(); }
     };
 
-    let deploy_mod_ident =
-        syn::Ident::new(&format!("_deploy_{}", contract_name), contract_name.span());
+    let client_impls: Vec<proc_macro2::TokenStream> = rpcs
+        .iter()
+        .map(|rpc| {
+            let mut sig = rpc.sig.clone();
+            mark_ctx_unused(&mut sig);
+            let ident = &sig.ident;
+            let inps = rpc.input_names().into_iter().map(|name| {
+                quote! {
+                    #name: #name.to_owned()
+                }
+            });
+            quote! {
+                pub #sig {
+                    let payload = RpcPayload::#ident { #(#inps),* };
+                    // let input = serde_cbor::to_vec(&payload).unwrap();
+                    let input = vec![0; 32];//serde_cbor::to_vec(&payload).unwrap();
+                    // TODO: populate `call` fields with actual values
+                    let result = oasis::call(
+                        42 /* gas */,
+                        &Address::zero(),
+                        U256::from(0) /* value */,
+                        &input
+                    )?;
+                    // TODO: make `call` fetch return data size
+                    panic!()
+                    // serde_cbor::from_slice(&result)?
+                }
+            }
+        })
+        .collect();
+
+    let mut client = contract.clone();
+    client.fields.iter_mut().for_each(|f| {
+        f.vis = parse_quote!(pub(crate));
+    });
+    client.attrs = client
+        .attrs
+        .into_iter()
+        .filter_map(|mut attr| {
+            if !attr.path.is_ident("derive") {
+                return Some(attr);
+            }
+            match attr.parse_meta() {
+                Ok(syn::Meta::List(syn::MetaList { nested, .. })) => {
+                    let derives: Vec<&syn::NestedMeta> = nested
+                        .iter()
+                        .filter(|d| d != &&parse_quote!(Contract))
+                        .collect();
+                    if derives.is_empty() {
+                        None
+                    } else {
+                        attr.tts = quote! { (#(#derives)*) };
+                        Some(attr)
+                    }
+                }
+                _ => None,
+            }
+        })
+        .collect();
+
+    let wrapper_mod_ident = syn::Ident::new(&format!("_{}_", contract_name), contract_name.span());
     proc_macro::TokenStream::from(quote! {
         #preamble
 
-        #contract
-
         #(#other_items)*
 
-        #[cfg(any(feature = "deploy", test))]
         #[allow(non_snake_case)]
-        mod #deploy_mod_ident {
+        mod #wrapper_mod_ident {
             use super::*;
+
+            #[derive(serde::Serialize, serde::Deserialize)]
+            struct CtorPayload {
+                #(#ctor_inps),*
+            }
 
             #[derive(serde::Serialize, serde::Deserialize)]
             #[serde(tag = "method", content = "payload")]
             #[allow(non_camel_case_types)]
-            enum RPC {
+            pub enum RpcPayload {
                 #(#rpc_defs),*
             }
 
-            #[no_mangle]
-            pub extern "C" fn call() {
-                let mut contract = <#contract_name>::coalesce();
-                let payload: RPC = serde_cbor::from_slice(&oasis::input()).unwrap();
-                let result = match payload {
-                    #(#call_tree),*
-                }.unwrap();
-                #contract_name::sunder(contract);
-                oasis::ret(&result);
+            mod contract {
+                use super::*;
+
+                #contract
+
+                #(#contract_impls)*
+
+                #[cfg(any(feature = "deploy", test))]
+                pub(super) mod deploy {
+                    use super::*;
+
+                    #[no_mangle]
+                    pub extern "C" fn call() {
+                        let mut contract = <#contract_name>::coalesce();
+                        let payload: RpcPayload = serde_cbor::from_slice(&oasis::input()).unwrap();
+                        let result = match payload {
+                            #(#call_tree),*
+                        }.unwrap();
+                        #contract_name::sunder(contract);
+                        oasis::ret(&result);
+                    }
+
+                    #[no_mangle]
+                    pub extern "C" fn deploy() {
+                        #deploy_payload
+                        #contract_name::sunder(
+                            #contract_name::new(&Context {}, #(#ctor_args),*).unwrap()
+                        );
+                    }
+                }
             }
 
-            #[derive(serde::Deserialize)]
-            struct Ctor {
-                #(#ctor_inps),*
+            mod client {
+                use super::*;
+                use contract::#contract_name as TheContract;
+
+                #client
+
+                impl #contract_name {
+                    #(#client_impls)*
+
+                    #[cfg(test)]
+                    pub #ctor_sig {
+                        let payload = CtorPayload { #(#ctor_payload_inps),* };
+                        oasis_test::set_input(serde_cbor::to_vec(&payload).unwrap());
+                        contract::deploy::deploy();
+                        Ok(TheContract::new(&Context {}, #(#ctor_new_args),*)?.into())
+                    }
+                }
+
+                impl From<TheContract> for #contract_name {
+                    fn from(contract: TheContract) -> Self {
+                        unsafe { std::mem::transmute::<TheContract, #contract_name>(contract) }
+                    }
+                }
             }
 
-            #[no_mangle]
-            pub extern "C" fn deploy() {
-                #deploy_payload
-                #contract_name::sunder(#contract_name::new(&Context {}, #(#ctor_args),*));
-            }
+            pub use client::#contract_name;
         }
+        pub use #wrapper_mod_ident::#contract_name;
     })
 }
 
@@ -180,145 +304,5 @@ impl syn::visit_mut::VisitMut for LazyInserter {
             _ => (),
         }
         syn::visit_mut::visit_field_value_mut(self, fv);
-    }
-}
-
-struct RPC<'a> {
-    ident: &'a syn::Ident,
-    inputs: Vec<(&'a syn::Pat, &'a syn::Type)>,
-}
-
-impl<'a> RPC<'a> {
-    fn new(imp: &'a syn::ItemImpl, m: &'a syn::ImplItemMethod) -> Self {
-        let sig = &m.sig;
-        let ident = &sig.ident;
-        if let Some(abi) = &sig.abi {
-            err!(abi: "RPC methods cannot declare an ABI.");
-        }
-        if let Some(unsafe_) = sig.unsafety {
-            err!(unsafe_: "RPC methods may not be unsafe.");
-        }
-        let decl = &sig.decl;
-        if decl.generics.type_params().count() > 0 {
-            err!(
-                decl.generics:
-                "RPC methods may not have generic type parameters.",
-            );
-        }
-        if let Some(variadic) = decl.variadic {
-            err!(variadic: "RPC methods may not be variadic.");
-        }
-
-        let typ = &*imp.self_ty;
-        let mut inps = decl.inputs.iter().peekable();
-        if ident == "new" {
-            check_next_arg!(
-                sig,
-                inps,
-                Self::is_context_ref,
-                "`{}::new` must take `&Context` as its first argument",
-                typ
-            );
-            match &decl.output {
-                syn::ReturnType::Type(_, t) if &**t == typ || t == &parse_quote!(Self) => (),
-                ret => {
-                    err!(ret: "`{}::new` must return `Self`", quote!(#typ));
-                }
-            }
-            Self {
-                ident,
-                inputs: inps.filter_map(RPC::check_arg).collect(),
-            }
-        } else {
-            check_next_arg!(
-                sig,
-                inps,
-                Self::is_self_ref,
-                "First argument to `{}::{}` should be `&self` or `&mut self`.",
-                typ,
-                ident
-            );
-            check_next_arg!(
-                sig,
-                inps,
-                Self::is_context_ref,
-                "Second argument to `{}::{}` should be `&Context`.",
-                typ,
-                ident
-            );
-            Self {
-                ident,
-                inputs: inps.filter_map(RPC::check_arg).collect(),
-            }
-        }
-    }
-
-    fn is_context_ref(arg: &syn::FnArg) -> bool {
-        match arg {
-            syn::FnArg::Captured(syn::ArgCaptured { ty, .. })
-                if ty == &parse_quote!(&Context) || ty == &parse_quote!(&oasis_std::Context) =>
-            {
-                true
-            }
-            _ => false,
-        }
-    }
-
-    fn is_self_ref(arg: &syn::FnArg) -> bool {
-        match arg {
-            syn::FnArg::SelfRef(_) => true,
-            _ => false,
-        }
-    }
-
-    fn check_arg(arg: &syn::FnArg) -> Option<(&syn::Pat, &syn::Type)> {
-        match arg {
-            syn::FnArg::Captured(syn::ArgCaptured { pat, ty, .. }) => Some((pat, ty)),
-            syn::FnArg::Ignored(_) => {
-                err!(arg: "Arguments to RPCs must have explicit names.");
-                None
-            }
-            syn::FnArg::Inferred(_) => {
-                err!(arg: "Arguments to RPCs must have explicit types.");
-                None
-            }
-            _ => None,
-        }
-    }
-
-    fn structify_inps(&self) -> Vec<proc_macro2::TokenStream> {
-        let string_type = parse_quote!(String);
-        self.inputs
-            .iter()
-            .map(|(name, ty)| {
-                let owned_ty = match ty {
-                    syn::Type::Reference(syn::TypeReference { elem, .. }) => match &**elem {
-                        syn::Type::Path(syn::TypePath { path, .. }) if path.is_ident("str") => {
-                            &string_type
-                        }
-                        _ => &**elem,
-                    },
-                    _ => *ty,
-                };
-                quote!( #name: #owned_ty )
-            })
-            .collect()
-    }
-
-    fn input_names(&self) -> Vec<proc_macro2::TokenStream> {
-        self.inputs
-            .iter()
-            .map(|(name, _ty)| quote!( #name ))
-            .collect()
-    }
-
-    fn call_args(&self) -> Vec<proc_macro2::TokenStream> {
-        self.inputs
-            .iter()
-            .map(|(name, ty)| match ty {
-                syn::Type::Reference(_) => quote! { &#name },
-                _ => quote! { #name },
-            })
-            .collect()
     }
 }

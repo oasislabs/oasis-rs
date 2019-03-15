@@ -30,18 +30,17 @@ fn get_serde(
         return Err(());
     }
 
-    let empty_punct = syn::punctuated::Punctuated::<_, syn::Token![,]>::new();
     let (named, fields) = match &input.data {
         syn::Data::Struct(s) => {
             match input.vis {
                 syn::Visibility::Public(_) => {}
                 _ => err!(s.struct_token: "`struct {}` should have `pub` visibility.", input.ident),
             }
-            match &s.fields {
-                syn::Fields::Named(syn::FieldsNamed { named, .. }) => (true, named.iter()),
-                syn::Fields::Unnamed(syn::FieldsUnnamed { unnamed, .. }) => (false, unnamed.iter()),
-                syn::Fields::Unit => (true, empty_punct.iter()),
-            }
+            let named = match &s.fields {
+                syn::Fields::Named(_) | syn::Fields::Unit => true,
+                syn::Fields::Unnamed(_) => false,
+            };
+            (named, s.fields.iter())
         }
         _ => {
             err!(input: "`#[derive(Contract)]` can only be applied to structs.");
@@ -52,10 +51,10 @@ fn get_serde(
     let (sers, des): (Vec<proc_macro2::TokenStream>, Vec<proc_macro2::TokenStream>) = fields
         .enumerate()
         .map(|(index, field)| {
-            match field.vis {
-                syn::Visibility::Inherited => {}
-                _ => err!([warning] field: "Field should have no visibility marker."),
-            }
+            // match field.vis {
+            //     syn::Visibility::Inherited => {}
+            //     _ => err!([warning] field: "Field should have no visibility marker."),
+            // }
             let (struct_idx, key) = match &field.ident {
                 Some(ident) => (quote! { #ident }, keccak_key(ident)),
                 None => (quote! { #index }, quote! { H256::from(#index as u32) }),
@@ -95,7 +94,7 @@ fn get_type_serde(
             if path
                 .segments
                 .last()
-                .map(|punct| punct.value().ident == parse_quote!(Lazy): syn::Ident)
+                .map(|seg| seg.value().ident == parse_quote!(Lazy): syn::Ident)
                 .unwrap_or(false)
             {
                 (

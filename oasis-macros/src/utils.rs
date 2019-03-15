@@ -43,6 +43,7 @@ fn is_impl_of(imp: &syn::ItemImpl, typ: &syn::Ident) -> bool {
     }
 }
 
+/// Hashes an ident into a `[u8; 32]` `TokenStream`.
 fn keccak_key(ident: &syn::Ident) -> proc_macro2::TokenStream {
     let key = syn::parse_str::<syn::Expr>(&format!(
         "{:?}",
@@ -52,12 +53,30 @@ fn keccak_key(ident: &syn::Ident) -> proc_macro2::TokenStream {
     quote! { H256::from(&#key) }
 }
 
+/// Turns `ctx: &Context` into `_: &Context` to prevent unused argument warnings.
 fn mark_ctx_unused(sig: &mut syn::MethodSig) {
     sig.decl.inputs.iter_mut().for_each(|inp| {
         if let syn::FnArg::Captured(syn::ArgCaptured { ty, pat, .. }) = inp {
-            if ty == &parse_quote!(&Context) {
+            if ty == &parse_quote!(&Context) || ty == &parse_quote!(&oasis_std::Conetxt) {
                 *pat = parse_quote!(_);
             }
         }
     });
+}
+
+struct Deborrower {}
+impl syn::visit_mut::VisitMut for Deborrower {
+    fn visit_type_mut(&mut self, ty: &mut syn::Type) {
+        if let syn::Type::Reference(syn::TypeReference { box elem, .. }) = ty {
+            match elem {
+                syn::Type::Path(syn::TypePath { path, .. }) if path.is_ident("str") => {
+                    *ty = parse_quote!(String);
+                }
+                _ => {
+                    *ty = elem.clone();
+                }
+            }
+        }
+        syn::visit_mut::visit_type_mut(self, ty);
+    }
 }

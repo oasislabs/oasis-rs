@@ -24,7 +24,7 @@ impl<'a> RPC<'a> {
             err!(variadic: "RPC methods may not be variadic.");
         }
 
-        let typ = &*imp.self_ty;
+        let self_ty = &*imp.self_ty;
         let mut inps = decl.inputs.iter().peekable();
         if ident == "new" {
             check_next_arg!(
@@ -32,38 +32,10 @@ impl<'a> RPC<'a> {
                 inps,
                 Self::is_context_ref,
                 "`{}::new` must take `&Context` as its first argument",
-                typ
+                self_ty
             );
-            match &decl.output {
-                syn::ReturnType::Type(_, box syn::Type::Path(syn::TypePath { path, .. }))
-                    if path
-                        .segments
-                        .last()
-                        .map(|seg| {
-                            let seg = seg.value();
-                            seg.ident == "Result"
-                                && match &seg.arguments {
-                                    syn::PathArguments::AngleBracketed(bracketed) => {
-                                        let args = &bracketed.args;
-                                        args.len() == 1 && {
-                                            match args.first().unwrap().value() {
-                                                syn::GenericArgument::Type(t) => {
-                                                    t == &parse_quote!(Self) || t == typ
-                                                }
-                                                _ => false,
-                                            }
-                                        }
-                                    }
-                                    _ => false,
-                                }
-                        })
-                        .unwrap_or(false) =>
-                {
-                    ()
-                }
-                ret => {
-                    err!(ret: "`{}::new` must return `Result<Self>`", quote!(#typ));
-                }
+            if let None = Self::unpack_output(&decl.output) {
+                err!(decl.output: "`{}::new` must return `Result<Self>`", quote!(#self_ty));
             }
         } else {
             check_next_arg!(
@@ -71,7 +43,7 @@ impl<'a> RPC<'a> {
                 inps,
                 Self::is_self_ref,
                 "First argument to `{}::{}` should be `&self` or `&mut self`.",
-                typ,
+                self_ty,
                 ident
             );
             check_next_arg!(
@@ -79,9 +51,12 @@ impl<'a> RPC<'a> {
                 inps,
                 Self::is_context_ref,
                 "Second argument to `{}::{}` should be `&Context`.",
-                typ,
+                self_ty,
                 ident
             );
+            if Self::unpack_output(&decl.output).is_none() {
+                err!(decl.output: "`{}::new` must return `Result<T>`", quote!(#self_ty));
+            }
         }
         Self {
             sig,
@@ -89,6 +64,7 @@ impl<'a> RPC<'a> {
         }
     }
 
+    /// Checks if an arg is `&[oasis_std::]Context`
     fn is_context_ref(arg: &syn::FnArg) -> bool {
         match arg {
             syn::FnArg::Captured(syn::ArgCaptured { ty, .. })
@@ -100,6 +76,7 @@ impl<'a> RPC<'a> {
         }
     }
 
+    /// Checks if an arg is `&self` or `&mut self`.
     fn is_self_ref(arg: &syn::FnArg) -> bool {
         match arg {
             syn::FnArg::SelfRef(_) => true,
@@ -122,25 +99,20 @@ impl<'a> RPC<'a> {
         }
     }
 
+    /// Returns `field: type` statements as would be present in a `struct` item
+    /// corresponding to the owned types of the RPC args.
     fn structify_inps(&self) -> Vec<proc_macro2::TokenStream> {
-        let string_type = parse_quote!(String);
         self.inputs
             .iter()
             .map(|(name, ty)| {
-                let owned_ty = match ty {
-                    syn::Type::Reference(syn::TypeReference { elem, .. }) => match &**elem {
-                        syn::Type::Path(syn::TypePath { path, .. }) if path.is_ident("str") => {
-                            &string_type
-                        }
-                        _ => &**elem,
-                    },
-                    _ => *ty,
-                };
+                let mut owned_ty = (*ty).clone();
+                Deborrower {}.visit_type_mut(&mut owned_ty);
                 quote!( #name: #owned_ty )
             })
             .collect()
     }
 
+    /// Returns the idents of the RpcPayload inputs.
     fn input_names(&self) -> Vec<proc_macro2::TokenStream> {
         self.inputs
             .iter()
@@ -148,6 +120,7 @@ impl<'a> RPC<'a> {
             .collect()
     }
 
+    /// Turns owned RpcPayload input idents into (possibly borrowed) call arg exprs.
     fn call_args(&self) -> Vec<proc_macro2::TokenStream> {
         self.inputs
             .iter()
@@ -156,5 +129,39 @@ impl<'a> RPC<'a> {
                 _ => quote! { #name },
             })
             .collect()
+    }
+
+    /// Extracts the `T` from `Result<T>`, if it exists.
+    fn unpack_output(output: &syn::ReturnType) -> Option<&syn::Type> {
+        match output {
+            syn::ReturnType::Type(_, box syn::Type::Path(syn::TypePath { path, .. })) => path
+                .segments
+                .last()
+                .map(|seg| {
+                    let seg = seg.value();
+                    if seg.ident != "Result" {
+                        return None;
+                    }
+                    match &seg.arguments {
+                        syn::PathArguments::AngleBracketed(bracketed) => {
+                            let args = &bracketed.args;
+                            if args.len() != 1 {
+                                return None;
+                            }
+                            match args.first().unwrap().value() {
+                                syn::GenericArgument::Type(t) => Some(t),
+                                _ => None,
+                            }
+                        }
+                        _ => None,
+                    }
+                })
+                .unwrap_or(None),
+            _ => None,
+        }
+    }
+
+    fn result_ty(&self) -> &syn::Type {
+        Self::unpack_output(&self.sig.decl.output).expect("`Result` output checked in `new`")
     }
 }

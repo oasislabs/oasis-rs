@@ -113,10 +113,8 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             quote! {
                 RpcPayload::#ident { #(#arg_names),* } => {
                     let result = contract.#ident(&Context {}, #(#call_args),*);
-                    match result {
-                        Ok(ret) => serde_cbor::to_vec(&ret),
-                        Err(err) =>  serde_cbor::to_vec(&err.to_string())
-                    }
+                    // TODO better error handling
+                    serde_cbor::to_vec(&result.map_err(|err| err.to_string()))
                 }
             }
         })
@@ -147,17 +145,19 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         .map(|rpc| {
             let mut sig = rpc.sig.clone();
             mark_ctx_unused(&mut sig);
+            Deborrower {}.visit_return_type_mut(&mut sig.decl.output);
             let ident = &sig.ident;
             let inps = rpc.input_names().into_iter().map(|name| {
                 quote! {
                     #name: #name.to_owned()
                 }
             });
+            let mut result_ty = rpc.result_ty().clone();
+            Deborrower {}.visit_type_mut(&mut result_ty);
             quote! {
                 pub #sig {
                     let payload = RpcPayload::#ident { #(#inps),* };
-                    // let input = serde_cbor::to_vec(&payload).unwrap();
-                    let input = vec![0; 32];//serde_cbor::to_vec(&payload).unwrap();
+                    let input = serde_cbor::to_vec(&payload).unwrap();
                     // TODO: populate `call` fields with actual values
                     let result = oasis::call(
                         42 /* gas */,
@@ -165,9 +165,10 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                         U256::from(0) /* value */,
                         &input
                     )?;
-                    // TODO: make `call` fetch return data size
-                    panic!()
-                    // serde_cbor::from_slice(&result)?
+                    // TODO: better error handling
+                    type RpcResult = std::result::Result<#result_ty, String>;
+                    serde_cbor::from_slice::<RpcResult>(&result)?
+                        .map_err(|err| failure::format_err!("{}", err))
                 }
             }
         })
@@ -236,7 +237,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                     use super::*;
 
                     #[no_mangle]
-                    pub extern "C" fn call() {
+                    pub fn call() {
                         let mut contract = <#contract_name>::coalesce();
                         let payload: RpcPayload = serde_cbor::from_slice(&oasis::input()).unwrap();
                         let result = match payload {
@@ -247,7 +248,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                     }
 
                     #[no_mangle]
-                    pub extern "C" fn deploy() {
+                    pub fn deploy() {
                         #deploy_payload
                         #contract_name::sunder(
                             #contract_name::new(&Context {}, #(#ctor_args),*).unwrap()

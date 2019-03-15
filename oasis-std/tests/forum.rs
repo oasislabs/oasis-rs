@@ -52,7 +52,7 @@ impl Forum {
                 reputation: 9001,
             }],
             posts: Vec::new(),
-            chats: lazy!(HashMap::new()),
+            chats: lazy!(std::collections::HashMap::new()),
         })
     }
 
@@ -77,13 +77,13 @@ impl Forum {
                 user.reputation += 1;
                 Ok(())
             }
-            None => Err(format_err!("403")),
+            None => Err(failure::format_err!("403")),
         }
     }
 
     pub fn get_posts(&self, ctx: &Context) -> Result<Vec<&ForumPost>> {
         if !self.users.iter().any(|user| user.id == ctx.sender()) {
-            return Err(format_err!("403"));
+            return Err(failure::format_err!("403"));
         }
         Ok(self.posts.iter().collect())
     }
@@ -123,7 +123,7 @@ impl Forum {
                     })
                     .collect())),
             },
-            None => Err(format_err!("403")),
+            None => Err(failure::format_err!("403")),
         }
     }
 }

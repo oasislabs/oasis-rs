@@ -6,34 +6,18 @@ mod eth {
     extern "C" {
         /// Direct/classic call. Corresponds to "CALL" opcode in EVM
         pub fn ccall(
-            gas: i64,
+            gas: u64,
             address: *const u8,
             val_ptr: *const u8,
             input_ptr: *const u8,
             input_len: u32,
-            result_ptr: *mut u8,
-            result_len: u32,
         ) -> i32;
 
         /// Delegate call. Corresponds to "CALLCODE" opcode in EVM
-        pub fn dcall(
-            gas: i64,
-            address: *const u8,
-            input_ptr: *const u8,
-            input_len: u32,
-            result_ptr: *mut u8,
-            result_len: u32,
-        ) -> i32;
+        pub fn dcall(gas: u64, address: *const u8, input_ptr: *const u8, input_len: u32) -> i32;
 
         /// Static call. Corresponds to "STACICCALL" opcode in EVM
-        pub fn scall(
-            gas: i64,
-            address: *const u8,
-            input_ptr: *const u8,
-            input_len: u32,
-            result_ptr: *mut u8,
-            result_len: u32,
-        ) -> i32;
+        pub fn scall(gas: u64, address: *const u8, input_ptr: *const u8, input_len: u32) -> i32;
 
         // blockchain functions
         pub fn address(dest: *mut u8);
@@ -57,23 +41,25 @@ mod eth {
         ) -> i32;
         pub fn difficulty(dest: *mut u8);
         pub fn elog(topic_ptr: *const u8, topic_count: u32, data_ptr: *const u8, data_len: u32);
-        pub fn fetch_input(dst: *mut u8);
+        pub fn input_length() -> u32;
+        pub fn fetch_input(dest: *mut u8);
         pub fn gasleft() -> i64;
         pub fn gaslimit(dest: *mut u8);
-        pub fn input_length() -> u32;
         pub fn origin(dest: *mut u8);
-        pub fn ret(ptr: *const u8, len: u32) -> !;
+        pub fn ret(ptr: *const u8, len: u32); // -> !
         pub fn sender(dest: *mut u8);
-        pub fn suicide(refund: *const u8) -> !;
+        pub fn suicide(refund: *const u8); //  -> !
         pub fn timestamp() -> i64;
         pub fn value(dest: *mut u8);
+        pub fn return_length() -> u32;
+        pub fn fetch_return(dest: *mut u8);
     }
 }
 
 mod oasis {
     extern "C" {
         // oasis platform functions
-        pub fn storage_read(key: *const u8, dst: *mut u8);
+        pub fn storage_read(key: *const u8, dest: *mut u8);
         pub fn storage_write(key: *const u8, src: *const u8);
 
         // Key must be 32 bytes.
@@ -88,7 +74,8 @@ mod oasis {
 /// Halt execution and register account for deletion.
 ///
 /// Value of the current account will be tranfered to `refund` address.
-pub fn suicide(refund: &Address) -> ! {
+/// Runtime SHOULD trap the execution.
+pub fn suicide(refund: &Address) {
     unsafe {
         eth::suicide(refund.as_ptr());
     }
@@ -154,22 +141,26 @@ pub fn create2(endowment: U256, salt: H256, code: &[u8]) -> Result<Address, ExtC
 /// * `value` - a value in Wei to send with a call
 /// * `input` - a data to send with a call
 /// * `result` - a mutable reference to be filled with a result data
-pub fn call(gas: u64, address: &Address, value: U256, input: &[u8]) -> Result<(), ExtCallError> {
+pub fn call(
+    gas: u64,
+    address: &Address,
+    value: U256,
+    input: &[u8],
+) -> Result<Vec<u8>, ExtCallError> {
     let mut value_arr = [0u8; 32];
     value.to_big_endian(&mut value_arr);
-    let mut result = vec![0; 256]; // TODO: returndatasize
     unsafe {
         if eth::ccall(
-            gas as i64,
+            gas,
             address.as_ptr(),
             value_arr.as_ptr(),
             input.as_ptr(),
             input.len() as u32,
-            result.as_mut_ptr(),
-            result.len() as u32,
         ) == 0
         {
-            Ok(())
+            let mut result = vec![0u8; eth::return_length() as usize];
+            eth::fetch_return(result.as_mut_ptr());
+            Ok(result)
         } else {
             Err(ExtCallError)
         }
@@ -180,23 +171,12 @@ pub fn call(gas: u64, address: &Address, value: U256, input: &[u8]) -> Result<()
 ///
 /// Effectively this function is like calling current account but with
 /// different code (i.e. like `DELEGATECALL` EVM instruction).
-pub fn call_code(
-    gas: u64,
-    address: &Address,
-    input: &[u8],
-    result: &mut [u8],
-) -> Result<(), ExtCallError> {
+pub fn call_code(gas: u64, address: &Address, input: &[u8]) -> Result<Vec<u8>, ExtCallError> {
     unsafe {
-        if eth::dcall(
-            gas as i64,
-            address.as_ptr(),
-            input.as_ptr(),
-            input.len() as u32,
-            result.as_mut_ptr(),
-            result.len() as u32,
-        ) == 0
-        {
-            Ok(())
+        if eth::dcall(gas, address.as_ptr(), input.as_ptr(), input.len() as u32) == 0 {
+            let mut result = vec![0u8; eth::return_length() as usize];
+            eth::fetch_return(result.as_mut_ptr());
+            Ok(result)
         } else {
             Err(ExtCallError)
         }
@@ -205,23 +185,12 @@ pub fn call_code(
 
 /// Like `call`, but this call and any of it's subcalls are disallowed to modify any storage.
 /// It will return an error in this case.
-pub fn static_call(
-    gas: u64,
-    address: &Address,
-    input: &[u8],
-    result: &mut [u8],
-) -> Result<(), ExtCallError> {
+pub fn static_call(gas: u64, address: &Address, input: &[u8]) -> Result<Vec<u8>, ExtCallError> {
     unsafe {
-        if eth::scall(
-            gas as i64,
-            address.as_ptr(),
-            input.as_ptr(),
-            input.len() as u32,
-            result.as_mut_ptr(),
-            result.len() as u32,
-        ) == 0
-        {
-            Ok(())
+        if eth::scall(gas, address.as_ptr(), input.as_ptr(), input.len() as u32) == 0 {
+            let mut result = vec![0u8; eth::return_length() as usize];
+            eth::fetch_return(result.as_mut_ptr());
+            Ok(result)
         } else {
             Err(ExtCallError)
         }
@@ -318,14 +287,11 @@ pub fn log(topics: &[H256], data: &[u8]) {
 /// Allocates and requests `call` arguments (input)
 /// Input data comes either with external transaction or from `call` input value.
 pub fn input() -> Vec<u8> {
-    let len = unsafe { eth::input_length() };
-
-    match len {
+    match unsafe { eth::input_length() } {
         0 => Vec::new(),
-        non_zero => {
-            let mut data = Vec::with_capacity(non_zero as usize);
+        len => {
+            let mut data = vec![0; len as usize];
             unsafe {
-                data.set_len(non_zero as usize);
                 eth::fetch_input(data.as_mut_ptr());
             }
             data
@@ -335,7 +301,7 @@ pub fn input() -> Vec<u8> {
 
 /// Sets a `call` return value
 /// Pass return data to the runtime. Runtime SHOULD trap the execution.
-pub fn ret(data: &[u8]) -> ! {
+pub fn ret(data: &[u8]) {
     unsafe {
         eth::ret(data.as_ptr(), data.len() as u32);
     }
@@ -343,11 +309,11 @@ pub fn ret(data: &[u8]) -> ! {
 
 /// Performs read from the storage.
 pub fn read(key: &H256) -> [u8; 32] {
-    let mut dst = [0u8; 32];
+    let mut dest = [0u8; 32];
     unsafe {
-        oasis::storage_read(key.as_ptr(), dst.as_mut_ptr());
+        oasis::storage_read(key.as_ptr(), dest.as_mut_ptr());
     }
-    dst
+    dest
 }
 
 /// Performs write to the storage

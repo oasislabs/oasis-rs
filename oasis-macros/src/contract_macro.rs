@@ -146,29 +146,51 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             let mut sig = rpc.sig.clone();
             mark_ctx_unused(&mut sig);
             Deborrower {}.visit_return_type_mut(&mut sig.decl.output);
+
+            let mut test_sig = sig.clone();
+            // take `&mut self` to allow updatating test client state
+            test_sig.decl.inputs[0] = parse_quote!(&mut self);
+
             let ident = &sig.ident;
             let inps = rpc.input_names().into_iter().map(|name| {
                 quote! {
                     #name: #name.to_owned()
                 }
             });
+
             let mut result_ty = rpc.result_ty().clone();
             Deborrower {}.visit_type_mut(&mut result_ty);
+
+            let rpc_inner = quote! {
+                let payload = RpcPayload::#ident { #(#inps),* };
+                let input = serde_cbor::to_vec(&payload).unwrap();
+                // TODO: populate `call` fields with actual values
+                let result = oasis::call(
+                    42 /* gas */,
+                    &Address::zero(),
+                    U256::from(0) /* value */,
+                    &input
+                )?;
+                if cfg!(test) {
+                    // copy new state into testing client
+                    *self = TheContract::coalesce().into();
+                }
+                type RpcResult = std::result::Result<#result_ty, String>;
+                // TODO: better error handling
+                serde_cbor::from_slice::<RpcResult>(&result)?
+                    .map_err(|err| failure::format_err!("{}", err))
+            };
+            let test_rpc_inner = rpc_inner.clone();
+
             quote! {
+                #[cfg(not(test))]
                 pub #sig {
-                    let payload = RpcPayload::#ident { #(#inps),* };
-                    let input = serde_cbor::to_vec(&payload).unwrap();
-                    // TODO: populate `call` fields with actual values
-                    let result = oasis::call(
-                        42 /* gas */,
-                        &Address::zero(),
-                        U256::from(0) /* value */,
-                        &input
-                    )?;
-                    // TODO: better error handling
-                    type RpcResult = std::result::Result<#result_ty, String>;
-                    serde_cbor::from_slice::<RpcResult>(&result)?
-                        .map_err(|err| failure::format_err!("{}", err))
+                    #rpc_inner
+                }
+
+                #[cfg(test)]
+                pub #test_sig {
+                    #test_rpc_inner
                 }
             }
         })

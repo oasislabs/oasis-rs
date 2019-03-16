@@ -1,0 +1,8 @@
+error: `Counter::new` must return `Result<Self>`
+ --> $DIR/new_bad_ret.rs:8:49
+  |
+8 |     pub fn new(ctx: &Context, start_count: u32) -> Self {
+  |                                                 ^^
+
+error: aborting due to previous error
+

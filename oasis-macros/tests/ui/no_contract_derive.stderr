@@ -1,0 +1,14 @@
+error: Contract definition must contain a #[derive(Contract)] struct.
+  --> $DIR/no_contract_derive.rs:1:1
+   |
+1  | / oasis_std::contract! {
+2  | |
+3  | | pub struct Counter(u32);
+4  | |
+...  |
+10 | |
+11 | | }
+   | |_^
+
+error: aborting due to previous error
+

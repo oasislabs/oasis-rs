@@ -1,0 +1,9 @@
+error[E0603]: struct `Counter` is private
+ --> $DIR/private_state.rs:4:8
+  |
+4 | struct Counter(u32);
+  |        ^^^^^^^
+
+error: aborting due to previous error
+
+For more information about this error, try `rustc --explain E0603`.

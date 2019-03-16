@@ -1,19 +1,15 @@
-# oasis-std
+# Oasis in Rust
 
-[![Latest Version](https://img.shields.io/crates/v/oasis-std.svg)](https://crates.io/crates/oasis-std)
-[![docs](https://docs.rs/oasis-std/badge.svg)](https://docs.rs/oasis-std)
+A collection of crates for interacting with the Oasis platform.
 
-A crate of utilities for developing programs for the Oasis platform.
+To get started, add the following dependencies to your `Cargo.toml`:
 
-The `Xargo.toml` can be used to create a custom Rust `libstd` that has wasm syscalls enabled.
-This allows using `println!` and `panic!` directly without creating custom extern fns.
-Compile using `--target=wasm32-unknown-unknown` to use Rust impls for symbols like
-`memcpy`; use `--target=wasm32-unknown-emscripten` to use platform-provided versions.
+```rust
+[dependencies]
+oasis-std = "0.1"
 
-## Usage
+[dev-dependencies]
+oasis-test = "0.1"
+```
 
-1. Add `oasis-std = "0.1"` to your contract's Cargo.toml.
-   Pass `features = ["platform-alloc"]` to use the Oasis platform allocator.
-2. Copy `Xargo.toml` to your contract crate root
-3. `xargo build --target=wasm32-unknown-unknown`
-4. business as usual
+Fore more information, please refer to the docs for [`oasis-std`](https://docs.rs/oasis-std) and [`oasis-test`](https://docs.rs/oasis-test).

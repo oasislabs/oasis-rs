@@ -4,14 +4,17 @@ struct RPC<'a> {
 }
 
 impl<'a> RPC<'a> {
-    fn new(imp: &'a syn::ItemImpl, m: &'a syn::ImplItemMethod) -> Self {
+    fn new(imp: &'a syn::ItemImpl, m: &'a syn::ImplItemMethod) -> Result<Self, Self> {
         let sig = &m.sig;
         let ident = &sig.ident;
+        let mut has_err = false;
         if let Some(abi) = &sig.abi {
             err!(abi: "RPC methods cannot declare an ABI.");
+            has_err = true;
         }
         if let Some(unsafe_) = sig.unsafety {
             err!(unsafe_: "RPC methods may not be unsafe.");
+            has_err = true;
         }
         let decl = &sig.decl;
         if decl.generics.type_params().count() > 0 {
@@ -19,17 +22,32 @@ impl<'a> RPC<'a> {
                 decl.generics:
                 "RPC methods may not have generic type parameters.",
             );
+            has_err = true;
         }
         if let Some(variadic) = decl.variadic {
             err!(variadic: "RPC methods may not be variadic.");
+            has_err = true;
         }
 
         let self_ty = &*imp.self_ty;
         let mut inps = decl.inputs.iter().peekable();
+
+        macro_rules! check_next_arg {
+            ($cond:expr, $err_msg:expr, $( $arg:ident ),*) => {
+                let err_loc = match inps.peek() {
+                    Some(inp) => inp.span(),
+                    None => sig.ident.span(),
+                }
+                .unwrap();
+                if !inps.next().map($cond).unwrap_or(false) {
+                    err_loc.error(format!($err_msg, $( quote!(#$arg) ),*)).emit();
+                    has_err = true;
+                }
+            };
+        }
+
         if ident == "new" {
             check_next_arg!(
-                sig,
-                inps,
                 Self::is_context_ref,
                 "`{}::new` must take `&Context` as its first argument",
                 self_ty
@@ -39,16 +57,12 @@ impl<'a> RPC<'a> {
             }
         } else {
             check_next_arg!(
-                sig,
-                inps,
                 Self::is_self_ref,
                 "First argument to `{}::{}` should be `&self` or `&mut self`.",
                 self_ty,
                 ident
             );
             check_next_arg!(
-                sig,
-                inps,
                 Self::is_context_ref,
                 "Second argument to `{}::{}` should be `&Context`.",
                 self_ty,
@@ -56,11 +70,17 @@ impl<'a> RPC<'a> {
             );
             if Self::unpack_output(&decl.output).is_none() {
                 err!(decl.output: "`{}::new` must return `Result<T>`", quote!(#self_ty));
+                has_err = true;
             }
         }
-        Self {
+        let rpc = Self {
             sig,
             inputs: inps.filter_map(RPC::check_arg).collect(),
+        };
+        if !has_err {
+            Ok(rpc)
+        } else {
+            Err(rpc)
         }
     }
 

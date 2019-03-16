@@ -7,19 +7,6 @@ macro_rules! err {
     };
 }
 
-macro_rules! check_next_arg {
-    ($sig:ident, $inps:ident, $cond:expr, $err_msg:expr, $( $arg:ident ),*) => {
-        let err_loc = match $inps.peek() {
-            Some(inp) => inp.span(),
-            None => $sig.ident.span(),
-        }
-        .unwrap();
-        if !$inps.next().map($cond).unwrap_or(false) {
-            err_loc.error(format!($err_msg, $( quote!(#$arg) ),*)).emit();
-        }
-    };
-}
-
 /// Checks whether struct derives a trait.
 /// Currently fails if trait is a path instead of an ident (@see syn#597)
 fn has_derive(s: &syn::ItemStruct, derive: &str) -> bool {

@@ -32,10 +32,6 @@ fn get_serde(
 
     let (named, fields) = match &input.data {
         syn::Data::Struct(s) => {
-            match input.vis {
-                syn::Visibility::Public(_) => {}
-                _ => err!(s.struct_token: "`struct {}` should have `pub` visibility.", input.ident),
-            }
             let named = match &s.fields {
                 syn::Fields::Named(_) | syn::Fields::Unit => true,
                 syn::Fields::Unnamed(_) => false,
@@ -51,10 +47,6 @@ fn get_serde(
     let (sers, des): (Vec<proc_macro2::TokenStream>, Vec<proc_macro2::TokenStream>) = fields
         .enumerate()
         .map(|(index, field)| {
-            // match field.vis {
-            //     syn::Visibility::Inherited => {}
-            //     _ => err!([warning] field: "Field should have no visibility marker."),
-            // }
             let (struct_idx, key) = match &field.ident {
                 Some(ident) => (quote! { #ident }, keccak_key(ident)),
                 None => (quote! { #index }, quote! { H256::from(#index as u32) }),

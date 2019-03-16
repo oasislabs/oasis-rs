@@ -5,7 +5,11 @@ fn run_mode(mode: &'static str) {
         target_rustcflags: Some(
             "--edition=2018 \
              -Z unstable-options \
+             --cfg feature=\"test\" \
+             --extern failure \
              --extern oasis_std \
+             --extern serde \
+             --extern serde_derive \
              --extern serde_cbor"
                 .to_string(),
         ),

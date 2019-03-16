@@ -34,8 +34,6 @@ pub enum Either<L, R> {
     Right(R),
 }
 
-pub type Result<T> = std::result::Result<T, failure::Error>;
-
 impl Forum {
     pub fn new(ctx: &Context, admin_username: String) -> Result<Self> {
         // Default::default() is not yet possible because Lazy can't `impl Default`

@@ -5,6 +5,8 @@ use crate::{
     types::{Address, H256},
 };
 
+pub type Result<T> = std::result::Result<T, failure::Error>;
+
 /// A type that can be stored in Oasis Storage.
 pub trait Storage = serde::Serialize + serde::de::DeserializeOwned;
 

@@ -4,12 +4,12 @@ oasis_std::contract! {
 pub struct State<T>(Option<T>);
 
 impl<T: Default> State<T> {
-    pub fn new(ctx: &Context) -> Self {
-        Default::default()
+    pub fn new(ctx: &Context) -> Result<Self> {
+        Ok(Default::default())
     }
 
-    fn hmmm() {
-        println!("hmmm");
+    fn hmmm() -> Result<()> {
+        Err(failure::format_err!("hmm"))
     }
 }
 

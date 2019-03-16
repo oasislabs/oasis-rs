@@ -25,12 +25,20 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let preamble = quote! {
         #[macro_use]
         extern crate oasis_std;
-
         #[macro_use]
         extern crate serde;
 
         use oasis_std::prelude::*;
     };
+
+    macro_rules! early_return {
+        () => {
+            return proc_macro::TokenStream::from(quote! {
+                #preamble
+                #(#other_items)*
+            });
+        };
+    }
 
     let contract = match contract {
         Some(contract) => contract,
@@ -38,14 +46,15 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             proc_macro::Span::call_site()
                 .error("Contract definition must contain a #[derive(Contract)] struct.")
                 .emit();
-            return proc_macro::TokenStream::from(quote! {
-                #preamble
-
-                #(#other_items)*
-            });
+            early_return!();
         }
     };
     let contract_name = &contract.ident;
+
+    if contract.generics.type_params().count() > 0 {
+        err!(contract.generics: "Contract cannot contain generic types.");
+        early_return!();
+    }
 
     let mut contract_impls = Vec::new();
     for imp in impls.into_iter() {
@@ -61,22 +70,33 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         LazyInserter {}.visit_item_impl_mut(item);
     });
 
-    let (ctor, rpcs): (Vec<RPC>, Vec<RPC>) = contract_impls
-        .iter()
-        .flat_map(|imp| {
-            imp.items.iter().filter_map(move |item| match item {
-                syn::ImplItem::Method(m) => match m.vis {
-                    syn::Visibility::Public(_) => Some(RPC::new(imp, m)),
-                    _ if m.sig.ident == "new" => {
-                        err!(m: "`{}::new` should have `pub` visibility", contract_name);
-                        Some(RPC::new(imp, m))
+    let mut ctor = None;
+    let mut rpcs = Vec::new();
+    for imp in contract_impls.iter() {
+        for item in imp.items.iter() {
+            if let syn::ImplItem::Method(m) = item {
+                match m.vis {
+                    syn::Visibility::Public(_) => {
+                        let rpc = match RPC::new(imp, m) {
+                            Ok(rpc) => rpc,
+                            Err(_) => early_return!(),
+                        };
+                        if m.sig.ident == "new" {
+                            ctor.replace(rpc);
+                        } else {
+                            rpcs.push(rpc);
+                        }
                     }
-                    _ => None,
-                },
-                _ => None,
-            })
-        })
-        .partition(|rpc| rpc.sig.ident == "new");
+                    _ => {
+                        if m.sig.ident == "new" {
+                            err!(m: "`{}::new` should have `pub` visibility", contract_name);
+                            early_return!();
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     let empty_new: syn::ImplItemMethod = parse_quote!(
         pub fn new() -> Result<Self> {
@@ -171,9 +191,8 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                     U256::from(0) /* value */,
                     &input
                 )?;
-                if cfg!(test) {
-                    // copy new state into testing client
-                    *self = TheContract::coalesce().into();
+                if cfg!(any(test, feature = "test")) {
+                    *self = TheContract::coalesce().into(); // copy new state into testing client
                 }
                 type RpcResult = std::result::Result<#result_ty, String>;
                 // TODO: better error handling
@@ -183,12 +202,12 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             let test_rpc_inner = rpc_inner.clone();
 
             quote! {
-                #[cfg(not(test))]
+                #[cfg(not(any(test, feature="test")))]
                 pub #sig {
                     #rpc_inner
                 }
 
-                #[cfg(test)]
+                #[cfg(any(test, feature="test"))]
                 pub #test_sig {
                     #test_rpc_inner
                 }

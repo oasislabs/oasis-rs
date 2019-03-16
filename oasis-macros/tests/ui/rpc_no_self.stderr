@@ -1,7 +1,7 @@
 error: First argument to `Counter::incr` should be `&self` or `&mut self`.
   --> $DIR/rpc_no_self.rs:11:17
    |
-11 |     pub fn incr(self, ctx: &Context) {
+11 |     pub fn incr(self, ctx: &Context) -> Result<()> {
    |                 ^^^^
 
 error: aborting due to previous error

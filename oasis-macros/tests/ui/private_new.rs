@@ -7,8 +7,8 @@ pub struct Counter {
 }
 
 impl Counter {
-    pub(crate) fn new(ctx: &Context) -> Self {
-        Default::default()
+    pub(crate) fn new(ctx: &Context) -> Result<Self> {
+        Ok(Default::default())
     }
 }
 

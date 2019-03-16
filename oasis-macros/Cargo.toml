@@ -12,14 +12,13 @@ keywords = ["oasis", "blockchain", "heavy magic"]
 [dependencies]
 proc-macro2 = "0.4"
 quote = "0.6"
-serde = "1.0"
-serde_derive = "1.0"
 syn = { version = "0.15", features = ["full", "extra-traits", "visit-mut"] }
 tiny-keccak = "1.4"
 
 [dev-dependencies]
 compiletest_rs = { version = "0.3", features = ["tmp"] }
 oasis-std = { path = "../oasis-std" }
+serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.9"
 
 [lib]

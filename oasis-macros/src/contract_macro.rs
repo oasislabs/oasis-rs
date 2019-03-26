@@ -135,7 +135,7 @@ pub fn contract(
             let call_args = rpc.call_args();
             quote! {
                 RpcPayload::#ident { #(#arg_names),* } => {
-                    let result = contract.#ident(&Context {}, #(#call_args),*);
+                    let result = contract.#ident(&Context::default(), #(#call_args),*);
                     // TODO better error handling
                     serde_cbor::to_vec(&result.map_err(|err| err.to_string()))
                 }
@@ -143,8 +143,8 @@ pub fn contract(
         })
         .collect();
 
-    let mut ctor_sig = ctor.sig.clone();
-    mark_ctx_unused(&mut ctor_sig);
+    let ctor_sig = ctor.sig.clone();
+    let ctor_ctx_ident = ctor.ctx_ident();
     let (ctor_inps, ctor_args) = (ctor.structify_inps(), ctor.call_args());
     let ctor_payload_inps: Vec<proc_macro2::TokenStream> = ctor_args
         .iter()
@@ -166,8 +166,8 @@ pub fn contract(
     let client_impls: Vec<proc_macro2::TokenStream> = rpcs
         .iter()
         .map(|rpc| {
+            let ctx_ident = rpc.ctx_ident();
             let mut sig = rpc.sig.clone();
-            mark_ctx_unused(&mut sig);
             Deborrower {}.visit_return_type_mut(&mut sig.decl.output);
 
             let mut test_sig = sig.clone();
@@ -315,7 +315,7 @@ pub fn contract(
                         let payload = CtorPayload { #(#ctor_payload_inps),* };
                         oasis_test::set_input(serde_cbor::to_vec(&payload).unwrap());
                         contract::deploy::deploy();
-                        Ok(TheContract::new(&Context {}, #(#ctor_new_args),*)?.into())
+                        Ok(TheContract::new(#ctor_ctx_ident, #(#ctor_new_args),*)?.into())
                     }
                 }
 

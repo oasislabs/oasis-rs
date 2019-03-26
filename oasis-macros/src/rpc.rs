@@ -183,4 +183,16 @@ impl<'a> RPC<'a> {
     fn result_ty(&self) -> &syn::Type {
         Self::unpack_output(&self.sig.decl.output).expect("`Result` output checked in `new`")
     }
+
+    /// Returns the ident to which the `Context` argument in RPCs is bound.
+    /// e.g., `fn foo(&self, CoNtExT: &Context)` would have a `ctx_ident` of `CoNtExT`.
+    fn ctx_ident(&self) -> syn::Ident {
+        match self.sig.decl.inputs[if self.sig.ident == "new" { 0 } else { 1 }] {
+            syn::FnArg::Captured(syn::ArgCaptured { ref pat, .. }) => match pat {
+                syn::Pat::Ident(syn::PatIdent { ident, .. }) => ident.clone(),
+                _ => unreachable!(), // `Context must be named.`
+            },
+            _ => unreachable!(), // `Context` as second arg was checked in `Rpc::new`.
+        }
+    }
 }

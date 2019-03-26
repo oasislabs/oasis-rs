@@ -40,17 +40,6 @@ fn keccak_key(ident: &syn::Ident) -> proc_macro2::TokenStream {
     quote! { H256::from(&#key) }
 }
 
-/// Turns `ctx: &Context` into `_: &Context` to prevent unused argument warnings.
-fn mark_ctx_unused(sig: &mut syn::MethodSig) {
-    sig.decl.inputs.iter_mut().for_each(|inp| {
-        if let syn::FnArg::Captured(syn::ArgCaptured { ty, pat, .. }) = inp {
-            if ty == &parse_quote!(&Context) || ty == &parse_quote!(&oasis_std::Context) {
-                *pat = parse_quote!(_);
-            }
-        }
-    });
-}
-
 /// Recursively removes borrows from a type.  E.g., `&Vec<&str>` becomes `Vec<String>`.
 struct Deborrower {}
 impl syn::visit_mut::VisitMut for Deborrower {

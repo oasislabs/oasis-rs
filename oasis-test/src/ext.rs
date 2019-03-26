@@ -11,6 +11,7 @@ thread_local! {
     static INPUT: RefCell<Vec<u8>> = RefCell::new(Vec::new());
     static RET: RefCell<Vec<u8>> = RefCell::new(Vec::new());
     static SENDER: RefCell<Address> = RefCell::new(Address::zero());
+    static VALUE: RefCell<U256> = RefCell::new(U256::zero());
 }
 
 #[no_mangle]
@@ -99,6 +100,13 @@ pub fn fetch_return(dest: *mut u8) {
     RET.with(|ret| {
         let ret = ret.borrow();
         unsafe { dest.copy_from_nonoverlapping(ret.as_ptr(), ret.len()) };
+    });
+}
+
+#[no_mangle]
+pub fn value(dest: *mut u8) {
+    VALUE.with(|val| {
+        unsafe { dest.copy_from_nonoverlapping(val.borrow().as_ptr(), 32) };
     });
 }
 

@@ -131,6 +131,11 @@ mod contract {
             }
         }
     }
+
+    pub fn display_ad(&self, ctx: &Context) -> Result<String> {
+        ctx.sender().transfer(100)?;
+        Ok("Buy more things!".to_string())
+    }
 }
 
 macro_rules! find_user {
@@ -152,7 +157,7 @@ speculate::speculate! {
         it "should work" {
             use oasis_std::prelude::*;
 
-            let mut ctx = Context::default();
+            let mut ctx = Context::default().with_value(111.into());
 
             let admin_addr = Address::from([42u8; 20]);
             ctx.set_sender(admin_addr.clone());

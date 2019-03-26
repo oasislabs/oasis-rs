@@ -22,6 +22,12 @@ impl_fixed_hash_conversions!(H256, H160);
 /// Represents an address in ethereum context.
 pub type Address = H160;
 
+impl Address {
+    pub fn transfer<V: Into<U256>>(&self, amount: V) -> crate::errors::Result<()> {
+        Ok(())
+    }
+}
+
 impl From<U256> for H256 {
     fn from(uint: U256) -> H256 {
         let mut hash = H256::zero();
@@ -47,6 +53,12 @@ impl From<H256> for U256 {
 impl<'a> From<&'a H256> for U256 {
     fn from(hash: &'a H256) -> U256 {
         U256::from(hash.as_bytes())
+    }
+}
+
+impl U256 {
+    pub fn as_ptr(&self) -> *const u8 {
+        self.0.as_ptr() as *const u8
     }
 }
 

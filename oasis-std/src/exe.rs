@@ -5,8 +5,6 @@ use crate::{
     types::{Address, H256},
 };
 
-pub type Result<T> = std::result::Result<T, failure::Error>;
-
 /// A type that can be stored in Oasis Storage.
 pub trait Storage = serde::Serialize + serde::de::DeserializeOwned;
 
@@ -19,13 +17,51 @@ pub trait Contract {
 }
 
 /// The context of the current RPC.
-#[derive(Default, Clone)]
-pub struct Context {}
+#[derive(Default, Copy, Clone)]
+pub struct Context {
+    #[doc(hidden)]
+    pub value: Option<U256>, //User-provider value. `None` when created during call/deploy
+
+    #[doc(hidden)]
+    pub call_type: CallType,
+}
+
+#[derive(Copy, Clone)]
+pub enum CallType {
+    Default,
+    Delegated,
+    Constant,
+}
+
+impl Default for CallType {
+    fn default() -> Self {
+        CallType::Default
+    }
+}
 
 impl Context {
+    pub fn delegated() -> Self {
+        Self {
+            call_type: CallType::Delegated,
+            ..Default::default()
+        }
+    }
+
+    /// Creates a new Context, based on the current environment, that specifies
+    /// a transfer of `value` to the callee.
+    pub fn with_value(mut self, value: U256) -> Self {
+        self.value = Some(value);
+        self
+    }
+
     /// Returns the `Address` of the sender of the current RPC.
     pub fn sender(&self) -> Address {
         sender()
+    }
+
+    /// Returns the value with which this `Context` was created.
+    pub fn value(&self) -> U256 {
+        self.value.unwrap_or_else(ext::value)
     }
 }
 

@@ -191,7 +191,7 @@ pub fn contract(
                 let result = oasis::call(
                     42 /* gas */,
                     &Address::zero(),
-                    U256::from(0) /* value */,
+                    #ctx_ident.value(),
                     &input
                 )?;
                 if cfg!(any(test, feature = "test")) {
@@ -295,7 +295,7 @@ pub fn contract(
                     pub fn deploy() {
                         #deploy_payload
                         #contract_name::sunder(
-                            #contract_name::new(&Context {}, #(#ctor_args),*).unwrap()
+                            #contract_name::new(&Context::default(), #(#ctor_args),*).unwrap()
                         );
                     }
                 }

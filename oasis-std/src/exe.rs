@@ -1,8 +1,8 @@
 use std::cell::UnsafeCell;
 
 use crate::{
-    ext::{get_bytes, sender},
-    types::{Address, H256},
+    ext::{self, get_bytes, sender},
+    types::{Address, H256, U256},
 };
 
 /// A type that can be stored in Oasis Storage.
@@ -117,6 +117,7 @@ pub struct Lazy<T: Storage> {
 impl<T: Storage> Lazy<T> {
     /// Creates a Lazy value with initial contents.
     /// This function is for internal use. Clients should use the `lazy!` macro.
+    #[doc(hidden)]
     pub fn _new(key: H256, val: T) -> Self {
         Self {
             key,
@@ -125,6 +126,7 @@ impl<T: Storage> Lazy<T> {
     }
 
     /// Creates an empty Lazy. This function is for internal use.
+    #[doc(hidden)]
     pub fn _uninitialized(key: H256) -> Self {
         Self {
             key,

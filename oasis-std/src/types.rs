@@ -23,8 +23,8 @@ impl_fixed_hash_conversions!(H256, H160);
 pub type Address = H160;
 
 impl Address {
-    pub fn transfer<V: Into<U256>>(&self, amount: V) -> crate::errors::Result<()> {
-        Ok(())
+    pub fn transfer<V: Into<U256>>(&self, value: V) -> Result<(), crate::errors::ExtCallError> {
+        crate::ext::transfer(self, value.into())
     }
 }
 

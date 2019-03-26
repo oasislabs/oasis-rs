@@ -150,6 +150,7 @@ macro_rules! find_user {
 speculate::speculate! {
 
     describe "forum" {
+
         before {
             oasis_test::init!();
         }

@@ -23,8 +23,32 @@ impl_fixed_hash_conversions!(H256, H160);
 pub type Address = H160;
 
 impl Address {
-    pub fn transfer<V: Into<U256>>(&self, value: V) -> Result<(), crate::errors::ExtCallError> {
+    pub fn transfer<'a, V: Into<&'a U256>>(
+        &self,
+        value: V,
+    ) -> Result<(), crate::errors::ExtCallError> {
         crate::ext::transfer(self, value.into())
+    }
+
+    pub fn balance(&self) -> U256 {
+        crate::ext::balance(self)
+    }
+
+    /// Creates an `Address` from a big-endian byte array.
+    pub fn from_raw(bytes: *const u8) -> Self {
+        Address::from_slice(unsafe { std::slice::from_raw_parts(bytes, 20) })
+    }
+}
+
+impl H256 {
+    pub fn from_raw(bytes: *const u8) -> Self {
+        Self::from_slice(unsafe { std::slice::from_raw_parts(bytes, 32) })
+    }
+}
+
+impl U256 {
+    pub fn from_raw(bytes: *const u8) -> Self {
+        Self::from_big_endian(unsafe { std::slice::from_raw_parts(bytes, 32) })
     }
 }
 
@@ -62,13 +86,39 @@ impl U256 {
     }
 }
 
+macro_rules! impl_partial_eq_for_uint {
+    ($( $prim:ty ),+) => {
+        $(
+            impl PartialEq<$prim> for U256 {
+                fn eq(&self, prim: &$prim) -> bool {
+                    self.as_u64() == *prim as u64
+                }
+            }
+        )+
+    };
+}
+
+impl_partial_eq_for_uint!(u8, u16, u32, u64);
+
 macro_rules! impl_hash_from_prim {
     ($( $prim:ty ),+) => {
         $(
             impl From<$prim> for H256 {
                 fn from(prim: $prim) -> Self {
                     let mut hash = Self::zero();
-                    hash.0.as_mut().copy_from_slice(&prim.to_be_bytes());
+                    let prim_bytes = prim.to_be_bytes();
+                    let nb = hash.0.len();
+                    hash.0.as_mut()[(nb - prim_bytes.len())..].copy_from_slice(&prim_bytes);
+                    hash
+                }
+            }
+
+            impl From<$prim> for Address {
+                fn from(prim: $prim) -> Self {
+                    let mut hash = Self::zero();
+                    let prim_bytes = prim.to_be_bytes();
+                    let nb = hash.0.len();
+                    hash.0.as_mut()[(nb - prim_bytes.len())..].copy_from_slice(&prim_bytes);
                     hash
                 }
             }
@@ -76,4 +126,4 @@ macro_rules! impl_hash_from_prim {
     };
 }
 
-impl_hash_from_prim!(i8, u8, i16, u16, i32, u32, i64, u64, i128, u128);
+impl_hash_from_prim!(i8, u8, i16, u16, i32, u32, i64, u64, i128, u128, isize, usize);

@@ -1,7 +1,7 @@
 use std::cell::UnsafeCell;
 
 use crate::{
-    ext::{self, get_bytes, sender},
+    ext,
     types::{Address, H256, U256},
 };
 
@@ -17,16 +17,20 @@ pub trait Contract {
 }
 
 /// The context of the current RPC.
-#[derive(Default, Copy, Clone)]
+// `Option` values are set by the user. `None` when populated by runting (during call/deploy).
+#[derive(Default, Copy, Clone, Debug)]
 pub struct Context {
     #[doc(hidden)]
-    pub value: Option<U256>, //User-provider value. `None` when created during call/deploy
+    pub sender: Option<Address>,
+
+    #[doc(hidden)]
+    pub value: Option<U256>,
 
     #[doc(hidden)]
     pub call_type: CallType,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum CallType {
     Default,
     Delegated,
@@ -47,21 +51,37 @@ impl Context {
         }
     }
 
+    pub fn with_sender(mut self, sender: Address) -> Self {
+        self.sender = Some(sender);
+        self
+    }
+
     /// Creates a new Context, based on the current environment, that specifies
     /// a transfer of `value` to the callee.
-    pub fn with_value(mut self, value: U256) -> Self {
-        self.value = Some(value);
+    pub fn with_value<V: Into<U256>>(mut self, value: V) -> Self {
+        self.value = Some(value.into());
         self
     }
 
     /// Returns the `Address` of the sender of the current RPC.
     pub fn sender(&self) -> Address {
-        sender()
+        self.sender.unwrap_or_else(ext::sender)
+    }
+
+    /// Returns the `Address` of the currently executing contract.
+    /// Panics if not currently in a contract.
+    pub fn address(&self) -> Address {
+        ext::address()
     }
 
     /// Returns the value with which this `Context` was created.
     pub fn value(&self) -> U256 {
         self.value.unwrap_or_else(ext::value)
+    }
+
+    /// Returns the remaining gas allocated to this transaction.
+    pub fn gas_left(&self) -> u64 {
+        ext::gas_left()
     }
 }
 
@@ -137,7 +157,7 @@ impl<T: Storage> Lazy<T> {
     fn ensure_val(&self) -> &mut T {
         let val = unsafe { &mut *self.val.get() };
         if val.is_none() {
-            val.replace(serde_cbor::from_slice(&get_bytes(&self.key).unwrap()).unwrap());
+            val.replace(serde_cbor::from_slice(&ext::get_bytes(&self.key).unwrap()).unwrap());
         }
         val.as_mut().unwrap()
     }

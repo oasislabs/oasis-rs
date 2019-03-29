@@ -169,22 +169,22 @@ pub fn call(
     }
 }
 
-pub fn transfer(address: &Address, value: U256) -> Result<(), ExtCallError> {
+pub fn transfer(address: &Address, value: &U256) -> Result<(), ExtCallError> {
     let mut value_arr = [0u8; 32];
     value.to_big_endian(&mut value_arr);
-    unsafe {
-        if eth::ccall(
+    if unsafe {
+        eth::ccall(
             BASE_GAS.into(),
             address.as_ptr(),
             value_arr.as_ptr(),
             std::ptr::null(), /* input */
             0,                /* input len */
-        ) == 0
-        {
-            Ok(())
-        } else {
-            Err(ExtCallError)
-        }
+        )
+    } == 0
+    {
+        Ok(())
+    } else {
+        Err(ExtCallError)
     }
 }
 

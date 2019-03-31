@@ -220,7 +220,6 @@ pub fn contract(
         })
         .collect();
 
-    // let mut client = contract.clone();
     let client_ident = syn::Ident::new(
         &format!("{}Client", contract.ident),
         proc_macro2::Span::call_site(),

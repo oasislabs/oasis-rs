@@ -1,8 +1,8 @@
 error: Contract field must be a POD type.
- --> $DIR/state_non_pod_type.rs:4:19
+ --> $DIR/state_non_pod_type.rs:5:23
   |
-4 | pub struct NonPOD(*const u8);
-  |                   ^
+5 |     pub struct NonPOD(*const u8);
+  |                       ^
 
 error: aborting due to previous error
 

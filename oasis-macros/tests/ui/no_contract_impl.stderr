@@ -1,8 +1,8 @@
 error: Missing implementation for `Counter::new`.
- --> $DIR/no_contract_impl.rs:4:12
+ --> $DIR/no_contract_impl.rs:5:16
   |
-4 | pub struct Counter(u32);
-  |            ^^^^^^^
+5 |     pub struct Counter(u32);
+  |                ^^^^^^^
 
 error: aborting due to previous error
 

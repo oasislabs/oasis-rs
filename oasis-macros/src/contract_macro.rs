@@ -1,13 +1,16 @@
 include!("rpc.rs");
 
-#[proc_macro]
-pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let contract_def = parse_macro_input!(input as syn::File);
+#[proc_macro_attribute]
+pub fn contract(
+    _args: proc_macro::TokenStream,
+    input: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let contract_def = parse_macro_input!(input as syn::ItemMod);
 
     let mut contract = None;
     let mut impls = Vec::new();
     let mut other_items = Vec::new();
-    for item in contract_def.items.into_iter() {
+    for item in contract_def.content.unwrap().1.into_iter() {
         match item {
             syn::Item::Struct(s) if has_derive(&s, "Contract") => {
                 if contract.is_none() {
@@ -77,7 +80,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             if let syn::ImplItem::Method(m) = item {
                 match m.vis {
                     syn::Visibility::Public(_) => {
-                        let rpc = match RPC::new(imp, m) {
+                        let rpc = match RPC::new(&*imp.self_ty, m) {
                             Ok(rpc) => rpc,
                             Err(_) => early_return!(),
                         };
@@ -99,7 +102,7 @@ pub fn contract(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     }
 
     let empty_new: syn::ImplItemMethod = parse_quote!(
-        pub fn new() -> Result<Self> {
+        pub fn new(ctx: &Context) -> Result<Self> {
             unreachable!()
         }
     );

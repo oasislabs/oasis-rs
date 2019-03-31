@@ -8,6 +8,7 @@ fn run_mode(mode: &'static str) {
              --cfg feature=\"test\" \
              --extern failure \
              --extern oasis_std \
+             --extern oasis_test \
              --extern serde \
              --extern serde_derive \
              --extern serde_cbor"

@@ -80,7 +80,7 @@ pub fn contract(
             if let syn::ImplItem::Method(m) = item {
                 match m.vis {
                     syn::Visibility::Public(_) => {
-                        let rpc = match RPC::new(imp, m) {
+                        let rpc = match RPC::new(&*imp.self_ty, m) {
                             Ok(rpc) => rpc,
                             Err(_) => early_return!(),
                         };
@@ -102,7 +102,7 @@ pub fn contract(
     }
 
     let empty_new: syn::ImplItemMethod = parse_quote!(
-        pub fn new() -> Result<Self> {
+        pub fn new(ctx: &Context) -> Result<Self> {
             unreachable!()
         }
     );

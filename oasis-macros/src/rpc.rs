@@ -4,7 +4,7 @@ struct RPC<'a> {
 }
 
 impl<'a> RPC<'a> {
-    fn new(imp: &'a syn::ItemImpl, m: &'a syn::ImplItemMethod) -> Result<Self, Self> {
+    fn new(self_ty: &'a syn::Type, m: &'a syn::ImplItemMethod) -> Result<Self, Self> {
         let sig = &m.sig;
         let ident = &sig.ident;
         let mut has_err = false;
@@ -29,7 +29,6 @@ impl<'a> RPC<'a> {
             has_err = true;
         }
 
-        let self_ty = &*imp.self_ty;
         let mut inps = decl.inputs.iter().peekable();
 
         macro_rules! check_next_arg {

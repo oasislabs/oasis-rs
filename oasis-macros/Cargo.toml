@@ -18,6 +18,7 @@ tiny-keccak = "1.4"
 [dev-dependencies]
 compiletest_rs = { version = "0.3", features = ["tmp"] }
 oasis-std = { path = "../oasis-std" }
+oasis-test = { path = "../oasis-test" }
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.9"
 

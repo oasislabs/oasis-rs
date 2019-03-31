@@ -1,20 +1,20 @@
 error: RPC methods cannot declare an ABI.
-  --> $DIR/bad_rpc_sig.rs:11:16
+  --> $DIR/bad_rpc_sig.rs:12:20
    |
-11 |     pub unsafe extern "C" fn wtf<T: std::fmt::Debug>(&self, ctx: &Context, val: T) -> Result<()> {
-   |                ^^^^^^
+12 |         pub unsafe extern "C" fn wtf<T: std::fmt::Debug>(
+   |                    ^^^^^^
 
 error: RPC methods may not be unsafe.
-  --> $DIR/bad_rpc_sig.rs:11:9
+  --> $DIR/bad_rpc_sig.rs:12:13
    |
-11 |     pub unsafe extern "C" fn wtf<T: std::fmt::Debug>(&self, ctx: &Context, val: T) -> Result<()> {
-   |         ^^^^^^
+12 |         pub unsafe extern "C" fn wtf<T: std::fmt::Debug>(
+   |             ^^^^^^
 
 error: RPC methods may not have generic type parameters.
-  --> $DIR/bad_rpc_sig.rs:11:33
+  --> $DIR/bad_rpc_sig.rs:12:37
    |
-11 |     pub unsafe extern "C" fn wtf<T: std::fmt::Debug>(&self, ctx: &Context, val: T) -> Result<()> {
-   |                                 ^
+12 |         pub unsafe extern "C" fn wtf<T: std::fmt::Debug>(
+   |                                     ^
 
 error: aborting due to 3 previous errors
 

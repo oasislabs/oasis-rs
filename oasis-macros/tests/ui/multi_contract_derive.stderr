@@ -1,8 +1,8 @@
 error: `contract!` must contain exactly one #[derive(Contract)] struct. Additional occurrence here:
- --> $DIR/multi_contract_derive.rs:6:1
+ --> $DIR/multi_contract_derive.rs:7:5
   |
-6 | #[derive(Contract)]
-  | ^
+7 |     #[derive(Contract)]
+  |     ^
 
 error: aborting due to previous error
 

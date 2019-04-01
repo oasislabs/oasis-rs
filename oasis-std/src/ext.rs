@@ -2,6 +2,8 @@
 
 use crate::{errors::ExtCallError, types::*};
 
+static BASE_GAS: u32 = 2100;
+
 mod eth {
     extern "C" {
         /// Direct/classic call. Corresponds to "CALL" opcode in EVM
@@ -164,6 +166,25 @@ pub fn call(
         } else {
             Err(ExtCallError)
         }
+    }
+}
+
+pub fn transfer(address: &Address, value: &U256) -> Result<(), ExtCallError> {
+    let mut value_arr = [0u8; 32];
+    value.to_big_endian(&mut value_arr);
+    if unsafe {
+        eth::ccall(
+            BASE_GAS.into(),
+            address.as_ptr(),
+            value_arr.as_ptr(),
+            std::ptr::null(), /* input */
+            0,                /* input len */
+        )
+    } == 0
+    {
+        Ok(())
+    } else {
+        Err(ExtCallError)
     }
 }
 

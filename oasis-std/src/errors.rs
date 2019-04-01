@@ -1,3 +1,5 @@
+pub type Result<T> = std::result::Result<T, failure::Error>;
+
 #[derive(Fail, Debug)]
 #[fail(display = "Call to Wasm import failed.")]
 pub struct ExtCallError;

@@ -1,11 +1,9 @@
 use std::cell::UnsafeCell;
 
 use crate::{
-    ext::{get_bytes, sender},
-    types::{Address, H256},
+    ext,
+    types::{Address, H256, U256},
 };
-
-pub type Result<T> = std::result::Result<T, failure::Error>;
 
 /// A type that can be stored in Oasis Storage.
 pub trait Storage = serde::Serialize + serde::de::DeserializeOwned;
@@ -19,13 +17,72 @@ pub trait Contract {
 }
 
 /// The context of the current RPC.
-#[derive(Default, Clone)]
-pub struct Context {}
+// `Option` values are set by the user. `None` when populated by runting (during call/deploy).
+#[derive(Default, Copy, Clone, Debug)]
+pub struct Context {
+    #[doc(hidden)]
+    pub sender: Option<Address>,
+
+    #[doc(hidden)]
+    pub value: Option<U256>,
+
+    #[doc(hidden)]
+    pub call_type: CallType,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum CallType {
+    Default,
+    Delegated,
+    Constant,
+}
+
+impl Default for CallType {
+    fn default() -> Self {
+        CallType::Default
+    }
+}
 
 impl Context {
+    pub fn delegated() -> Self {
+        Self {
+            call_type: CallType::Delegated,
+            ..Default::default()
+        }
+    }
+
+    /// Sets the sender of this `Context`. Has no effect when called inside of a contract.
+    pub fn with_sender(mut self, sender: Address) -> Self {
+        self.sender = Some(sender);
+        self
+    }
+
+    /// Creates a new Context, based on the current environment, that specifies
+    /// a transfer of `value` to the callee.
+    pub fn with_value<V: Into<U256>>(mut self, value: V) -> Self {
+        self.value = Some(value.into());
+        self
+    }
+
     /// Returns the `Address` of the sender of the current RPC.
     pub fn sender(&self) -> Address {
-        sender()
+        self.sender.unwrap_or_else(ext::sender)
+    }
+
+    /// Returns the `Address` of the currently executing contract.
+    /// Panics if not currently in a contract.
+    pub fn address(&self) -> Address {
+        ext::address()
+    }
+
+    /// Returns the value with which this `Context` was created.
+    pub fn value(&self) -> U256 {
+        self.value.unwrap_or_else(ext::value)
+    }
+
+    /// Returns the remaining gas allocated to this transaction.
+    pub fn gas_left(&self) -> u64 {
+        ext::gas_left()
     }
 }
 
@@ -81,6 +138,7 @@ pub struct Lazy<T: Storage> {
 impl<T: Storage> Lazy<T> {
     /// Creates a Lazy value with initial contents.
     /// This function is for internal use. Clients should use the `lazy!` macro.
+    #[doc(hidden)]
     pub fn _new(key: H256, val: T) -> Self {
         Self {
             key,
@@ -89,6 +147,7 @@ impl<T: Storage> Lazy<T> {
     }
 
     /// Creates an empty Lazy. This function is for internal use.
+    #[doc(hidden)]
     pub fn _uninitialized(key: H256) -> Self {
         Self {
             key,
@@ -99,7 +158,7 @@ impl<T: Storage> Lazy<T> {
     fn ensure_val(&self) -> &mut T {
         let val = unsafe { &mut *self.val.get() };
         if val.is_none() {
-            val.replace(serde_cbor::from_slice(&get_bytes(&self.key).unwrap()).unwrap());
+            val.replace(serde_cbor::from_slice(&ext::get_bytes(&self.key).unwrap()).unwrap());
         }
         val.as_mut().unwrap()
     }

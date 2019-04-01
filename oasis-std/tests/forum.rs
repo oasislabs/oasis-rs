@@ -14,14 +14,15 @@ mod contract {
     // 1. collect all structs defined inside of `contract!`,
     // 2. recursively find all types used in the state
     // 3. add the #[derive(Serialize, Deserialize)] if it doesn't exist
-    #[derive(Clone, Serialize, Deserialize, Debug)]
+    #[derive(Clone, Serialize, Deserialize, Debug, Default)]
     pub struct User {
         id: UserId,
         name: String,
         reputation: i64,
+        bounty: U256,
     }
 
-    #[derive(Clone, Serialize, Deserialize, Debug)]
+    #[derive(Clone, Serialize, Deserialize, Debug, Default)]
     pub struct ForumPost {
         author: UserId,
         title: String,
@@ -44,6 +45,7 @@ mod contract {
                     id: ctx.sender(),
                     name: admin_username,
                     reputation: 9001,
+                    ..Default::default()
                 }],
                 posts: Vec::new(),
                 chats: lazy!(std::collections::HashMap::new()),
@@ -54,7 +56,7 @@ mod contract {
             self.users.push(User {
                 id: ctx.sender(),
                 name: name.to_string(),
-                reputation: 0,
+                ..Default::default()
             });
             Ok(())
         }
@@ -130,60 +132,90 @@ mod contract {
                 None => Err(failure::format_err!("403")),
             }
         }
+
+        pub fn give_bounty(&mut self, ctx: &Context, recipient: &UserId) -> Result<()> {
+            if ctx.value() == U256::zero() {
+                return Ok(());
+            }
+            match self.users.iter_mut().find(|user| user.id == *recipient) {
+                Some(user) => {
+                    user.bounty += ctx.value();
+                    Ok(())
+                }
+                None => Err(failure::format_err!("No such user.")),
+            }
+        }
+
+        pub fn collect_bounty(&mut self, ctx: &Context) -> Result<U256> {
+            match self.users.iter_mut().find(|user| user.id == ctx.sender()) {
+                Some(user) => {
+                    let bounty = user.bounty;
+                    user.bounty = U256::zero();
+                    user.id.transfer(&bounty)?;
+                    Ok(bounty)
+                }
+                None => Err(failure::format_err!("No such user.")),
+            }
+        }
     }
 }
 
-macro_rules! find_user {
-    ($bb:ident, $ctx:ident) => {
-        $bb.users
-            .iter()
-            .find(|user| user.id == $ctx.sender())
-            .expect("`signup` failed")
-    };
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-speculate::speculate! {
+    fn check_user(bb: &Forum, user_id: &UserId, checker: &Fn(&User) -> ()) {
+        checker(bb.users.iter().find(|user| user.id == *user_id).unwrap());
+    }
 
-    describe "forum" {
-        before {
-            oasis_test::init!();
-        }
+    #[test]
+    fn test_forum() {
+        oasis_test::init!();
+        let admin = oasis_test::create_account(42);
+        let boarhunter = oasis_test::create_account(1);
 
-        it "should work" {
-            use oasis_std::prelude::*;
+        let admin_ctx = Context::default().with_sender(admin);
+        let boarhunter_ctx = Context::default().with_sender(boarhunter);
 
-            let mut ctx = Context::default();
+        let mut bb = Forum::new(&admin_ctx, "admin".to_string()).unwrap();
 
-            let admin_addr = Address::from([42u8; 20]);
-            ctx.set_sender(admin_addr.clone());
-            let mut bb = Forum::new(&ctx, "admin".to_string()).unwrap();
-
-            let username = "boarhunter69";
-            let user_addr = Address::from([69u8; 20]);
-            ctx.set_sender(user_addr.clone());
-            bb.signup(&ctx, username).unwrap();
-
-            let user = find_user!(bb, ctx);
-            assert_eq!(user.name, username.to_string());
+        // sign up boarhunter
+        let username = "boarhunter69".to_string();
+        bb.signup(&boarhunter_ctx, &username).unwrap();
+        check_user(&bb, &boarhunter, &|user| {
+            assert_eq!(user.name, username);
             assert_eq!(user.reputation, 0);
+        });
 
-            let title = "Rust is the best!";
-            let message = "👆 title says it all";
-            bb.post(&ctx, title.to_string(), message.to_string()).unwrap();
+        // make post as boarhunter
+        bb.post(
+            &boarhunter_ctx,
+            "Rust is the best".to_string(),      // title
+            "👆 title says it al".to_string(), // message
+        )
+        .unwrap();
+        check_user(&bb, &boarhunter, &|user| assert_eq!(user.reputation, 1));
 
-            let user = find_user!(bb, ctx);
-            assert_eq!(user.reputation, 1);
-
-            ctx.set_sender(admin_addr.clone());
-            bb.dm(&ctx, &user_addr, "+1").unwrap();
-
-            ctx.set_sender(user_addr.clone());
-            match bb.get_chats(&ctx, &Some(admin_addr)).unwrap() {
-                Either::Left(ref chats) if chats.len() == 1 => {
-                    assert_eq!(chats[0],  "+1");
-                },
-                ow => panic!("bad chats: {:?}", ow)
+        // send message admin -> boarhunter, boarhunter checks that it was delivered
+        bb.dm(&admin_ctx, &boarhunter, "+1").unwrap();
+        match bb.get_chats(&boarhunter_ctx, &Some(admin)).unwrap() {
+            Either::Left(ref chats) if chats.len() == 1 => {
+                assert_eq!(chats[0], "+1");
             }
+            ow => panic!("bad chats: {:?}", ow),
         }
+
+        bb.give_bounty(&admin_ctx.with_value(42), &boarhunter)
+            .unwrap();
+        check_user(&bb, &boarhunter, &|user| assert_eq!(user.bounty, 42u64));
+        assert_eq!(admin.balance(), 0u64);
+        assert!(bb
+            .give_bounty(&admin_ctx.with_value(1), &boarhunter)
+            .is_err());
+        assert_eq!(boarhunter.balance(), 1u64);
+
+        bb.collect_bounty(&boarhunter_ctx).unwrap();
+        check_user(&bb, &boarhunter, &|user| assert_eq!(user.bounty, 0u64));
+        assert_eq!(boarhunter.balance(), 43u64);
     }
 }

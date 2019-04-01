@@ -4,7 +4,7 @@
     proc_macro_diagnostic,
     type_ascription
 )]
-#![recursion_limit = "128"]
+#![recursion_limit = "256"]
 
 extern crate proc_macro;
 #[macro_use]

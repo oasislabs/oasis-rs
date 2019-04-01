@@ -16,7 +16,7 @@ syn = { version = "0.15", features = ["full", "extra-traits", "visit-mut"] }
 tiny-keccak = "1.4"
 
 [dev-dependencies]
-compiletest_rs = { version = "0.3", features = ["tmp"] }
+compiletest_rs = { git = "https://github.com/laumann/compiletest-rs", features = ["tmp"] }
 oasis-std = { path = "../oasis-std" }
 oasis-test = { path = "../oasis-test" }
 serde = { version = "1.0", features = ["derive"] }

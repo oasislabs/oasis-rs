@@ -51,6 +51,7 @@ impl Context {
         }
     }
 
+    /// Sets the sender of this `Context`. Has no effect when called inside of a contract.
     pub fn with_sender(mut self, sender: Address) -> Self {
         self.sender = Some(sender);
         self

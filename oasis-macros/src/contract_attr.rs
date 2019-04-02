@@ -198,22 +198,21 @@ pub fn contract(
             let rpc_inner = quote! {
                 let payload = RpcPayload::#ident { #(#inps),* };
                 let input = serde_cbor::to_vec(&payload).unwrap();
-                #[cfg(test)]
-                {
-                    oasis_test::push_context(&#ctx_ident);
-                    oasis_test::push_address(self._address);
-                }
-                let result = oasis::call(
-                    #ctx_ident.gas_left(),
-                    &self._address /* callee = address held by `Client` struct */,
-                    #ctx_ident.value(),
-                    &input
+                let result = oasis_std::testing::call_with(
+                    &self._address,
+                    &#ctx_ident,
+                    &input,
+                    &|| {
+                        oasis::call(
+                            #ctx_ident.gas_left(),
+                            &self._address /* callee = address held by `Client` struct */,
+                            #ctx_ident.value(),
+                            &input
+                        )
+                    }
                 )?;
-                #[cfg(test)]
-                {
+                if cfg!(test) {
                     unsafe { &mut *self.contract.get() }.replace(TheContract::coalesce());
-                    oasis_test::pop_address();
-                    oasis_test::pop_context();
                 }
                 type RpcResult = std::result::Result<#result_ty, String>;
                 // TODO: better error handling
@@ -331,16 +330,16 @@ pub fn contract(
 
                     #[cfg(test)]
                     pub #ctor_sig {
-                        let contract_addr =
-                            oasis_test::create_account(#ctor_ctx_ident.value.unwrap_or_default());
+                        let contract_addr = oasis_std::testing::create_account(
+                            #ctor_ctx_ident.value.unwrap_or_default()
+                        );
                         let payload = CtorPayload { #(#ctor_payload_inps),* };
-                        oasis_test::push_context(&#ctor_ctx_ident);
-                        oasis_test::push_input(serde_cbor::to_vec(&payload).unwrap());
-                        oasis_test::push_address(contract_addr);
-                        contract::deploy::deploy();
-                        oasis_test::pop_address();
-                        oasis_test::pop_input();
-                        oasis_test::pop_context();
+                        oasis_std::testing::call_with(
+                            &contract_addr,
+                            &#ctor_ctx_ident,
+                            &serde_cbor::to_vec(&payload).unwrap(),
+                            &contract::deploy::deploy
+                        );
                         Ok(Self {
                             contract: UnsafeCell::new(
                                 Some(TheContract::new(#ctor_ctx_ident, #(#ctor_args),*)?)

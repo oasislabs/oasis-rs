@@ -57,3 +57,9 @@ impl syn::visit_mut::VisitMut for Deborrower {
         syn::visit_mut::visit_type_mut(self, ty);
     }
 }
+
+macro_rules! format_ident {
+    ($fmt_str:literal, $($fmt_arg:expr),+) => {
+        syn::Ident::new(&format!($fmt_str, $($fmt_arg),+), proc_macro2::Span::call_site())
+    }
+}

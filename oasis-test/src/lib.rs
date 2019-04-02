@@ -6,5 +6,7 @@ pub use ext::{
 
 #[macro_export]
 macro_rules! init {
-    () => {};
+    () => {
+        use oasis_std::prelude::*;
+    };
 }

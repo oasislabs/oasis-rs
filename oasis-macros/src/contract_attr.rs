@@ -159,25 +159,19 @@ pub fn contract(
         }
     };
 
-    let ctor_sig = ctor.sig.clone();
-    let ctor_test_sig = ctor_sig.clone();
+    let ctor_sig = ctor.sig;
     let ctor_ctx_ident = ctor.ctx_ident();
     let (ctor_inps, ctor_args) = (ctor.structify_inps(), ctor.call_args());
     let ctor_payload_inps: Vec<proc_macro2::TokenStream> = ctor_args
         .iter()
-        .map(|arg| {
-            let arg = arg.clone();
-            quote! {
-                #arg: #arg.to_owned()
-            }
-        })
+        .map(|arg| quote! { #arg: #arg.to_owned() })
         .collect();
-    let ctor_new_args = ctor_args.clone();
     let deploy_payload = if ctor_args.is_empty() {
         quote! {}
     } else {
-        let args = ctor_args.clone();
-        quote! { let CtorPayload { #(#args)* } = serde_cbor::from_slice(&oasis::input()).unwrap(); }
+        quote! {
+            let CtorPayload { #(#ctor_args)* } = serde_cbor::from_slice(&oasis::input()).unwrap();
+        }
     };
 
     let client_impls: Vec<proc_macro2::TokenStream> = rpcs
@@ -204,8 +198,8 @@ pub fn contract(
             let rpc_inner = quote! {
                 let payload = RpcPayload::#ident { #(#inps),* };
                 let input = serde_cbor::to_vec(&payload).unwrap();
-                // `feature = "test"` is needed for compiletests
-                if cfg!(test) {
+                #[cfg(test)]
+                {
                     oasis_test::push_context(&#ctx_ident);
                     oasis_test::push_address(self._address);
                 }
@@ -235,10 +229,7 @@ pub fn contract(
         })
         .collect();
 
-    let client_ident = syn::Ident::new(
-        &format!("{}Client", contract.ident),
-        proc_macro2::Span::call_site(),
-    );
+    let client_ident = format_ident!("{}Client", contract.ident);
 
     proc_macro::TokenStream::from(quote! {
         #preamble
@@ -270,6 +261,7 @@ pub fn contract(
                 #[cfg(test)]
                 #test_contract
 
+                #[cfg(any(feature = "deploy", test))]
                 #(#contract_impls)*
 
                 #[cfg(any(feature = "deploy", test))]
@@ -321,17 +313,15 @@ pub fn contract(
                 impl #client_ident {
                     #(#client_impls)*
 
-                    #[cfg(not(any(test, feature = "test")))]
+                    #[cfg(not(test))]
                     #[allow(unused_variables)]
                     pub #ctor_sig {
                         let contract_addr = oasis::create(
                             #ctor_ctx_ident.value.unwrap_or_default(),
-                            include_bytes!(
-                                concat!(
-                                    env!("CARGO_MANIFEST_DIR"), "/target/contract/",
-                                    env!("CARGO_PKG_NAME"), ".wasm"
-                                )
-                            ),
+                            include_bytes!(concat!(
+                                env!("CARGO_MANIFEST_DIR"), "/target/contract/",
+                                env!("CARGO_PKG_NAME"), ".wasm"
+                            )),
                         )?;
                         Ok(Self {
                             contract: UnsafeCell::new(None),
@@ -340,9 +330,9 @@ pub fn contract(
                     }
 
                     #[cfg(test)]
-                    pub #ctor_test_sig {
+                    pub #ctor_sig {
                         let contract_addr =
-                            oasis_test::create_account(ctx.value.unwrap_or_default());
+                            oasis_test::create_account(#ctor_ctx_ident.value.unwrap_or_default());
                         let payload = CtorPayload { #(#ctor_payload_inps),* };
                         oasis_test::push_context(&#ctor_ctx_ident);
                         oasis_test::push_input(serde_cbor::to_vec(&payload).unwrap());
@@ -353,7 +343,7 @@ pub fn contract(
                         oasis_test::pop_context();
                         Ok(Self {
                             contract: UnsafeCell::new(
-                                Some(TheContract::new(#ctor_ctx_ident, #(#ctor_new_args),*)?)
+                                Some(TheContract::new(#ctor_ctx_ident, #(#ctor_args),*)?)
                             ),
                             _address: contract_addr,
                         })
@@ -364,6 +354,10 @@ pub fn contract(
                             contract: UnsafeCell::new(None),
                             _address: address,
                         }
+                    }
+
+                    pub fn address(&self) -> Address {
+                        self._address
                     }
                 }
             }

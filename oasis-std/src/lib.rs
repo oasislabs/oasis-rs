@@ -10,6 +10,7 @@ extern crate serde;
 #[macro_use]
 extern crate uint;
 
+pub mod build;
 pub mod errors;
 pub mod exe;
 pub mod ext;
@@ -23,4 +24,5 @@ pub mod prelude {
     pub use macros::{contract, Contract};
 }
 
+pub use build::build_contract;
 pub use macros::contract;

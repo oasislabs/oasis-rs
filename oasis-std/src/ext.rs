@@ -180,18 +180,26 @@ pub fn call(
 }
 
 pub fn transfer(address: &Address, value: &U256) -> Result<(), ExtCallError> {
+    let base_gas = U256::from(BASE_GAS);
     let mut value_arr = [0u8; 32];
     value.to_big_endian(&mut value_arr);
-    if unsafe {
-        eth::ccall(
-            U256::from(BASE_GAS).as_ptr(),
-            address.as_ptr(),
-            value_arr.as_ptr(),
-            std::ptr::null(), /* input */
-            0,                /* input len */
-        )
-    } == 0
-    {
+    let result = crate::testing::call_with(
+        address,
+        None,
+        Some(value),
+        &Vec::new(), /* input */
+        &base_gas,
+        || unsafe {
+            eth::ccall(
+                base_gas.as_ptr(),
+                address.as_ptr(),
+                value_arr.as_ptr(),
+                std::ptr::null(), /* input */
+                0,                /* input len */
+            )
+        },
+    );
+    if result == 0 {
         Ok(())
     } else {
         Err(ExtCallError)

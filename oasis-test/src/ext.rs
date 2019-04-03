@@ -2,6 +2,20 @@ use std::{cell::RefCell, collections::HashMap};
 
 use oasis_std::types::*;
 
+oasis_macros::test_host!();
+
+#[no_mangle]
+extern "C" fn is_testing() -> bool {
+    true
+}
+
+thread_local! {
+    static ACCOUNTS: RefCell<HashMap<Address, AccountState>> = RefCell::new(HashMap::new());
+    static EXPORTS: RefCell<HashMap<Address, HashMap<String, extern "C" fn()>>> =
+        RefCell::new(HashMap::new());
+}
+
+#[derive(Debug)]
 struct AccountState {
     balance: U256,
     storage: HashMap<H256, Vec<u8>>,
@@ -16,19 +30,8 @@ impl AccountState {
     }
 }
 
-thread_local! {
-    static ACCOUNTS: RefCell<HashMap<Address, AccountState>> = RefCell::new(HashMap::new());
-    static EXPORTS: RefCell<HashMap<Address, HashMap<String, &'static (dyn Fn())>>> =
-        RefCell::new(HashMap::new());
-}
-
-oasis_macros::test_pp_host!();
-
 fn cur_addr() -> Address {
-    ADDRESS.with(|addr| {
-        let addr = addr.borrow();
-        addr.last().copied().unwrap()
-    })
+    ADDRESS.with(|addr| addr.borrow().last().copied().unwrap())
 }
 
 fn with_cur_state<T, F: FnOnce(&AccountState) -> T>(f: F) -> T {
@@ -51,7 +54,7 @@ fn invoke_export<S: AsRef<str>>(addr: Address, name: S) {
 
 #[no_mangle]
 fn gasleft() -> U256 {
-    U256::zero() // TODO
+    U256::zero() // TODO (#14)
 }
 
 #[no_mangle]
@@ -85,22 +88,15 @@ pub fn set_bytes(key: *const u8, bytes: *const u8, bytes_len: u64) {
 
 #[no_mangle]
 pub fn ccall(
-    _gas: *const u8, // TODO
+    _gas: *const u8, // TODO (#14)
     address_ptr: *const u8,
     value_ptr: *const u8,
     _input_ptr: *const u8,
     input_len: u32,
 ) -> u32 {
     let value = U256::from_raw(value_ptr);
-    let sender = SENDER.with(|sender| {
-        let sender = sender.borrow();
-        if sender.len() > 1 {
-            cur_addr()
-        } else {
-            sender.last().copied().unwrap()
-        }
-    });
-    if value > with_cur_state(|state| state.balance) {
+    let sender = SENDER.with(|sender| *sender.borrow().last().unwrap());
+    if ACCOUNTS.with(|accounts| value > accounts.borrow().get(&sender).unwrap().balance) {
         return 1;
     }
     if input_len > 0 {
@@ -138,7 +134,45 @@ pub fn create_account<V: Into<U256>>(balance: V) -> Address {
     ACCOUNTS.with(|accounts| {
         let mut accounts = accounts.borrow_mut();
         let addr = Address::from(accounts.len());
-        accounts.insert(addr.clone(), AccountState::new_with_balance(balance));
+        accounts.insert(addr, AccountState::new_with_balance(balance));
         addr
     })
+}
+
+#[no_mangle]
+pub fn create(
+    endowment: *const u8,
+    _code: *const u8,
+    _code_len: *const u8,
+    ret_addr: *mut u8,
+) -> i32 {
+    let addr = create_account(U256::from_raw(endowment));
+    unsafe { ret_addr.copy_from_nonoverlapping(addr.as_ptr(), 20) };
+    0
+}
+
+#[no_mangle]
+extern "C" fn register_exports(
+    addr: *const u8,
+    export_names: *const *const i8,
+    export_fns: *const extern "C" fn(),
+    num_exports: u32,
+) {
+    let addr = Address::from_raw(addr);
+    let export_names: Vec<String> = unsafe {
+        std::slice::from_raw_parts(export_names, num_exports as usize)
+            .into_iter()
+            .map(|ptr| std::ffi::CStr::from_ptr(*ptr))
+            .map(|cstr| cstr.to_str().unwrap().to_string())
+            .collect()
+    };
+    let export_fns: Vec<extern "C" fn()> = unsafe {
+        std::slice::from_raw_parts(export_fns, num_exports as usize)
+            .into_iter()
+            .map(|func| func.to_owned())
+            .collect()
+    };
+    let addr_exports: HashMap<String, extern "C" fn()> =
+        export_names.into_iter().zip(export_fns).collect();
+    EXPORTS.with(|exports| exports.borrow_mut().insert(addr, addr_exports));
 }

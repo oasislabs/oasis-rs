@@ -137,8 +137,8 @@ pub fn contract(
             let call_args = rpc.call_args();
             quote! {
                 RpcPayload::#ident { #(#arg_names),* } => {
-                    let result = contract.#ident(&Context::default(), #(#call_args),*);
-                    // TODO better error handling
+                    let result = contract.#ident(&ctx, #(#call_args),*);
+                    // TODO: better error handling (#15)
                     serde_cbor::to_vec(&result.map_err(|err| err.to_string()))
                 }
             }
@@ -149,6 +149,7 @@ pub fn contract(
         quote! {}
     } else {
         quote! {
+            let ctx = Context::default(); // TODO: use delegated if called using dcall (#33)
             let mut contract = <#contract_ident>::coalesce();
             let payload: RpcPayload = serde_cbor::from_slice(&oasis::input()).unwrap();
             let result = match payload {
@@ -200,23 +201,25 @@ pub fn contract(
                 let input = serde_cbor::to_vec(&payload).unwrap();
                 let result = oasis_std::testing::call_with(
                     &self._address,
-                    &#ctx_ident,
+                    #ctx_ident.sender.as_ref(),
+                    #ctx_ident.value.as_ref(),
                     &input,
-                    &U256::zero() /* gas */, // TODO
+                    &U256::zero() /* gas */, // TODO (#14)
                     &|| {
-                        oasis::call(
+                        let result = oasis::call(
                             #ctx_ident.gas_left(),
                             &self._address /* callee = address held by `Client` struct */,
                             #ctx_ident.value(),
                             &input
-                        )
+                        );
+                        if cfg!(test) {
+                            unsafe { &mut *self.contract.get() }.replace(TheContract::coalesce());
+                        }
+                        result
                     }
                 )?;
-                if cfg!(test) {
-                    unsafe { &mut *self.contract.get() }.replace(TheContract::coalesce());
-                }
                 type RpcResult = std::result::Result<#result_ty, String>;
-                // TODO: better error handling
+                // TODO: better error handling (#15)
                 serde_cbor::from_slice::<RpcResult>(&result)?
                     .map_err(|err| failure::format_err!("{}", err))
             };
@@ -269,12 +272,12 @@ pub fn contract(
                     use super::*;
 
                     #[no_mangle]
-                    pub fn call() {
+                    pub extern "C" fn call() {
                         #entry_fn_body
                     }
 
                     #[no_mangle]
-                    pub fn deploy() {
+                    pub extern "C" fn deploy() {
                         #deploy_payload
                         #contract_ident::sunder(
                             #contract_ident::new(&Context::default(), #(#ctor_args),*).unwrap()
@@ -313,39 +316,47 @@ pub fn contract(
                 impl #client_ident {
                     #(#client_impls)*
 
-                    #[cfg(not(test))]
                     #[allow(unused_variables)]
                     pub #ctor_sig {
+                        let is_testing = oasis_std::testing::is_testing();
+                        let empty_contract = Vec::new();
                         let contract_addr = oasis::create(
                             #ctor_ctx_ident.value.unwrap_or_default(),
-                            include_bytes!(concat!(
-                                env!("CARGO_MANIFEST_DIR"), "/target/contract/",
-                                env!("CARGO_PKG_NAME"), ".wasm"
-                            )),
+                            if is_testing {
+                                &empty_contract
+                            } else {
+                                // cfg is needed for unit testing oasis-std via single-file crates
+                                #[cfg(not(test))]
+                                {
+                                    include_bytes!(concat!(
+                                        env!("CARGO_MANIFEST_DIR"), "/target/contract/",
+                                        env!("CARGO_PKG_NAME"), ".wasm"
+                                    ))
+                                }
+                                #[cfg(test)]
+                                {
+                                    &empty_contract
+                                }
+                            }
                         )?;
-                        Ok(Self {
-                            contract: UnsafeCell::new(None),
-                            _address: contract_addr,
-                        })
-                    }
-
-                    #[cfg(test)]
-                    pub #ctor_sig {
-                        let contract_addr = oasis_std::testing::create_account(
-                            #ctor_ctx_ident.value.unwrap_or_default()
+                        oasis_std::testing::register_exports(
+                            contract_addr,
+                            &[("call".to_string(), super::contract::deploy::call)],
                         );
-                        let payload = CtorPayload { #(#ctor_payload_inps),* };
                         oasis_std::testing::call_with(
                             &contract_addr,
-                            &#ctor_ctx_ident,
-                            &serde_cbor::to_vec(&payload).unwrap(),
-                            &U256::zero() /* gas */, // TODO
-                            &contract::deploy::deploy
+                            #ctor_ctx_ident.sender.as_ref(),
+                            #ctor_ctx_ident.value.as_ref(),
+                            &serde_cbor::to_vec(&CtorPayload { #(#ctor_payload_inps),* }).unwrap(),
+                            &U256::zero() /* gas */, // TODO (#14)
+                            || { contract::deploy::deploy() }
                         );
                         Ok(Self {
-                            contract: UnsafeCell::new(
+                            contract: UnsafeCell::new(if oasis_std::testing::is_testing() {
                                 Some(TheContract::new(#ctor_ctx_ident, #(#ctor_args),*)?)
-                            ),
+                            } else {
+                                None
+                            }),
                             _address: contract_addr,
                         })
                     }

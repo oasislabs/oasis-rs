@@ -1,3 +1,36 @@
+thread_local! {
+    static TEST_EXT_DEFS: Vec<TestExtDef> = {
+        let fields: syn::FieldsNamed = parse_quote!({
+            address: &Address,
+            input: &[u8],
+            r#return: &[u8],
+            sender: &Address,
+            value: &U256,
+            gas: &U256,
+        });
+        fields.named
+            .into_iter()
+            .map(|field| {
+                let ident = unraw(field.ident.as_ref().unwrap());
+
+                let mut owned_ty = field.ty.clone();
+                Deborrower {}.visit_type_mut(&mut owned_ty);
+
+                TestExtDef {
+                    bytes_arg: format_ident!("{}_bytes", ident),
+                    bytes_len_arg: format_ident!("{}_len", ident),
+                    push_fn_ident: format_ident!("push_{}", ident),
+                    pop_fn_ident: format_ident!("pop_{}", ident),
+                    upper_field: format_ident!("{}", ident.to_string().to_uppercase()),
+                    field: field.ident.unwrap(),
+                    owned_ty,
+                    ty: field.ty,
+                }
+            })
+        .collect()
+    };
+}
+
 struct TestExtDef {
     bytes_arg: syn::Ident,
     bytes_len_arg: syn::Ident,
@@ -49,43 +82,10 @@ impl TestExtDef {
     }
 }
 
-thread_local! {
-    static TEST_EXT_DEFS: Vec<TestExtDef> = {
-        let fields: syn::FieldsNamed = parse_quote!({
-            address: &Address,
-            input: &[u8],
-            r#return: &[u8],
-            sender: &Address,
-            value: &U256,
-            gas: &U256,
-        });
-        fields.named
-            .into_iter()
-            .map(|field| {
-                let ident = unraw(field.ident.as_ref().unwrap());
-
-                let mut owned_ty = field.ty.clone();
-                Deborrower {}.visit_type_mut(&mut owned_ty);
-
-                TestExtDef {
-                    bytes_arg: format_ident!("{}_bytes", ident),
-                    bytes_len_arg: format_ident!("{}_len", ident),
-                    push_fn_ident: format_ident!("push_{}", ident),
-                    pop_fn_ident: format_ident!("pop_{}", ident),
-                    upper_field: format_ident!("{}", ident.to_string().to_uppercase()),
-                    field: field.ident.unwrap(),
-                    owned_ty,
-                    ty: field.ty,
-                }
-            })
-        .collect()
-    };
-}
-
 #[proc_macro]
 /// Generates push/pop externs, mock externs, and bindings for a testing client.
 /// @see `oasis_std::testing` for an example of use.
-pub fn test_pp_client(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn test_client(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     TEST_EXT_DEFS.with(|defs| {
         let ext_mod_ident: syn::Ident = parse_quote!(call_ctx_ext);
         let mock_ext_mod_ident = format_ident!("mock_{}", ext_mod_ident);
@@ -137,21 +137,31 @@ pub fn test_pp_client(_input: proc_macro::TokenStream) -> proc_macro::TokenStrea
             mod #ext_mod_ident {
                 extern "C" {
                     #(#extern_fns)*
+
+                    pub fn push_current_address_as_sender();
                 }
             }
 
             mod #mock_ext_mod_ident {
                 #(#mock_extern_fns)*
+
+                #[no_mangle]
+                #[linkage = "extern_weak"]
+                extern "C" fn push_current_address_as_sender() {}
             }
 
             #(#bindings)*
+
+            pub fn push_current_address_as_sender() {
+                unsafe { #ext_mod_ident::push_current_address_as_sender(); }
+            }
         })
     })
 }
 
 #[proc_macro]
 /// Generates push/pop externs and impls. Used in `oasis_test::ext`.
-pub fn test_pp_host(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn test_host(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     TEST_EXT_DEFS.with(|defs| {
         let call_envs = defs.iter().map(|def| {
             let TestExtDef {
@@ -252,6 +262,14 @@ pub fn test_pp_host(_input: proc_macro::TokenStream) -> proc_macro::TokenStream 
             mod pp_receivers {
                 use super::*;
                 #(#pp_receivers)*
+
+                #[no_mangle]
+                extern "C" fn push_current_address_as_sender() {
+                    SENDER.with(|sender| {
+                        let addr = ADDRESS.with(|addr| *addr.borrow().last().unwrap());
+                        sender.borrow_mut().push(addr);
+                    });
+                }
             }
 
             #(#eth_accessors)*

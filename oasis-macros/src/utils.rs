@@ -65,6 +65,7 @@ macro_rules! format_ident {
     }
 }
 
+/// Removes a `r#` from an `Ident` if it exists. @see dtolnay/syn#603
 fn unraw(ident: &syn::Ident) -> syn::Ident {
     let ident_str = ident.to_string();
     if ident_str.starts_with("r#") {

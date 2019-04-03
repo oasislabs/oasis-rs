@@ -53,7 +53,7 @@ pub fn contract(
         }
     };
     let mut test_contract = contract.clone();
-    PubCraterr {}.visit_item_struct_mut(&mut test_contract);
+    PubCrater {}.visit_item_struct_mut(&mut test_contract);
     let contract_ident = &contract.ident;
 
     if contract.generics.type_params().count() > 0 {
@@ -391,8 +391,8 @@ impl syn::visit_mut::VisitMut for LazyInserter {
 
 /// Used to increase the visibility of contract struct fields to at least `pub(crate)`
 /// so that testing client can proxy field access via `Deref`.
-struct PubCraterr {}
-impl syn::visit_mut::VisitMut for PubCraterr {
+struct PubCrater {}
+impl syn::visit_mut::VisitMut for PubCrater {
     fn visit_visibility_mut(&mut self, vis: &mut syn::Visibility) {
         match vis {
             syn::Visibility::Inherited | syn::Visibility::Restricted(_) => {

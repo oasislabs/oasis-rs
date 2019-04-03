@@ -10,4 +10,5 @@ readme = "README.md"
 keywords = ["oasis", "test", "testing"]
 
 [dependencies]
+oasis-macros = { version = "0.1", path = "../oasis-macros" }
 oasis-std = { version = "0.1", path = "../oasis-std" }

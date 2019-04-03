@@ -1,4 +1,4 @@
-#![feature(trait_alias)]
+#![feature(linkage, trait_alias)]
 
 #[macro_use]
 extern crate failure;
@@ -14,6 +14,7 @@ pub mod build;
 pub mod errors;
 pub mod exe;
 pub mod ext;
+pub mod testing;
 pub mod types;
 
 #[cfg(feature = "platform-alloc")]

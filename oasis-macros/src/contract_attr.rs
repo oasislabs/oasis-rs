@@ -53,7 +53,7 @@ pub fn contract(
         }
     };
     let mut test_contract = contract.clone();
-    PubCraterr {}.visit_item_struct_mut(&mut test_contract);
+    PubCrater {}.visit_item_struct_mut(&mut test_contract);
     let contract_ident = &contract.ident;
 
     if contract.generics.type_params().count() > 0 {
@@ -103,18 +103,13 @@ pub fn contract(
         }
     }
 
-    let empty_new: syn::ImplItemMethod = parse_quote!(
-        pub fn new(ctx: &Context) -> Result<Self> {
-            unreachable!()
+    let ctor = match ctor.into_iter().nth(0) {
+        Some(ctor) => ctor,
+        None => {
+            err!(contract_ident: "Missing implementation for `{}::new`.", contract_ident);
+            early_return!()
         }
-    );
-    let ctor = ctor.into_iter().nth(0).unwrap_or_else(|| {
-        err!(contract_ident: "Missing implementation for `{}::new`.", contract_ident);
-        RPC {
-            sig: &empty_new.sig,
-            inputs: Vec::new(),
-        }
-    });
+    };
 
     let rpc_defs: Vec<proc_macro2::TokenStream> = rpcs
         .iter()
@@ -122,9 +117,7 @@ pub fn contract(
             let ident = &rpc.sig.ident;
             let inps = rpc.structify_inps();
             // e.g., `my_method { my_input: String, my_other_input: u64 }`
-            quote! {
-                #ident { #(#inps),* }
-            }
+            quote! { #ident { #(#inps),* } }
         })
         .collect();
 
@@ -137,8 +130,8 @@ pub fn contract(
             let call_args = rpc.call_args();
             quote! {
                 RpcPayload::#ident { #(#arg_names),* } => {
-                    let result = contract.#ident(&Context::default(), #(#call_args),*);
-                    // TODO better error handling
+                    let result = contract.#ident(&ctx, #(#call_args),*);
+                    // TODO: better error handling (#15)
                     serde_cbor::to_vec(&result.map_err(|err| err.to_string()))
                 }
             }
@@ -149,6 +142,7 @@ pub fn contract(
         quote! {}
     } else {
         quote! {
+            let ctx = Context::default(); // TODO: use delegated if called using dcall (#33)
             let mut contract = <#contract_ident>::coalesce();
             let payload: RpcPayload = serde_cbor::from_slice(&oasis::input()).unwrap();
             let result = match payload {
@@ -187,9 +181,7 @@ pub fn contract(
 
             let ident = &sig.ident;
             let inps = rpc.input_names().into_iter().map(|name| {
-                quote! {
-                    #name: #name.to_owned()
-                }
+                quote! { #name: #name.to_owned() }
             });
 
             let mut result_ty = rpc.result_ty().clone();
@@ -198,25 +190,27 @@ pub fn contract(
             let rpc_inner = quote! {
                 let payload = RpcPayload::#ident { #(#inps),* };
                 let input = serde_cbor::to_vec(&payload).unwrap();
-                #[cfg(test)]
-                {
-                    oasis_test::push_context(&#ctx_ident);
-                    oasis_test::push_address(self._address);
-                }
-                let result = oasis::call(
-                    #ctx_ident.gas_left(),
-                    &self._address /* callee = address held by `Client` struct */,
-                    #ctx_ident.value(),
-                    &input
+                let result = oasis_std::testing::call_with(
+                    &self._address,
+                    #ctx_ident.sender.as_ref(),
+                    #ctx_ident.value.as_ref(),
+                    &input,
+                    &U256::zero() /* gas */, // TODO (#14)
+                    &|| {
+                        let result = oasis::call(
+                            #ctx_ident.gas_left(),
+                            &self._address /* callee = address held by `Client` struct */,
+                            #ctx_ident.value(),
+                            &input
+                        );
+                        if cfg!(test) {
+                            unsafe { &mut *self.contract.get() }.replace(TheContract::coalesce());
+                        }
+                        result
+                    }
                 )?;
-                #[cfg(test)]
-                {
-                    unsafe { &mut *self.contract.get() }.replace(TheContract::coalesce());
-                    oasis_test::pop_address();
-                    oasis_test::pop_context();
-                }
                 type RpcResult = std::result::Result<#result_ty, String>;
-                // TODO: better error handling
+                // TODO: better error handling (#15)
                 serde_cbor::from_slice::<RpcResult>(&result)?
                     .map_err(|err| failure::format_err!("{}", err))
             };
@@ -261,24 +255,29 @@ pub fn contract(
                 #[cfg(test)]
                 #test_contract
 
-                #[cfg(any(feature = "deploy", test))]
                 #(#contract_impls)*
 
-                #[cfg(any(feature = "deploy", test))]
-                pub(super) mod deploy {
-                    use super::*;
+                pub(super) extern "C" fn call() {
+                    #entry_fn_body
+                }
 
+                pub(super) extern "C" fn deploy() {
+                    #deploy_payload
+                    #contract_ident::sunder(
+                        #contract_ident::new(&Context::default(), #(#ctor_args),*).unwrap()
+                    );
+                }
+
+                #[cfg(feature = "deploy")]
+                mod deploy_ext {
                     #[no_mangle]
-                    pub fn call() {
-                        #entry_fn_body
+                    pub extern "C" fn call() {
+                        super::call();
                     }
 
                     #[no_mangle]
-                    pub fn deploy() {
-                        #deploy_payload
-                        #contract_ident::sunder(
-                            #contract_ident::new(&Context::default(), #(#ctor_args),*).unwrap()
-                        );
+                    pub extern "C" fn deploy() {
+                        super::deploy();
                     }
                 }
             }
@@ -313,38 +312,43 @@ pub fn contract(
                 impl #client_ident {
                     #(#client_impls)*
 
-                    #[cfg(not(test))]
                     #[allow(unused_variables)]
                     pub #ctor_sig {
+                        let is_testing = oasis_std::testing::is_testing();
+                        let empty_contract = Vec::new();
                         let contract_addr = oasis::create(
                             #ctor_ctx_ident.value.unwrap_or_default(),
-                            include_bytes!(concat!(
-                                env!("CARGO_MANIFEST_DIR"), "/target/contract/",
-                                env!("CARGO_PKG_NAME"), ".wasm"
-                            )),
+                            if is_testing {
+                                &empty_contract
+                            } else {
+                                // cfg is needed for unit testing oasis-std via single-file crates
+                                #[cfg(not(any(test, feature = "test")))]
+                                {include_bytes!(concat!(
+                                    env!("CARGO_MANIFEST_DIR"), "/target/contract/",
+                                    env!("CARGO_PKG_NAME"), ".wasm"
+                                ))}
+                                #[cfg(any(test, feature = "test"))]
+                                { &empty_contract }
+                            }
                         )?;
+                        oasis_std::testing::register_exports(
+                            contract_addr,
+                            &[("call".to_string(), super::contract::call)],
+                        );
+                        oasis_std::testing::call_with(
+                            &contract_addr,
+                            #ctor_ctx_ident.sender.as_ref(),
+                            #ctor_ctx_ident.value.as_ref(),
+                            &serde_cbor::to_vec(&CtorPayload { #(#ctor_payload_inps),* }).unwrap(),
+                            &U256::zero() /* gas */, // TODO (#14)
+                            || { contract::deploy() }
+                        );
                         Ok(Self {
-                            contract: UnsafeCell::new(None),
-                            _address: contract_addr,
-                        })
-                    }
-
-                    #[cfg(test)]
-                    pub #ctor_sig {
-                        let contract_addr =
-                            oasis_test::create_account(#ctor_ctx_ident.value.unwrap_or_default());
-                        let payload = CtorPayload { #(#ctor_payload_inps),* };
-                        oasis_test::push_context(&#ctor_ctx_ident);
-                        oasis_test::push_input(serde_cbor::to_vec(&payload).unwrap());
-                        oasis_test::push_address(contract_addr);
-                        contract::deploy::deploy();
-                        oasis_test::pop_address();
-                        oasis_test::pop_input();
-                        oasis_test::pop_context();
-                        Ok(Self {
-                            contract: UnsafeCell::new(
+                            contract: UnsafeCell::new(if oasis_std::testing::is_testing() {
                                 Some(TheContract::new(#ctor_ctx_ident, #(#ctor_args),*)?)
-                            ),
+                            } else {
+                                None
+                            }),
                             _address: contract_addr,
                         })
                     }
@@ -392,8 +396,8 @@ impl syn::visit_mut::VisitMut for LazyInserter {
 
 /// Used to increase the visibility of contract struct fields to at least `pub(crate)`
 /// so that testing client can proxy field access via `Deref`.
-struct PubCraterr {}
-impl syn::visit_mut::VisitMut for PubCraterr {
+struct PubCrater {}
+impl syn::visit_mut::VisitMut for PubCrater {
     fn visit_visibility_mut(&mut self, vis: &mut syn::Visibility) {
         match vis {
             syn::Visibility::Inherited | syn::Visibility::Restricted(_) => {

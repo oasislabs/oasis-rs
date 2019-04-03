@@ -2,13 +2,13 @@
 
 use crate::{errors::ExtCallError, types::*};
 
-static BASE_GAS: u32 = 2100;
+static BASE_GAS: u64 = 2100;
 
 mod eth {
     extern "C" {
         /// Direct/classic call. Corresponds to "CALL" opcode in EVM
         pub fn ccall(
-            gas: u64,
+            gas: *const u8,
             address: *const u8,
             val_ptr: *const u8,
             input_ptr: *const u8,
@@ -16,10 +16,20 @@ mod eth {
         ) -> i32;
 
         /// Delegate call. Corresponds to "CALLCODE" opcode in EVM
-        pub fn dcall(gas: u64, address: *const u8, input_ptr: *const u8, input_len: u32) -> i32;
+        pub fn dcall(
+            gas: *const u8,
+            address: *const u8,
+            input_ptr: *const u8,
+            input_len: u32,
+        ) -> i32;
 
         /// Static call. Corresponds to "STACICCALL" opcode in EVM
-        pub fn scall(gas: u64, address: *const u8, input_ptr: *const u8, input_len: u32) -> i32;
+        pub fn scall(
+            gas: *const u8,
+            address: *const u8,
+            input_ptr: *const u8,
+            input_len: u32,
+        ) -> i32;
 
         // blockchain functions
         pub fn address(dest: *mut u8);
@@ -45,7 +55,7 @@ mod eth {
         pub fn elog(topic_ptr: *const u8, topic_count: u32, data_ptr: *const u8, data_len: u32);
         pub fn input_length() -> u32;
         pub fn fetch_input(dest: *mut u8);
-        pub fn gasleft() -> i64;
+        pub fn gasleft() -> *const u8;
         pub fn gaslimit(dest: *mut u8);
         pub fn origin(dest: *mut u8);
         pub fn ret(ptr: *const u8, len: u32); // -> !
@@ -144,7 +154,7 @@ pub fn create2(endowment: U256, salt: H256, code: &[u8]) -> Result<Address, ExtC
 /// * `input` - a data to send with a call
 /// * `result` - a mutable reference to be filled with a result data
 pub fn call(
-    gas: u64,
+    gas: U256,
     address: &Address,
     value: U256,
     input: &[u8],
@@ -153,7 +163,7 @@ pub fn call(
     value.to_big_endian(&mut value_arr);
     unsafe {
         if eth::ccall(
-            gas,
+            gas.as_ptr(),
             address.as_ptr(),
             value_arr.as_ptr(),
             input.as_ptr(),
@@ -170,18 +180,26 @@ pub fn call(
 }
 
 pub fn transfer(address: &Address, value: &U256) -> Result<(), ExtCallError> {
+    let base_gas = U256::from(BASE_GAS);
     let mut value_arr = [0u8; 32];
     value.to_big_endian(&mut value_arr);
-    if unsafe {
-        eth::ccall(
-            BASE_GAS.into(),
-            address.as_ptr(),
-            value_arr.as_ptr(),
-            std::ptr::null(), /* input */
-            0,                /* input len */
-        )
-    } == 0
-    {
+    let result = crate::testing::call_with(
+        address,
+        None,
+        Some(value),
+        &Vec::new(), /* input */
+        &base_gas,
+        || unsafe {
+            eth::ccall(
+                base_gas.as_ptr(),
+                address.as_ptr(),
+                value_arr.as_ptr(),
+                std::ptr::null(), /* input */
+                0,                /* input len */
+            )
+        },
+    );
+    if result == 0 {
         Ok(())
     } else {
         Err(ExtCallError)
@@ -192,9 +210,15 @@ pub fn transfer(address: &Address, value: &U256) -> Result<(), ExtCallError> {
 ///
 /// Effectively this function is like calling current account but with
 /// different code (i.e. like `DELEGATECALL` EVM instruction).
-pub fn call_code(gas: u64, address: &Address, input: &[u8]) -> Result<Vec<u8>, ExtCallError> {
+pub fn call_code(gas: U256, address: &Address, input: &[u8]) -> Result<Vec<u8>, ExtCallError> {
     unsafe {
-        if eth::dcall(gas, address.as_ptr(), input.as_ptr(), input.len() as u32) == 0 {
+        if eth::dcall(
+            gas.as_ptr(),
+            address.as_ptr(),
+            input.as_ptr(),
+            input.len() as u32,
+        ) == 0
+        {
             let mut result = vec![0u8; eth::return_length() as usize];
             eth::fetch_return(result.as_mut_ptr());
             Ok(result)
@@ -206,9 +230,15 @@ pub fn call_code(gas: u64, address: &Address, input: &[u8]) -> Result<Vec<u8>, E
 
 /// Like `call`, but this call and any of it's subcalls are disallowed to modify any storage.
 /// It will return an error in this case.
-pub fn static_call(gas: u64, address: &Address, input: &[u8]) -> Result<Vec<u8>, ExtCallError> {
+pub fn static_call(gas: U256, address: &Address, input: &[u8]) -> Result<Vec<u8>, ExtCallError> {
     unsafe {
-        if eth::scall(gas, address.as_ptr(), input.as_ptr(), input.len() as u32) == 0 {
+        if eth::scall(
+            gas.as_ptr(),
+            address.as_ptr(),
+            input.as_ptr(),
+            input.len() as u32,
+        ) == 0
+        {
             let mut result = vec![0u8; eth::return_length() as usize];
             eth::fetch_return(result.as_mut_ptr());
             Ok(result)
@@ -260,8 +290,8 @@ pub fn gas_limit() -> U256 {
 }
 
 /// Get amount of gas left.
-pub fn gas_left() -> u64 {
-    unsafe { eth::gasleft() as u64 }
+pub fn gas_left() -> U256 {
+    U256::from_raw(unsafe { eth::gasleft() })
 }
 
 /// Get caller address

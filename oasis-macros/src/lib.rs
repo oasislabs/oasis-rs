@@ -17,3 +17,4 @@ use syn::{spanned::Spanned as _, visit_mut::VisitMut as _};
 include!("utils.rs");
 include!("contract_attr.rs");
 include!("contract_derive.rs");
+include!("testing.rs");

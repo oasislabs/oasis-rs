@@ -32,23 +32,23 @@ thread_local! {
 }
 
 struct TestExtDef {
+    field: syn::Ident,
+    upper_field: syn::Ident,
     bytes_arg: syn::Ident,
     bytes_len_arg: syn::Ident,
-    field: syn::Ident,
-    owned_ty: syn::Type,
-    pop_fn_ident: syn::Ident,
     push_fn_ident: syn::Ident,
+    pop_fn_ident: syn::Ident,
     ty: syn::Type,
-    upper_field: syn::Ident,
+    owned_ty: syn::Type,
 }
 
 impl TestExtDef {
     // For some reason, TokenStream can't go into thread_local.
     pub fn ext_push_fn_sig(&self) -> proc_macro2::TokenStream {
         let Self {
-            push_fn_ident,
             bytes_arg,
             bytes_len_arg,
+            push_fn_ident,
             ..
         } = self;
         let mut args = vec![quote! { #bytes_arg: *const u8 }];
@@ -60,8 +60,8 @@ impl TestExtDef {
 
     pub fn ext_push_fn_call(&self) -> proc_macro2::TokenStream {
         let Self {
-            push_fn_ident,
             field,
+            push_fn_ident,
             ..
         } = self;
         let mut call_args = vec![quote! { #field.as_ptr() }];
@@ -176,11 +176,11 @@ pub fn test_host(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 
         let pp_receivers = defs.iter().map(|def| {
             let TestExtDef {
+                upper_field,
                 bytes_arg,
                 bytes_len_arg,
                 pop_fn_ident,
                 owned_ty,
-                upper_field,
                 ..
             } = def;
             let rety = if def.ty_is_slice() {
@@ -207,8 +207,8 @@ pub fn test_host(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         let eth_accessors = defs.iter().map(|def| {
             let TestExtDef {
                 field,
-                owned_ty,
                 upper_field,
+                owned_ty,
                 ..
             } = def;
 
@@ -247,12 +247,6 @@ pub fn test_host(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 #len_accessor
             }
         });
-        // #[no_mangle]
-        // pub fn sender(dest: *mut u8) {
-        //     SENDER.with(|sender| unsafe {
-        //         dest.copy_from_nonoverlapping(sender.borrow().last().unwrap().as_ptr(), 20)
-        //     });
-        // }
 
         proc_macro::TokenStream::from(quote! {
             thread_local! {

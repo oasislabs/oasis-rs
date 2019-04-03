@@ -104,9 +104,7 @@ pub fn contract(
     }
 
     let empty_new: syn::ImplItemMethod = parse_quote!(
-        pub fn new(ctx: &Context) -> Result<Self> {
-            unreachable!()
-        }
+        pub fn new(ctx: &Context) -> Result<Self> {}
     );
     let ctor = ctor.into_iter().nth(0).unwrap_or_else(|| {
         err!(contract_ident: "Missing implementation for `{}::new`.", contract_ident);
@@ -122,9 +120,7 @@ pub fn contract(
             let ident = &rpc.sig.ident;
             let inps = rpc.structify_inps();
             // e.g., `my_method { my_input: String, my_other_input: u64 }`
-            quote! {
-                #ident { #(#inps),* }
-            }
+            quote! { #ident { #(#inps),* } }
         })
         .collect();
 
@@ -188,9 +184,7 @@ pub fn contract(
 
             let ident = &sig.ident;
             let inps = rpc.input_names().into_iter().map(|name| {
-                quote! {
-                    #name: #name.to_owned()
-                }
+                quote! { #name: #name.to_owned() }
             });
 
             let mut result_ty = rpc.result_ty().clone();
@@ -332,16 +326,12 @@ pub fn contract(
                             } else {
                                 // cfg is needed for unit testing oasis-std via single-file crates
                                 #[cfg(not(test))]
-                                {
-                                    include_bytes!(concat!(
-                                        env!("CARGO_MANIFEST_DIR"), "/target/contract/",
-                                        env!("CARGO_PKG_NAME"), ".wasm"
-                                    ))
-                                }
+                                {include_bytes!(concat!(
+                                    env!("CARGO_MANIFEST_DIR"), "/target/contract/",
+                                    env!("CARGO_PKG_NAME"), ".wasm"
+                                ))}
                                 #[cfg(test)]
-                                {
-                                    &empty_contract
-                                }
+                                { &empty_contract }
                             }
                         )?;
                         oasis_std::testing::register_exports(

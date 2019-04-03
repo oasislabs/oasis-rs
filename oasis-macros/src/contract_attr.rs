@@ -103,16 +103,13 @@ pub fn contract(
         }
     }
 
-    let empty_new: syn::ImplItemMethod = parse_quote!(
-        pub fn new(ctx: &Context) -> Result<Self> {}
-    );
-    let ctor = ctor.into_iter().nth(0).unwrap_or_else(|| {
-        err!(contract_ident: "Missing implementation for `{}::new`.", contract_ident);
-        RPC {
-            sig: &empty_new.sig,
-            inputs: Vec::new(),
+    let ctor = match ctor.into_iter().nth(0) {
+        Some(ctor) => ctor,
+        None => {
+            err!(contract_ident: "Missing implementation for `{}::new`.", contract_ident);
+            early_return!()
         }
-    });
+    };
 
     let rpc_defs: Vec<proc_macro2::TokenStream> = rpcs
         .iter()
@@ -325,12 +322,12 @@ pub fn contract(
                                 &empty_contract
                             } else {
                                 // cfg is needed for unit testing oasis-std via single-file crates
-                                #[cfg(not(test))]
+                                #[cfg(not(any(test, feature = "test")))]
                                 {include_bytes!(concat!(
                                     env!("CARGO_MANIFEST_DIR"), "/target/contract/",
                                     env!("CARGO_PKG_NAME"), ".wasm"
                                 ))}
-                                #[cfg(test)]
+                                #[cfg(any(test, feature = "test"))]
                                 { &empty_contract }
                             }
                         )?;

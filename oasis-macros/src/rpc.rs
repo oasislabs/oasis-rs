@@ -53,6 +53,7 @@ impl<'a> RPC<'a> {
             );
             if let None = Self::unpack_output(&decl.output) {
                 err!(decl.output: "`{}::new` must return `Result<Self>`", quote!(#self_ty));
+                has_err = true;
             }
         } else {
             check_next_arg!(
@@ -68,7 +69,7 @@ impl<'a> RPC<'a> {
                 ident
             );
             if Self::unpack_output(&decl.output).is_none() {
-                err!(decl.output: "`{}::new` must return `Result<T>`", quote!(#self_ty));
+                err!(decl.output: "`{}::new` must return `Result<Self>`", quote!(#self_ty));
                 has_err = true;
             }
         }

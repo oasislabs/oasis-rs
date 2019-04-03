@@ -81,7 +81,7 @@ impl Context {
     }
 
     /// Returns the remaining gas allocated to this transaction.
-    pub fn gas_left(&self) -> u64 {
+    pub fn gas_left(&self) -> U256 {
         ext::gas_left()
     }
 }

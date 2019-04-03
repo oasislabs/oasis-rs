@@ -1,11 +1,6 @@
 use crate::{exe::Context, types::*};
 
-oasis_macros::define_test_pp!({
-    address: &Address,
-    input: &[u8],
-    sender: &Address,
-    value: &U256,
-});
+oasis_macros::test_pp_client!();
 
 mod test_ext {
     extern "C" {
@@ -21,12 +16,20 @@ mod mock_test_ext {
     }
 }
 
-pub fn call_with<T>(addr: &Address, ctx: &Context, input: &[u8], call_fn: &(dyn Fn() -> T)) -> T {
+pub fn call_with<T, F: FnOnce() -> T>(
+    addr: &Address,
+    ctx: &Context,
+    input: &[u8],
+    gas: &U256,
+    call_fn: F,
+) -> T {
     push_address(addr);
     push_sender(ctx.sender.as_ref().unwrap());
     push_value(ctx.value.as_ref().unwrap_or(&U256::zero()));
     push_input(input);
+    push_gas(gas);
     let ret = call_fn();
+    pop_gas();
     pop_input();
     pop_value();
     pop_sender();

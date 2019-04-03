@@ -91,7 +91,7 @@ macro_rules! impl_partial_eq_for_uint {
         $(
             impl PartialEq<$prim> for U256 {
                 fn eq(&self, prim: &$prim) -> bool {
-                    self.as_u64() == *prim as u64
+                    self.as_u64() == u64::from(*prim)
                 }
             }
         )+

@@ -202,6 +202,7 @@ pub fn contract(
                     &self._address,
                     &#ctx_ident,
                     &input,
+                    &U256::zero() /* gas */, // TODO
                     &|| {
                         oasis::call(
                             #ctx_ident.gas_left(),
@@ -338,6 +339,7 @@ pub fn contract(
                             &contract_addr,
                             &#ctor_ctx_ident,
                             &serde_cbor::to_vec(&payload).unwrap(),
+                            &U256::zero() /* gas */, // TODO
                             &contract::deploy::deploy
                         );
                         Ok(Self {

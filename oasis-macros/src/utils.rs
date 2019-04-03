@@ -64,3 +64,12 @@ macro_rules! format_ident {
         syn::Ident::new(&format!($fmt_str, $($fmt_arg),+), proc_macro2::Span::call_site())
     }
 }
+
+fn unraw(ident: &syn::Ident) -> syn::Ident {
+    let ident_str = ident.to_string();
+    if ident_str.starts_with("r#") {
+        format_ident!("{}", &ident_str[2..])
+    } else {
+        ident.clone()
+    }
+}

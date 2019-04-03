@@ -1,4 +1,4 @@
-use crate::{exe::Context, types::*};
+use crate::types::*;
 
 oasis_macros::test_client!();
 

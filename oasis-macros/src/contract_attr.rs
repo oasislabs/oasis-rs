@@ -264,24 +264,29 @@ pub fn contract(
                 #[cfg(test)]
                 #test_contract
 
-                #[cfg(any(feature = "deploy", test))]
                 #(#contract_impls)*
 
-                #[cfg(any(feature = "deploy", test))]
-                pub(super) mod deploy {
-                    use super::*;
+                pub(super) extern "C" fn call() {
+                    #entry_fn_body
+                }
 
+                pub(super) extern "C" fn deploy() {
+                    #deploy_payload
+                    #contract_ident::sunder(
+                        #contract_ident::new(&Context::default(), #(#ctor_args),*).unwrap()
+                    );
+                }
+
+                #[cfg(feature = "deploy")]
+                mod deploy_ext {
                     #[no_mangle]
                     pub extern "C" fn call() {
-                        #entry_fn_body
+                        super::call();
                     }
 
                     #[no_mangle]
                     pub extern "C" fn deploy() {
-                        #deploy_payload
-                        #contract_ident::sunder(
-                            #contract_ident::new(&Context::default(), #(#ctor_args),*).unwrap()
-                        );
+                        super::deploy();
                     }
                 }
             }
@@ -341,7 +346,7 @@ pub fn contract(
                         )?;
                         oasis_std::testing::register_exports(
                             contract_addr,
-                            &[("call".to_string(), super::contract::deploy::call)],
+                            &[("call".to_string(), super::contract::call)],
                         );
                         oasis_std::testing::call_with(
                             &contract_addr,
@@ -349,7 +354,7 @@ pub fn contract(
                             #ctor_ctx_ident.value.as_ref(),
                             &serde_cbor::to_vec(&CtorPayload { #(#ctor_payload_inps),* }).unwrap(),
                             &U256::zero() /* gas */, // TODO (#14)
-                            || { contract::deploy::deploy() }
+                            || { contract::deploy() }
                         );
                         Ok(Self {
                             contract: UnsafeCell::new(if oasis_std::testing::is_testing() {

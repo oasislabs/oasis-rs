@@ -49,6 +49,7 @@ impl syn::visit_mut::VisitMut for Deborrower {
                 syn::Type::Path(syn::TypePath { path, .. }) if path.is_ident("str") => {
                     *ty = parse_quote!(String);
                 }
+                syn::Type::Slice(syn::TypeSlice { box elem, .. }) => *ty = parse_quote!(Vec<#elem>),
                 _ => {
                     *ty = elem.clone();
                 }

@@ -81,7 +81,7 @@ fn get_type_serde(
     match ty {
         Group(g) => get_type_serde(&*g.elem, struct_idx, key),
         Paren(p) => get_type_serde(&*p.elem, struct_idx, key),
-        Array(_) | Tuple(_) => default_serde(&key, &struct_idx),
+        Array(_) | Tuple(_) => default_serde(&struct_idx, &key),
         Path(syn::TypePath { path, .. }) => {
             if path
                 .segments

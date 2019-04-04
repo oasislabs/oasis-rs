@@ -164,7 +164,7 @@ pub fn contract(
         quote! {}
     } else {
         quote! {
-            let CtorPayload { #(#ctor_args)* } = serde_cbor::from_slice(&oasis::input()).unwrap();
+            let CtorPayload { #(#ctor_args),* } = serde_cbor::from_slice(&oasis::input()).unwrap();
         }
     };
 

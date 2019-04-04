@@ -31,7 +31,6 @@ mod tests {
         // 4. transfer `val - 1` to `ContractB`
         // 5. transfer `1` to `ContractB`
 
-        oasis_test::init!();
         let val = U256::from(0x0A515);
 
         let user = oasis_test::create_account(val);

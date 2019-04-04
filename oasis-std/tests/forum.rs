@@ -3,9 +3,11 @@
 mod contract {
     #[derive(Contract, Debug)]
     pub struct Forum {
+        name: (String),
         users: Vec<User>,
         posts: Vec<ForumPost>,
         chats: Lazy<std::collections::HashMap<(UserId, UserId), Vec<String>>>,
+        expiry: (u64, u64), // post, message
     }
 
     type UserId = Address;
@@ -37,10 +39,16 @@ mod contract {
     }
 
     impl Forum {
-        pub fn new(ctx: &Context, admin_username: String) -> Result<Self> {
+        pub fn new(
+            ctx: &Context,
+            forum_name: String,
+            expiry: (u64, u64),
+            admin_username: String,
+        ) -> Result<Self> {
             // Default::default() is not yet possible because Lazy can't `impl Default`
             // this can be solved using a const generic when those are implemented: `Lazy<T, "key">`
             Ok(Self {
+                name: forum_name,
                 users: vec![User {
                     id: ctx.sender(),
                     name: admin_username,
@@ -49,6 +57,7 @@ mod contract {
                 }],
                 posts: Vec::new(),
                 chats: lazy!(std::collections::HashMap::new()),
+                expiry,
             })
         }
 
@@ -170,14 +179,19 @@ mod tests {
 
     #[test]
     fn test_forum() {
-        oasis_test::init!();
         let admin = oasis_test::create_account(42);
         let boarhunter = oasis_test::create_account(1);
 
         let admin_ctx = Context::default().with_sender(admin);
         let boarhunter_ctx = Context::default().with_sender(boarhunter);
 
-        let mut bb = Forum::new(&admin_ctx, "admin".to_string()).unwrap();
+        let mut bb = Forum::new(
+            &admin_ctx,
+            "c10l forum".to_string(),
+            (90, 01),
+            "admin".to_string(),
+        )
+        .unwrap();
 
         // sign up boarhunter
         let username = "boarhunter69".to_string();

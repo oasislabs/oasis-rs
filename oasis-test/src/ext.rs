@@ -105,7 +105,6 @@ pub fn ccall(
     ACCOUNTS.with(|accounts| {
         let mut accounts = accounts.borrow_mut();
         let recipient = Address::from_raw(address_ptr);
-        let value = U256::from_raw(value_ptr);
         accounts.get_mut(&sender).unwrap().balance -= value;
         accounts.get_mut(&recipient).unwrap().balance += value;
     });
@@ -130,24 +129,18 @@ pub fn balance(address: *const u8, dest: *mut u8) {
     });
 }
 
-pub fn create_account<V: Into<U256>>(balance: V) -> Address {
-    ACCOUNTS.with(|accounts| {
+#[no_mangle]
+pub fn create(endowment: *const u8, _code: *const u8, _code_len: u32, ret_addr: *mut u8) -> i32 {
+    let balance = U256::from_raw(endowment);
+    let addr = ACCOUNTS.with(|accounts| {
         let mut accounts = accounts.borrow_mut();
         let addr = Address::from(accounts.len());
         accounts.insert(addr, AccountState::new_with_balance(balance));
         addr
-    })
-}
-
-#[no_mangle]
-pub fn create(
-    endowment: *const u8,
-    _code: *const u8,
-    _code_len: *const u8,
-    ret_addr: *mut u8,
-) -> i32 {
-    let addr = create_account(U256::from_raw(endowment));
-    unsafe { ret_addr.copy_from_nonoverlapping(addr.as_ptr(), 20) };
+    });
+    unsafe {
+        ret_addr.copy_from_nonoverlapping(addr.as_ptr(), 20);
+    }
     0
 }
 

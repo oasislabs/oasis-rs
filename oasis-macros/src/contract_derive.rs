@@ -48,8 +48,23 @@ fn get_serde(
         .enumerate()
         .map(|(index, field)| {
             let (struct_idx, key) = match &field.ident {
-                Some(ident) => (quote! { #ident }, keccak_key(ident)),
-                None => (quote! { #index }, quote! { H256::from(#index as u32) }),
+                Some(ident) => (parse_quote!(#ident): syn::Member, keccak_key(ident)),
+                None => {
+                    // this is a hack for rustc nightly which quotes a bogus suffix onto index
+                    let struct_index: proc_macro2::TokenStream = quote! { #index }
+                        .into_iter()
+                        .map(|itm| match itm {
+                            proc_macro2::TokenTree::Literal(_) => {
+                                proc_macro2::Literal::usize_unsuffixed(index).into()
+                            }
+                            _ => itm,
+                        })
+                        .collect();
+                    (
+                        parse_quote!(#struct_index): syn::Member,
+                        quote! { H256::from(#index as u32) },
+                    )
+                }
             };
             let (ser, de) = get_type_serde(&field.ty, struct_idx, key);
             let de = match &field.ident {
@@ -74,7 +89,7 @@ fn get_serde(
 /// Returns the serializer and deserializer for a (possibly lazy) Type.
 fn get_type_serde(
     ty: &syn::Type,
-    struct_idx: proc_macro2::TokenStream,
+    struct_idx: syn::Member,
     key: proc_macro2::TokenStream,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     use syn::Type::*;
@@ -113,7 +128,7 @@ fn get_type_serde(
 
 /// Returns the default serializer and deserializer for a struct field.
 fn default_serde(
-    struct_idx: &proc_macro2::TokenStream,
+    struct_idx: &syn::Member,
     key: &proc_macro2::TokenStream,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     (

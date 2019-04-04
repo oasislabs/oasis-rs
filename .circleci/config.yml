@@ -9,7 +9,7 @@ jobs:
           name: Install Rust
           command: |
             apt-get update && apt-get -qq install curl git build-essential
-            curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly-2019-03-24
+            curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
             source ~/.cargo/env
             rustup component add rustfmt
             rustup target add wasm32-unknown-unknown

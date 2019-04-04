@@ -1,0 +1,30 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: ubuntu:18.04
+
+    steps:
+      - run:
+          name: Install Rust
+          command: |
+            apt-get update && apt-get -qq install curl git build-essential
+            curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly-2019-03-24
+            source ~/.cargo/env
+            rustup component add rustfmt
+            rustup target add wasm32-unknown-unknown
+
+      - checkout
+
+      - run:
+          name: Checkstyle
+          command: source ~/.cargo/env && cargo fmt -- --check
+
+      - run:
+          name: Unit tests
+          command: source ~/.cargo/env && cargo test --tests
+
+      - run:
+          name: Integration tests
+          working_directory: tests/xcc-a
+          command: source ~/.cargo/env && cargo test --tests

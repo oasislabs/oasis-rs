@@ -323,10 +323,7 @@ pub fn contract(
                             } else {
                                 // cfg is needed for unit testing oasis-std via single-file crates
                                 #[cfg(not(any(test, feature = "test")))]
-                                {include_bytes!(concat!(
-                                    env!("CARGO_MANIFEST_DIR"), "/target/contract/",
-                                    env!("CARGO_PKG_NAME"), ".wasm"
-                                ))}
+                                {include_bytes!(env!("CONTRACT_PATH"))}
                                 #[cfg(any(test, feature = "test"))]
                                 { &empty_contract }
                             }

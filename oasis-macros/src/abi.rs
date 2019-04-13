@@ -5,20 +5,23 @@ use crate::RPC;
 /// Generates an interface definition for the provided RPCs.
 ///
 /// v1.5: Writes `<contract_ident>.json` to a directory specified by the `ABI_DIR` env var.
-///       `ABI_DIR` should be an apsolute path set by `oasis_std::build::build_contract`.
+///       `ABI_DIR`, if provided, is an abspath set by `oasis_std::build::build_contract`.
+///       The ABI will not be generated if `ABI_DIR` is absent.
 pub(crate) fn generate(
     contract_ident: &syn::Ident,
     ctor: &RPC,
     rpcs: &[RPC],
 ) -> Result<(), std::io::Error> {
+    let abi_dir = std::env::var_os("ABI_DIR");
+    if abi_dir.is_none() {
+        return Ok(());
+    }
     let abi_defs = std::iter::once(ctor)
         .chain(rpcs.into_iter())
         .map(|rpc| rpc.into())
         .collect::<Vec<AbiEntry>>();
 
-    let mut json_path = std::path::PathBuf::from(
-        std::env::var_os("ABI_DIR").expect("Build script should have set `ABI_DIR`"),
-    );
+    let mut json_path = std::path::PathBuf::from(abi_dir.unwrap());
     json_path.push(format!("{}.json", contract_ident));
 
     std::fs::write(json_path, serde_json::to_string_pretty(&abi_defs)?)

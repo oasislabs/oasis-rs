@@ -1,5 +1,3 @@
-include!("rpc.rs");
-
 #[proc_macro_attribute]
 pub fn contract(
     _args: proc_macro::TokenStream,
@@ -26,6 +24,9 @@ pub fn contract(
     }
 
     let preamble = quote! {
+        #[cfg(all(feature = "deploy", not(all(target_arch = "wasm32", target_env = ""))))]
+        compile_error!("Please rerun deploy build with `--target=wasm32-unknown-unknown`.");
+
         #[macro_use]
         extern crate oasis_std;
         #[macro_use]
@@ -224,6 +225,10 @@ pub fn contract(
         .collect();
 
     let client_ident = format_ident!("{}Client", contract.ident);
+
+    if let Err(_) = abi::generate(&contract_ident, &ctor, &rpcs) {
+        early_return!();
+    }
 
     proc_macro::TokenStream::from(quote! {
         #preamble

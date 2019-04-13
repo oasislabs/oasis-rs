@@ -1,6 +1,7 @@
 #![feature(
     bind_by_move_pattern_guards,
     box_patterns,
+    box_syntax,
     proc_macro_diagnostic,
     type_ascription
 )]
@@ -11,10 +12,16 @@ extern crate proc_macro;
 extern crate proc_quote;
 #[macro_use]
 extern crate syn;
+#[macro_use]
+extern crate serde;
+
+mod abi;
 
 use syn::{spanned::Spanned as _, visit_mut::VisitMut as _};
 
+// per rustc: "functions tagged with `#[proc_macro]` must currently reside in the root of the crate"
 include!("utils.rs");
 include!("contract_attr.rs");
 include!("contract_derive.rs");
+include!("rpc.rs");
 include!("testing.rs");

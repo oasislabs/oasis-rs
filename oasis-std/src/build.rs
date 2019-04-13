@@ -2,15 +2,13 @@ use std::io::Write as _;
 
 pub fn build_contract() -> Result<(), failure::Error> {
     let crate_name = std::env::var("CARGO_PKG_NAME")?.replace("-", "_");
-    let mut contract_path =
+    let target_dir =
         std::path::PathBuf::from(std::env::var("CARGO_TARGET_DIR").unwrap_or("target".to_string()));
-    contract_path.push("contract");
-    if !contract_path.is_dir() {
-        std::fs::create_dir_all(&contract_path).expect("Could not create contract dir");
-    }
-    contract_path = contract_path
-        .canonicalize()
-        .expect("Could not canonicalize CONTRACT_PATH");
+
+    let json_dir = out_dir(target_dir.clone(), "json");
+    println!("cargo:rustc-env=JSON_DIR={}", json_dir.display());
+
+    let mut contract_path = out_dir(target_dir.clone(), "contract");
     contract_path.push(format!("{}.wasm", crate_name));
     println!("cargo:rustc-env=CONTRACT_PATH={}", contract_path.display());
 
@@ -57,4 +55,14 @@ pub fn build_contract() -> Result<(), failure::Error> {
         )),
         _ => Ok(()),
     }
+}
+
+fn out_dir(target_dir: std::path::PathBuf, name: &'static str) -> std::path::PathBuf {
+    let mut dir = target_dir;
+    dir.push(name);
+    if !dir.is_dir() {
+        std::fs::create_dir_all(&dir).expect(&format!("Could not create dir `{}`", dir.display()));
+    }
+    dir.canonicalize()
+        .expect(&format!("Could not canonicalize `{}`", dir.display()))
 }

@@ -8,12 +8,14 @@ jobs:
       - run:
           name: Install Rust
           command: |
-            apt-get update && apt-get -qq install curl git build-essential
+            apt-get update && apt-get -qq install curl git build-essential libssl-dev pkg-config
             curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
             source ~/.cargo/env
             rustup component add rustfmt
             rustup target add wasm32-unknown-unknown
             cargo install owasm-utils-cli --bin wasm-build
+            cargo install sccache
+            echo "RUSTC_WRAPPER=sccache" >> ~/.cargo/env
 
       - checkout
 

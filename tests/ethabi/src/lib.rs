@@ -37,7 +37,6 @@ mod tests {
             .unwrap()
             .iter()
             .map(|def| {
-                // snake_case is the correct case
                 let name = if def["type"].as_str().unwrap() == "constructor" {
                     "constructor".to_string()
                 } else {

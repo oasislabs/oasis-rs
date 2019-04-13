@@ -26,6 +26,11 @@ jobs:
           command: source ~/.cargo/env && cargo test --tests
 
       - run:
-          name: Integration tests
+          name: Cross-contract call integration test
           working_directory: tests/xcc-a
+          command: source ~/.cargo/env && cargo test --tests
+
+      - run:
+          name: Ballot ABI integration test
+          working_directory: tests/ballot
           command: source ~/.cargo/env && cargo test --tests

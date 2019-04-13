@@ -226,8 +226,10 @@ pub fn contract(
 
     let client_ident = format_ident!("{}Client", contract.ident);
 
-    if let Err(_) = abi::generate(&contract_ident, &ctor, &rpcs) {
-        early_return!();
+    if option_env!("SKIP_ABI_GEN").is_none() {
+        if let Err(_) = abi::generate(&contract_ident, &ctor, &rpcs) {
+            early_return!();
+        }
     }
 
     proc_macro::TokenStream::from(quote! {

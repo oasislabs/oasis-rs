@@ -24,11 +24,15 @@ jobs:
       - run:
           name: Unit tests
           command: source ~/.cargo/env && cargo test --tests
+          environment:
+            SKIP_ABI_GEN: 1
 
       - run:
           name: Cross-contract call integration test
           working_directory: tests/xcc-a
           command: source ~/.cargo/env && cargo test --tests
+          environment:
+            SKIP_ABI_GEN: 1
 
       - run:
           name: Ballot ABI integration test

@@ -59,6 +59,7 @@ jobs:
         environment:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
           RUSTC_WRAPPER: sccache
+    resource_class: xlarge
     steps:
       - restore_cache:
           key: v1-repo-{{ .Environment.CIRCLE_SHA1 }}
@@ -77,6 +78,7 @@ jobs:
         environment:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
           RUSTC_WRAPPER: sccache
+    resource_class: xlarge
     steps:
       - restore_cache:
           key: v1-repo-{{ .Environment.CIRCLE_SHA1 }}

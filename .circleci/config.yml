@@ -14,25 +14,14 @@ jobs:
           name: Update Rust
           command: rustup update nightly
       - checkout
+      - run:
+          name: Checkstyle
+          command: cargo fmt -- --check
       - save_cache:
           key: v1-rust-{{ checksum "~/.rustup/update-hashes/nightly-x86_64-unknown-linux-gnu" }}
           paths:
             - ~/.rustup
             - ~/.cargo
-
-  checkstyle:
-    docker:
-      - image: nhdh/rust:latest
-        environment:
-          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          RUSTC_WRAPPER: sccache
-    steps:
-      - checkout
-      - restore_cache:
-          key: v1-rust-{{ checksum "~/.rustup/update-hashes/nightly-x86_64-unknown-linux-gnu" }}
-      - run:
-          name: Checkstyle
-          command: cargo fmt -- --check
 
   unit_test:
     docker:
@@ -89,9 +78,6 @@ workflows:
   test:
     jobs:
       - init
-      - checkstyle:
-          requires:
-            - init
       - unit_test:
           requires:
             - init

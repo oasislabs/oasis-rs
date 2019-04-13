@@ -8,17 +8,16 @@ jobs:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
           RUSTC_WRAPPER: sccache
     steps:
+      - restore_cache:
+          key: v1-rust-{{ checksum "~/.rustup/update-hashes/nightly-x86_64-unknown-linux-gnu" }}
       - run:
           name: Update Rust
           command: rustup update nightly
       - checkout
       - save_cache:
-          key: v1-repo-{{ .Environment.CIRCLE_SHA1 }}
+          key: v1-rust-{{ checksum "~/.rustup/update-hashes/nightly-x86_64-unknown-linux-gnu" }}
           paths:
-            - ~/project
-      - save_cache:
-          key: v1-cargo-{{ .Environment.CIRCLE_SHA1 }}
-          paths:
+            - ~/.rustup
             - ~/.cargo
 
   checkstyle:
@@ -28,10 +27,9 @@ jobs:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
           RUSTC_WRAPPER: sccache
     steps:
+      - checkout
       - restore_cache:
-          key: v1-repo-{{ .Environment.CIRCLE_SHA1 }}
-      - restore_cache:
-          key: v1-cargo-{{ .Environment.CIRCLE_SHA1 }}
+          key: v1-rust-{{ checksum "~/.rustup/update-hashes/nightly-x86_64-unknown-linux-gnu" }}
       - run:
           name: Checkstyle
           command: cargo fmt -- --check
@@ -43,10 +41,9 @@ jobs:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
           RUSTC_WRAPPER: sccache
     steps:
+      - checkout
       - restore_cache:
-          key: v1-repo-{{ .Environment.CIRCLE_SHA1 }}
-      - restore_cache:
-          key: v1-cargo-{{ .Environment.CIRCLE_SHA1 }}
+          key: v1-rust-{{ checksum "~/.rustup/update-hashes/nightly-x86_64-unknown-linux-gnu" }}
       - run:
           name: Unit tests
           command: cargo test --tests
@@ -61,10 +58,9 @@ jobs:
           RUSTC_WRAPPER: sccache
     resource_class: xlarge
     steps:
+      - checkout
       - restore_cache:
-          key: v1-repo-{{ .Environment.CIRCLE_SHA1 }}
-      - restore_cache:
-          key: v1-cargo-{{ .Environment.CIRCLE_SHA1 }}
+          key: v1-rust-{{ checksum "~/.rustup/update-hashes/nightly-x86_64-unknown-linux-gnu" }}
       - run:
           name: Cross-contract call integration test
           working_directory: tests/xcc-a
@@ -80,12 +76,11 @@ jobs:
           RUSTC_WRAPPER: sccache
     resource_class: xlarge
     steps:
+      - checkout
       - restore_cache:
-          key: v1-repo-{{ .Environment.CIRCLE_SHA1 }}
-      - restore_cache:
-          key: v1-cargo-{{ .Environment.CIRCLE_SHA1 }}
+          key: v1-rust-{{ checksum "~/.rustup/update-hashes/nightly-x86_64-unknown-linux-gnu" }}
       - run:
-          name: Cross-contract call integration test
+          name: Ballot Ethereum ABI integration test
           working_directory: tests/ballot
           command: cargo test --tests
 

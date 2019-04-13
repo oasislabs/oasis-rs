@@ -2,43 +2,38 @@ version: 2
 jobs:
   build:
     docker:
-      - image: ubuntu:18.04
+      - image: nhdh/rust:latest
+        environment:
+          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          RUSTC_WRAPPER: sccache
 
     resource_class: xlarge
 
     steps:
       - run:
-          name: Install Rust
-          command: |
-            apt-get update && apt-get -qq install curl git build-essential libssl-dev pkg-config
-            curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
-            source ~/.cargo/env
-            rustup component add rustfmt
-            rustup target add wasm32-unknown-unknown
-            cargo install owasm-utils-cli --bin wasm-build
-            cargo install sccache
-            echo "RUSTC_WRAPPER=sccache" >> ~/.cargo/env
+          name: Update Rust
+          command: rustup update nightly
 
       - checkout
 
       - run:
           name: Checkstyle
-          command: source ~/.cargo/env && cargo fmt -- --check
+          command: cargo fmt -- --check
 
       - run:
           name: Unit tests
-          command: source ~/.cargo/env && cargo test --tests
+          command: cargo test --tests
           environment:
             SKIP_ABI_GEN: 1
 
       - run:
           name: Cross-contract call integration test
           working_directory: tests/xcc-a
-          command: source ~/.cargo/env && cargo test --tests
+          command: cargo test --tests
           environment:
             SKIP_ABI_GEN: 1
 
       - run:
           name: Ballot ABI integration test
           working_directory: tests/ballot
-          command: source ~/.cargo/env && cargo test --tests
+          command: cargo test --tests

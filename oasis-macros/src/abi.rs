@@ -4,8 +4,8 @@ use crate::RPC;
 
 /// Generates an interface definition for the provided RPCs.
 ///
-/// v1.5: Writes `<contract_ident>.json` to a directory specified by the `JSON_DIR` env var.
-///       `JSON_DIR` should be an apsolute path set by `oasis_std::build::build_contract`.
+/// v1.5: Writes `<contract_ident>.json` to a directory specified by the `ABI_DIR` env var.
+///       `ABI_DIR` should be an apsolute path set by `oasis_std::build::build_contract`.
 pub(crate) fn generate(
     contract_ident: &syn::Ident,
     ctor: &RPC,
@@ -17,7 +17,7 @@ pub(crate) fn generate(
         .collect::<Vec<AbiEntry>>();
 
     let mut json_path = std::path::PathBuf::from(
-        std::env::var_os("JSON_DIR").expect("Build script should have set `JSON_DIR`"),
+        std::env::var_os("ABI_DIR").expect("Build script should have set `ABI_DIR`"),
     );
     json_path.push(format!("{}.json", contract_ident));
 
@@ -32,7 +32,8 @@ struct AbiEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>, // `None` when constructor
     inputs: Vec<Param>,
-    outputs: Vec<Param>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    outputs: Option<Vec<Param>>, // `None` when constructor
     state_mutability: StateMutability,
 }
 
@@ -50,6 +51,7 @@ struct Param {
     name: Option<String>, // `None` when output value
     #[serde(rename = "type")]
     param_type: AbiType,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     components: Vec<Param>,
 }
 
@@ -217,12 +219,7 @@ impl<'a> TryFrom<&'a syn::Type> for AbiType {
 impl<'a, 'r> From<&'a RPC<'r>> for AbiEntry {
     fn from(rpc: &RPC) -> Self {
         let (entry_type, name, state_mutability, outputs) = if rpc.is_ctor() {
-            (
-                EntryType::Constructor,
-                None,
-                StateMutability::Payable,
-                vec![],
-            )
+            (EntryType::Constructor, None, StateMutability::Payable, None)
         } else {
             let mutability = if rpc.is_mut() {
                 StateMutability::Payable
@@ -238,7 +235,7 @@ impl<'a, 'r> From<&'a RPC<'r>> for AbiEntry {
                 EntryType::Function,
                 Some(rpc.sig.ident.to_string()),
                 mutability,
-                outputs,
+                Some(outputs),
             )
         };
 

@@ -140,28 +140,74 @@ mod contract {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::collections::HashMap;
+
+    use heck::SnakeCase as _;
 
     #[test]
-    fn test_xcc() {
-        // 1. create user with initial `val`
-        // 2. transfer all value to `ContractA`
-        // 3. create `ContractB` which records the amount of value passed through it
-        // 4. transfer `val - 1` to `ContractB`
-        // 5. transfer `1` to `ContractB`
+    fn test_generated_abi() {
+        // `serde_json::Value` because `oasis_macros`, a proc_macro crate, can only export macros.
+        // Besides, the ABI is an implementation detail.
 
-        let val = U256::from(0x0A515);
+        let mut expected_abi_json: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/res/Ballot.json"))
+                .unwrap(),
+        )
+        .unwrap();
+        let expected_fns: HashMap<String, &serde_json::Value> = expected_abi_json
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .map(|def| {
+                // snake_case is the correct case
+                let name = if def["type"].as_str().unwrap() == "constructor" {
+                    "constructor".to_string()
+                } else {
+                    def["name"].as_str().unwrap().to_snake_case()
+                };
+                def["inputs"]
+                    .as_array_mut()
+                    .unwrap()
+                    .iter_mut()
+                    .for_each(|inp| {
+                        inp["name"] = inp["name"].as_str().unwrap().to_snake_case().into()
+                    });
+                (name, &*def)
+            })
+            .collect();
 
-        let user = oasis_test::create_account(val);
-        let ctx = Context::default().with_sender(user);
+        let abi_json: serde_json::Value =
+            serde_json::from_str(include_str!(concat!(env!("ABI_DIR"), "/Ballot.json"))).unwrap();
+        let abi_fns = abi_json.as_array().unwrap();
 
-        let b = xcc_b::ContractB::new(&ctx).unwrap();
-        let a = ContractA::new(&ctx.with_value(val), b.address()).unwrap();
+        assert_eq!(expected_fns.len(), abi_fns.len());
 
-        assert_eq!(a.do_the_thing(&ctx.with_value(val - 1)).unwrap(), val - 1);
-        assert_eq!(b.total_value(&ctx).unwrap(), val - 1);
+        for def in abi_fns.iter() {
+            let expected = expected_fns
+                .get(if def["type"].as_str().unwrap() == "constructor" {
+                    "constructor"
+                } else {
+                    def["name"].as_str().unwrap()
+                })
+                .unwrap();
 
-        assert_eq!(a.do_the_thing(&ctx.with_value(1)).unwrap(), 1u32);
-        assert_eq!(b.total_value(&ctx).unwrap(), val);
+            assert_eq!(expected["type"], def["type"]);
+            assert_eq!(expected["inputs"], def["inputs"]);
+
+            match expected.get("outputs") {
+                Some(expected_outputs) => {
+                    let expected_outputs = expected_outputs.as_array().unwrap();
+                    let outputs = def["outputs"].as_array().unwrap();
+                    assert_eq!(expected_outputs.len(), outputs.len());
+                    expected_outputs
+                        .iter()
+                        .zip(outputs.iter())
+                        .for_each(|(eo, o)| {
+                            assert_eq!(eo["type"], o["type"]) // Rust outputs don't have names
+                        });
+                }
+                None => assert!(def.get("outputs").is_none()),
+            }
+        }
     }
 }

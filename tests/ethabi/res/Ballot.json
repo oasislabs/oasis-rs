@@ -58,7 +58,7 @@
 	{
 		"inputs": [
 			{
-				"name": "_numProposals",
+				"name": "numProposals",
 				"type": "uint8"
 			}
 		],

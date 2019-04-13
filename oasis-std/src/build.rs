@@ -6,7 +6,7 @@ pub fn build_contract() -> Result<(), failure::Error> {
         std::path::PathBuf::from(std::env::var("CARGO_TARGET_DIR").unwrap_or("target".to_string()));
 
     let json_dir = out_dir(target_dir.clone(), "json");
-    println!("cargo:rustc-env=JSON_DIR={}", json_dir.display());
+    println!("cargo:rustc-env=ABI_DIR={}", json_dir.display());
 
     let mut contract_path = out_dir(target_dir.clone(), "contract");
     contract_path.push(format!("{}.wasm", crate_name));

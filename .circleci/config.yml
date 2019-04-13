@@ -4,6 +4,8 @@ jobs:
     docker:
       - image: ubuntu:18.04
 
+    resource_class: xlarge
+
     steps:
       - run:
           name: Install Rust

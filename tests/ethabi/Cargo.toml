@@ -1,0 +1,23 @@
+[package]
+name = "remix-ballot"
+version = "0.1.0"
+authors = ["Oasis Labs <info@oasislabs.com>"]
+edition = "2018"
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+failure = "0.1"
+oasis-std = { path = "../../oasis-std" }
+serde = { version = "1.0", features = ["derive"] }
+serde_cbor = "0.9"
+
+[dev-dependencies]
+serde_json = "1.0"
+
+[build-dependencies]
+oasis-std = { path = "../../oasis-std" }
+
+[features]
+deploy = []

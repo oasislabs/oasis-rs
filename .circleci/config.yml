@@ -1,31 +1,69 @@
 version: 2
+
 jobs:
-  build:
+  init:
     docker:
       - image: nhdh/rust:latest
         environment:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
           RUSTC_WRAPPER: sccache
-
-    resource_class: xlarge
-
     steps:
       - run:
           name: Update Rust
           command: rustup update nightly
-
       - checkout
+      - save_cache:
+          key: v1-repo-{{ .Environment.CIRCLE_SHA1 }}
+          paths:
+            - ~/project
+      - save_cache:
+          key: v1-cargo-{{ .Environment.CIRCLE_SHA1 }}
+          paths:
+            - ~/.cargo
 
+  checkstyle:
+    docker:
+      - image: nhdh/rust:latest
+        environment:
+          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          RUSTC_WRAPPER: sccache
+    steps:
+      - restore_cache:
+          key: v1-repo-{{ .Environment.CIRCLE_SHA1 }}
+      - restore_cache:
+          key: v1-cargo-{{ .Environment.CIRCLE_SHA1 }}
       - run:
           name: Checkstyle
           command: cargo fmt -- --check
 
+  unit_test:
+    docker:
+      - image: nhdh/rust:latest
+        environment:
+          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          RUSTC_WRAPPER: sccache
+    steps:
+      - restore_cache:
+          key: v1-repo-{{ .Environment.CIRCLE_SHA1 }}
+      - restore_cache:
+          key: v1-cargo-{{ .Environment.CIRCLE_SHA1 }}
       - run:
           name: Unit tests
           command: cargo test --tests
           environment:
             SKIP_ABI_GEN: 1
 
+  test_xcc:
+    docker:
+      - image: nhdh/rust:latest
+        environment:
+          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          RUSTC_WRAPPER: sccache
+    steps:
+      - restore_cache:
+          key: v1-repo-{{ .Environment.CIRCLE_SHA1 }}
+      - restore_cache:
+          key: v1-cargo-{{ .Environment.CIRCLE_SHA1 }}
       - run:
           name: Cross-contract call integration test
           working_directory: tests/xcc-a
@@ -33,7 +71,36 @@ jobs:
           environment:
             SKIP_ABI_GEN: 1
 
+  test_ballot:
+    docker:
+      - image: nhdh/rust:latest
+        environment:
+          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          RUSTC_WRAPPER: sccache
+    steps:
+      - restore_cache:
+          key: v1-repo-{{ .Environment.CIRCLE_SHA1 }}
+      - restore_cache:
+          key: v1-cargo-{{ .Environment.CIRCLE_SHA1 }}
       - run:
-          name: Ballot ABI integration test
+          name: Cross-contract call integration test
           working_directory: tests/ballot
           command: cargo test --tests
+
+workflows:
+  version: 2
+  test:
+    jobs:
+      - init
+      - checkstyle:
+          requires:
+            - init
+      - unit_test:
+          requires:
+            - init
+      - test_xcc:
+          requires:
+            - init
+      - test_ballot:
+          requires:
+            - init

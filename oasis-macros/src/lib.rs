@@ -3,6 +3,7 @@
     box_patterns,
     box_syntax,
     proc_macro_diagnostic,
+    proc_macro_span,
     type_ascription
 )]
 #![recursion_limit = "256"]

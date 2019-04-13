@@ -1,5 +1,7 @@
 use std::convert::TryFrom;
 
+use syn::visit_mut::VisitMut;
+
 use crate::RPC;
 
 /// Generates an interface definition for the provided RPCs.
@@ -7,24 +9,36 @@ use crate::RPC;
 /// v1.5: Writes `<contract_ident>.json` to a directory specified by the `ABI_DIR` env var.
 ///       `ABI_DIR`, if provided, is an abspath set by `oasis_std::build::build_contract`.
 ///       The ABI will not be generated if `ABI_DIR` is absent.
-pub(crate) fn generate(
-    contract_ident: &syn::Ident,
-    ctor: &RPC,
-    rpcs: &[RPC],
-) -> Result<(), std::io::Error> {
+pub(crate) fn generate<'a>(
+    contract_ident: &'a syn::Ident,
+    ctor: &'a RPC,
+    rpcs: &'a [RPC],
+) -> Result<(), Vec<&'a (dyn syn::spanned::Spanned)>> {
     let abi_dir = std::env::var_os("ABI_DIR");
     if abi_dir.is_none() {
         return Ok(());
     }
-    let abi_defs = std::iter::once(ctor)
-        .chain(rpcs.into_iter())
-        .map(|rpc| rpc.into())
-        .collect::<Vec<AbiEntry>>();
+    let mut abi_defs = Vec::with_capacity(rpcs.len() + 1);
+    let mut errs = Vec::new();
+    for rpc in std::iter::once(ctor).chain(rpcs.into_iter()) {
+        match AbiEntry::try_from(rpc) {
+            Ok(entry) => abi_defs.push(entry),
+            Err(mut err) => errs.append(&mut err),
+        }
+    }
 
-    let mut json_path = std::path::PathBuf::from(abi_dir.unwrap());
-    json_path.push(format!("{}.json", contract_ident));
-
-    std::fs::write(json_path, serde_json::to_string_pretty(&abi_defs)?)
+    if !errs.is_empty() {
+        Err(errs)
+    } else {
+        let mut json_path = std::path::PathBuf::from(abi_dir.unwrap());
+        json_path.push(format!("{}.json", contract_ident));
+        std::fs::write(
+            json_path,
+            serde_json::to_string_pretty(&abi_defs).expect("Could not serialize ABI"),
+        )
+        .expect("Could not write ABI JSON");
+        Ok(())
+    }
 }
 
 #[derive(Serialize)]
@@ -91,35 +105,42 @@ enum AbiType {
     // },
 }
 
-impl<'a> From<&'a syn::Type> for Param {
-    /// Converts a Rust type to an `AbiParam`. Panics if conversion is unsupported.
-    fn from(ty: &syn::Type) -> Self {
+impl<'a> TryFrom<&'a syn::Type> for Param {
+    type Error = Vec<&'a (dyn syn::spanned::Spanned)>;
+    fn try_from(ty: &'a syn::Type) -> Result<Self, Self::Error> {
         use syn::{Type::*, *};
         let mut components = vec![];
+        let mut errs = vec![];
         let param_type = match ty {
-            Array(_) | Reference(_) => AbiType::try_from(ty)
-                .expect(&format!("Could not map `{:?}` to Ethereum ABI type", ty)),
+            Array(_) | Reference(_) => match AbiType::try_from(ty) {
+                Ok(param_ty) => param_ty,
+                Err(err) => return Err(vec![err]),
+            },
             Tuple(tup) => {
-                components = tup.elems.iter().map(|el| el.into()).collect();
+                for el in tup.elems.iter() {
+                    match Param::try_from(el) {
+                        Ok(param) => components.push(param),
+                        Err(mut errz) => errs.append(&mut errz),
+                    }
+                }
                 AbiType::Tuple
             }
-            Path(TypePath {
-                path: syn::Path { segments, .. },
-                ..
-            }) => match AbiType::try_from(ty) {
+            Path(_) => match AbiType::try_from(ty) {
                 Ok(abi_ty) => abi_ty,
-                Err(_) => {
-                    unimplemented!("look up defintion of `{:?}` and convert to tuple", segments)
-                }
+                Err(err) => return Err(vec![err]),
             },
-            Paren(TypeParen { box elem, .. }) => return Param::from(elem),
-            Group(TypeGroup { box elem, .. }) => return Param::from(elem),
-            _ => panic!("Could not map `{:?}` to Ethereum ABI type", ty),
+            Paren(TypeParen { box elem, .. }) => return Param::try_from(elem),
+            Group(TypeGroup { box elem, .. }) => return Param::try_from(elem),
+            _ => return Err(vec![ty]),
         };
-        Self {
-            name: None,
-            param_type,
-            components,
+        if !errs.is_empty() {
+            Err(errs)
+        } else {
+            Ok(Self {
+                name: None,
+                param_type,
+                components,
+            })
         }
     }
 }
@@ -151,8 +172,8 @@ impl serde::Serialize for AbiType {
 }
 
 impl<'a> TryFrom<&'a syn::Type> for AbiType {
-    type Error = String;
-    fn try_from(ty: &syn::Type) -> Result<Self, Self::Error> {
+    type Error = &'a (dyn syn::spanned::Spanned);
+    fn try_from(ty: &'a syn::Type) -> Result<Self, Self::Error> {
         use syn::{Type::*, *};
         Ok(match ty {
             Array(TypeArray { box elem, len, .. }) => AbiType::Array {
@@ -162,7 +183,7 @@ impl<'a> TryFrom<&'a syn::Type> for AbiType {
                         lit: Lit::Int(lit_int),
                         ..
                     }) => lit_int.value() as usize,
-                    _ => return Err(format!("Invalid array len `{:?}`", len)),
+                    _ => return Err(len),
                 },
             },
             Reference(TypeReference { box elem, .. }) => Self::try_from(elem)?,
@@ -203,24 +224,26 @@ impl<'a> TryFrom<&'a syn::Type> for AbiType {
                                 if *ty == parse_quote!(u8): syn::Type {
                                     AbiType::Bytes
                                 } else {
-                                    AbiType::Vec(box Param::from(ty).param_type)
+                                    AbiType::Vec(box AbiType::try_from(ty)?)
                                 }
                             }
                             _ => unreachable!("`Vec` must have type parameter"),
                         },
                         _ => unreachable!("`Vec` can only have one angle bracketed type parameter"),
                     },
-                    ty => panic!("`{}` could not be converted to Ethereum ABI type", ty),
+                    _ => return Err(segments),
                 }
             }
             Paren(TypeParen { box elem, .. }) => Self::try_from(elem)?,
             Group(TypeGroup { box elem, .. }) => Self::try_from(elem)?,
-            _ => return Err(format!("Could not map `{:?}` to Ethereum ABI type", ty)),
+            _ => return Err(ty),
         })
     }
 }
-impl<'a, 'r> From<&'a RPC<'r>> for AbiEntry {
-    fn from(rpc: &RPC) -> Self {
+impl<'a, 'r> TryFrom<&'a RPC<'r>> for AbiEntry {
+    type Error = Vec<&'a (dyn syn::spanned::Spanned)>;
+    fn try_from(rpc: &'a RPC) -> Result<Self, Self::Error> {
+        let mut errs = Vec::new();
         let (entry_type, name, state_mutability, outputs) = if rpc.is_ctor() {
             (EntryType::Constructor, None, StateMutability::Payable, None)
         } else {
@@ -230,9 +253,26 @@ impl<'a, 'r> From<&'a RPC<'r>> for AbiEntry {
                 StateMutability::View
             };
 
-            let outputs = match rpc.result_ty() {
-                syn::Type::Tuple(tup) => tup.elems.iter().map(|out| out.into()).collect(),
-                out => vec![Param::from(out)],
+            let mut owned_result_ty = rpc.result_ty().clone();
+            crate::Deborrower {}.visit_type_mut(&mut owned_result_ty);
+
+            let mut outputs = Vec::new();
+            // in the following section, both the original and deborrowed types
+            // are simultaneously tracked so that, if the deborrowed type is unconvertable,
+            // the spans for the user's types can be returned.
+            match (rpc.result_ty(), owned_result_ty) {
+                (syn::Type::Tuple(tup), syn::Type::Tuple(ref owned_tup)) => {
+                    for (el, owned_el) in tup.elems.iter().zip(owned_tup.elems.iter()) {
+                        match Param::try_from(owned_el) {
+                            Ok(el) => outputs.push(el),
+                            Err(_) => errs.append(&mut Param::try_from(el).err().unwrap()),
+                        }
+                    }
+                }
+                (out, _) => match Param::try_from(out) {
+                    Ok(out) => outputs.push(out),
+                    Err(mut errz) => errs.append(&mut errz),
+                },
             };
             (
                 EntryType::Function,
@@ -242,25 +282,30 @@ impl<'a, 'r> From<&'a RPC<'r>> for AbiEntry {
             )
         };
 
-        let inputs = rpc
-            .inputs
-            .iter()
-            .map(|(pat, ty)| {
-                let mut ty = Param::from(*ty);
-                ty.name = match pat {
-                    syn::Pat::Ident(syn::PatIdent { ident, .. }) => Some(ident.to_string()),
-                    _ => unreachable!("Captured function args always have ident in Rust 2018"),
-                };
-                ty
-            })
-            .collect();
+        let mut inputs = Vec::with_capacity(rpc.inputs.len());
+        for (pat, ty) in rpc.inputs.iter() {
+            match Param::try_from(*ty) {
+                Ok(mut ty) => {
+                    ty.name = match pat {
+                        syn::Pat::Ident(syn::PatIdent { ident, .. }) => Some(ident.to_string()),
+                        _ => unreachable!("Captured function args always have ident in Rust 2018"),
+                    };
+                    inputs.push(ty)
+                }
+                Err(mut errz) => errs.append(&mut errz),
+            }
+        }
 
-        Self {
-            entry_type,
-            name,
-            inputs,
-            outputs,
-            state_mutability,
+        if !errs.is_empty() {
+            Err(errs)
+        } else {
+            Ok(Self {
+                entry_type,
+                name,
+                inputs,
+                outputs,
+                state_mutability,
+            })
         }
     }
 }

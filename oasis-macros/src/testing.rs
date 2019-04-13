@@ -104,11 +104,11 @@ pub fn test_client(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             let ext_push_fn_sig = def.ext_push_fn_sig();
             quote! {
                 #[no_mangle]
-                #[linkage = "extern_weak"]
+                #[linkage = "weak"]
                 extern "C" #ext_push_fn_sig {} // nop
 
                 #[no_mangle]
-                #[linkage = "extern_weak"]
+                #[linkage = "weak"]
                 extern "C" fn #pop_fn_ident() {} // nop
             }
         });
@@ -146,7 +146,7 @@ pub fn test_client(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 #(#mock_extern_fns)*
 
                 #[no_mangle]
-                #[linkage = "extern_weak"]
+                #[linkage = "weak"]
                 extern "C" fn push_current_address_as_sender() {}
             }
 

@@ -17,19 +17,19 @@ mod test_ext {
 
 mod mock_test_ext {
     #[no_mangle]
-    #[linkage = "extern_weak"]
+    #[linkage = "weak"]
     extern "C" fn create_account(_value_bytes: *const u8) -> *const u8 {
         std::ptr::null()
     }
 
     #[no_mangle]
-    #[linkage = "extern_weak"]
+    #[linkage = "weak"]
     extern "C" fn is_testing() -> bool {
         false
     }
 
     #[no_mangle]
-    #[linkage = "extern_weak"]
+    #[linkage = "weak"]
     extern "C" fn register_exports(
         _addr: *const u8,
         _export_names: *const *const i8,

@@ -257,7 +257,7 @@ impl<'a, 'r> TryFrom<&'a RPC<'r>> for AbiEntry {
             crate::Deborrower {}.visit_type_mut(&mut owned_result_ty);
 
             let mut outputs = Vec::new();
-            // in the following section, both the original and deborrowed types
+            // In the following section, both the original and deborrowed types
             // are simultaneously tracked so that, if the deborrowed type is unconvertable,
             // the spans for the user's types can be returned.
             match (rpc.result_ty(), owned_result_ty) {

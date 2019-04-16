@@ -8,20 +8,10 @@ jobs:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
           RUSTC_WRAPPER: sccache
     steps:
-      - restore_cache:
-          key: v1-rust-{{ checksum "~/.rustup/update-hashes/nightly-x86_64-unknown-linux-gnu" }}
-      - run:
-          name: Update Rust
-          command: rustup update nightly
       - checkout
       - run:
           name: Checkstyle
           command: cargo fmt -- --check
-      - save_cache:
-          key: v1-rust-{{ checksum "~/.rustup/update-hashes/nightly-x86_64-unknown-linux-gnu" }}
-          paths:
-            - ~/.rustup
-            - ~/.cargo
 
   unit_test:
     docker:
@@ -31,8 +21,6 @@ jobs:
           RUSTC_WRAPPER: sccache
     steps:
       - checkout
-      - restore_cache:
-          key: v1-rust-{{ checksum "~/.rustup/update-hashes/nightly-x86_64-unknown-linux-gnu" }}
       - run:
           name: Unit tests
           command: cargo test --tests
@@ -48,8 +36,6 @@ jobs:
     resource_class: xlarge
     steps:
       - checkout
-      - restore_cache:
-          key: v1-rust-{{ checksum "~/.rustup/update-hashes/nightly-x86_64-unknown-linux-gnu" }}
       - run:
           name: Cross-contract call integration test
           working_directory: tests/xcc-a
@@ -66,8 +52,6 @@ jobs:
     resource_class: xlarge
     steps:
       - checkout
-      - restore_cache:
-          key: v1-rust-{{ checksum "~/.rustup/update-hashes/nightly-x86_64-unknown-linux-gnu" }}
       - run:
           name: Ballot
           working_directory: tests/ballot

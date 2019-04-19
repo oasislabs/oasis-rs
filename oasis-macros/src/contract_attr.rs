@@ -240,7 +240,7 @@ pub fn contract(
                 #(#ctor_inps),*
             }
 
-            #[derive(serde::Serialize, serde::Deserialize, Debug)]
+            #[derive(serde::Serialize, serde::Deserialize)]
             #[serde(tag = "method", content = "payload")]
             #[allow(non_camel_case_types)]
             pub enum RpcPayload {

@@ -6,7 +6,6 @@ jobs:
       - image: nhdh/rust:latest
         environment:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          RUSTC_WRAPPER: sccache
     steps:
       - checkout
       - run:
@@ -18,7 +17,6 @@ jobs:
       - image: nhdh/rust:latest
         environment:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          RUSTC_WRAPPER: sccache
     steps:
       - checkout
       - run:
@@ -32,7 +30,6 @@ jobs:
       - image: nhdh/rust:latest
         environment:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          RUSTC_WRAPPER: sccache
     resource_class: xlarge
     steps:
       - checkout
@@ -48,10 +45,12 @@ jobs:
       - image: nhdh/rust:latest
         environment:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          RUSTC_WRAPPER: sccache
     resource_class: xlarge
     steps:
       - checkout
+      - run:
+          name: Install idl-gen
+          command: cargo install --path idl-gen
       - run:
           name: Test IDL generation
           working_directory: tests/idl_gen

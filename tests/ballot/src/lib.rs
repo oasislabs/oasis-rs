@@ -11,7 +11,7 @@ mod contract {
         votes: Vec<U256>,
     }
 
-    #[derive(Serialize, Deserialize, Default)]
+    #[derive(Serialize, Deserialize, Default, Clone)]
     pub struct Voter {
         weight: U256,
         vote: Option<u8>,

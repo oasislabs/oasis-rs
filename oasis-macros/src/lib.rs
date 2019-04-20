@@ -13,10 +13,6 @@ extern crate proc_macro;
 extern crate proc_quote;
 #[macro_use]
 extern crate syn;
-#[macro_use]
-extern crate serde;
-
-mod abi;
 
 use syn::{spanned::Spanned as _, visit_mut::VisitMut as _};
 

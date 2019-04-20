@@ -43,7 +43,7 @@ jobs:
           environment:
             SKIP_ABI_GEN: 1
 
-  test_ethabi:
+  test_idl:
     docker:
       - image: nhdh/rust:latest
         environment:
@@ -53,12 +53,8 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Ballot
-          working_directory: tests/ballot
-          command: cargo test --tests
-      - run:
-          name: EthabiTest
-          working_directory: tests/ethabi
+          name: Test IDL generation
+          working_directory: tests/idl_gen
           command: cargo test --tests
 
 workflows:
@@ -72,6 +68,6 @@ workflows:
       - test_xcc:
           requires:
             - init
-      - test_ethabi:
+      - test_idl:
           requires:
             - init

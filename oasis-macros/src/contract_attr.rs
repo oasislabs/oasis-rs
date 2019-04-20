@@ -226,13 +226,6 @@ pub fn contract(
 
     let client_ident = format_ident!("{}Client", contract.ident);
 
-    if let Err(err_spans) = abi::generate(&contract_ident, &ctor, &rpcs) {
-        err_spans.iter().for_each(
-            |err_span| err!(err_span: "Could not convert `{}` to Ethereum ABI type.", err_span.span().unwrap().source_text().unwrap()),
-        );
-        early_return!();
-    }
-
     proc_macro::TokenStream::from(quote! {
         #preamble
 

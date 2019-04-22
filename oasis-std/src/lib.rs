@@ -5,10 +5,11 @@ extern crate failure;
 #[macro_use]
 extern crate fixed_hash;
 pub extern crate oasis_macros as macros;
-#[macro_use]
 extern crate serde;
 #[macro_use]
 extern crate uint;
+
+pub mod serialize;
 
 pub mod build;
 pub mod errors;

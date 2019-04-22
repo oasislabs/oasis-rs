@@ -1,23 +1,73 @@
+use super::serialize;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
 construct_uint! {
     /// A 256-bits (4 64-bit word) fixed-size bigint type.
-    #[derive(Serialize, Deserialize)]
     pub struct U256(4);
 }
 
 construct_fixed_hash! {
     /// A 160 bits (20 bytes) hash type (aka `Address`).
-    #[derive(Serialize, Deserialize)]
     pub struct H160(20);
 }
 
 construct_fixed_hash! {
     /// A 256-bits (32 bytes) hash type.
-    #[derive(Serialize, Deserialize)]
     pub struct H256(32);
 }
 
 // Auto-impl `From` conversions between `H256` and `H160`.
 impl_fixed_hash_conversions!(H256, H160);
+
+macro_rules! impl_serde_hash {
+    ($name: ident, $len: expr) => {
+        impl Serialize for $name {
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                let mut slice = [0u8; 2 + 2 * $len];
+                serialize::serialize(&mut slice, &self.0, serializer)
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                let mut bytes = [0u8; $len];
+                serialize::deserialize_check_len(
+                    deserializer,
+                    serialize::ExpectedLen::Exact(&mut bytes),
+                )?;
+                Ok($name(bytes))
+            }
+        }
+    };
+}
+
+macro_rules! impl_serde_uint {
+    ($name: ident, $len: expr) => {
+        impl Serialize for $name {
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                let mut slice = [0u8; 2 + 2 * $len * 8];
+                let mut bytes = [0u8; $len * 8];
+                self.to_big_endian(&mut bytes);
+                serialize::serialize_uint(&mut slice, &bytes, serializer)
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                let mut bytes = [0u8; $len * 8];
+                let wrote = serialize::deserialize_check_len(
+                    deserializer,
+                    serialize::ExpectedLen::Between(0, &mut bytes),
+                )?;
+                Ok(bytes[0..wrote].into())
+            }
+        }
+    };
+}
+
+impl_serde_hash!(H160, 20);
+impl_serde_hash!(H256, 32);
+impl_serde_uint!(U256, 32);
 
 /// Represents an address in ethereum context.
 pub type Address = H160;
@@ -127,3 +177,104 @@ macro_rules! impl_hash_from_prim {
 }
 
 impl_hash_from_prim!(i8, u8, i16, u16, i32, u32, i64, u64, i128, u128, isize, usize);
+
+#[cfg(test)]
+mod tests {
+
+    use super::{H160, H256, U256};
+    use serde_json as ser;
+
+    #[test]
+    fn test_serialize_h160() {
+        let tests = vec![
+            (H160::from(0), "0x0000000000000000000000000000000000000000"),
+            (H160::from(2), "0x0000000000000000000000000000000000000002"),
+            (H160::from(15), "0x000000000000000000000000000000000000000f"),
+            (H160::from(16), "0x0000000000000000000000000000000000000010"),
+            (
+                H160::from(1_000),
+                "0x00000000000000000000000000000000000003e8",
+            ),
+            (
+                H160::from(100_000),
+                "0x00000000000000000000000000000000000186a0",
+            ),
+            (
+                H160::from(u64::max_value()),
+                "0x000000000000000000000000ffffffffffffffff",
+            ),
+        ];
+
+        for (number, expected) in tests {
+            assert_eq!(
+                format!("{:?}", expected),
+                ser::to_string_pretty(&number).unwrap()
+            );
+            assert_eq!(number, ser::from_str(&format!("{:?}", expected)).unwrap());
+        }
+    }
+
+    #[test]
+    fn test_serialize_h256() {
+        let tests = vec![
+            (
+                H256::from(0),
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            (
+                H256::from(2),
+                "0x0000000000000000000000000000000000000000000000000000000000000002",
+            ),
+            (
+                H256::from(15),
+                "0x000000000000000000000000000000000000000000000000000000000000000f",
+            ),
+            (
+                H256::from(16),
+                "0x0000000000000000000000000000000000000000000000000000000000000010",
+            ),
+            (
+                H256::from(1_000),
+                "0x00000000000000000000000000000000000000000000000000000000000003e8",
+            ),
+            (
+                H256::from(100_000),
+                "0x00000000000000000000000000000000000000000000000000000000000186a0",
+            ),
+            (
+                H256::from(u64::max_value()),
+                "0x000000000000000000000000000000000000000000000000ffffffffffffffff",
+            ),
+        ];
+
+        for (number, expected) in tests {
+            assert_eq!(
+                format!("{:?}", expected),
+                ser::to_string_pretty(&number).unwrap()
+            );
+            assert_eq!(number, ser::from_str(&format!("{:?}", expected)).unwrap());
+        }
+    }
+
+    #[test]
+    fn test_serialize_invalid() {
+        assert!(ser::from_str::<H256>(
+            "\"0x000000000000000000000000000000000000000000000000000000000000000\""
+        )
+        .unwrap_err()
+        .is_data());
+        assert!(ser::from_str::<H256>(
+            "\"0x000000000000000000000000000000000000000000000000000000000000000g\""
+        )
+        .unwrap_err()
+        .is_data());
+        assert!(ser::from_str::<H256>(
+            "\"0x00000000000000000000000000000000000000000000000000000000000000000\""
+        )
+        .unwrap_err()
+        .is_data());
+        assert!(ser::from_str::<H256>("\"\"").unwrap_err().is_data());
+        assert!(ser::from_str::<H256>("\"0\"").unwrap_err().is_data());
+        assert!(ser::from_str::<H256>("\"10\"").unwrap_err().is_data());
+    }
+}

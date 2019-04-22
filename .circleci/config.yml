@@ -6,7 +6,6 @@ jobs:
       - image: nhdh/rust:latest
         environment:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          RUSTC_WRAPPER: sccache
     steps:
       - checkout
       - run:
@@ -18,7 +17,6 @@ jobs:
       - image: nhdh/rust:latest
         environment:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          RUSTC_WRAPPER: sccache
     steps:
       - checkout
       - run:
@@ -32,7 +30,6 @@ jobs:
       - image: nhdh/rust:latest
         environment:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          RUSTC_WRAPPER: sccache
     resource_class: xlarge
     steps:
       - checkout
@@ -43,22 +40,20 @@ jobs:
           environment:
             SKIP_ABI_GEN: 1
 
-  test_ethabi:
+  test_idl:
     docker:
       - image: nhdh/rust:latest
         environment:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          RUSTC_WRAPPER: sccache
     resource_class: xlarge
     steps:
       - checkout
       - run:
-          name: Ballot
-          working_directory: tests/ballot
-          command: cargo test --tests
+          name: Install idl-gen
+          command: cargo install --path idl-gen
       - run:
-          name: EthabiTest
-          working_directory: tests/ethabi
+          name: Test IDL generation
+          working_directory: tests/idl_gen
           command: cargo test --tests
 
 workflows:
@@ -72,6 +67,6 @@ workflows:
       - test_xcc:
           requires:
             - init
-      - test_ethabi:
+      - test_idl:
           requires:
             - init

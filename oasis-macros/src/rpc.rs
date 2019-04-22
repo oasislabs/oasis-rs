@@ -181,18 +181,6 @@ impl<'a> RPC<'a> {
         }
     }
 
-    fn is_ctor(&self) -> bool {
-        self.sig.ident == "new"
-    }
-
-    fn is_mut(&self) -> bool {
-        self.is_ctor()
-            || match self.sig.decl.inputs.iter().nth(0).unwrap() {
-                syn::FnArg::SelfRef(self_ref) => self_ref.mutability.is_some(),
-                _ => unreachable!(),
-            }
-    }
-
     fn result_ty(&self) -> &syn::Type {
         Self::unpack_output(&self.sig.decl.output).expect("`Result` output checked in `new`")
     }

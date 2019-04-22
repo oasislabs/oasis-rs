@@ -5,12 +5,10 @@ pub fn build_contract() -> Result<(), failure::Error> {
     let target_dir =
         std::path::PathBuf::from(std::env::var("CARGO_TARGET_DIR").unwrap_or("target".to_string()));
 
-    if option_env!("SKIP_ABI_GEN").is_none() {
-        let json_dir = out_dir(target_dir.clone(), "json");
-        println!("cargo:rustc-env=ABI_DIR={}", json_dir.display());
-    }
+    println!("cargo:rustc-env=GEN_IDL_FOR={}", crate_name); // pass name to idl-gen
 
     let mut contract_path = out_dir(target_dir.clone(), "contract");
+    println!("cargo:rustc-env=IDL_TARGET_DIR={}", contract_path.display());
     contract_path.push(format!("{}.wasm", crate_name));
     println!("cargo:rustc-env=CONTRACT_PATH={}", contract_path.display());
 

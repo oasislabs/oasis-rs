@@ -1,2 +1,13 @@
 _extends: private-global-settings
 
+branches:
+  - name: master
+    protection:
+      required_pull_request_reviews:
+        dismissal_restrictions:
+          teams: []
+      required_status_checks:
+        contexts: ["ci/circleci: unit_test", "ci/circleci: test_xcc", "ci/circleci: test_idl"]
+      required_signatures: true
+      restrictions:
+        teams: ["oasislabs/dev"]

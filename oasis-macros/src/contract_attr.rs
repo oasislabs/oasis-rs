@@ -24,9 +24,6 @@ pub fn contract(
     }
 
     let preamble = quote! {
-        #[cfg(all(feature = "deploy", not(all(target_arch = "wasm32", target_env = ""))))]
-        compile_error!("Please rerun deploy build with `--target=wasm32-unknown-unknown`.");
-
         #[macro_use]
         extern crate oasis_std;
         #[macro_use]
@@ -191,15 +188,16 @@ pub fn contract(
             let rpc_inner = quote! {
                 let payload = RpcPayload::#ident { #(#inps),* };
                 let input = serde_cbor::to_vec(&payload).unwrap();
+                let gas_left = #ctx_ident.gas_left();
                 let result = oasis_std::testing::call_with(
                     &self._address,
                     #ctx_ident.sender.as_ref(),
                     #ctx_ident.value.as_ref(),
                     &input,
-                    &U256::zero() /* gas */, // TODO (#14)
+                    &#ctx_ident.gas.map(|gas| std::cmp::min(gas, gas_left)).unwrap_or(gas_left),
                     &|| {
                         let result = oasis::call(
-                            #ctx_ident.gas_left(),
+                            gas_left,
                             &self._address /* callee = address held by `Client` struct */,
                             #ctx_ident.value(),
                             &input

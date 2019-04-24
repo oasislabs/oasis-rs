@@ -1,3 +1,5 @@
+#![allow(unused_attributes)]
+
 use std::{cell::RefCell, collections::HashMap};
 
 use oasis_std::types::*;

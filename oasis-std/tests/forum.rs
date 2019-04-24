@@ -182,8 +182,8 @@ mod tests {
         let admin = oasis_test::create_account(42);
         let boarhunter = oasis_test::create_account(1);
 
-        let admin_ctx = Context::default().with_sender(admin);
-        let boarhunter_ctx = Context::default().with_sender(boarhunter);
+        let admin_ctx = Context::default().with_sender(admin).with_gas(100_000);
+        let boarhunter_ctx = Context::default().with_sender(boarhunter).with_gas(100_000);
 
         let mut bb = Forum::new(
             &admin_ctx,

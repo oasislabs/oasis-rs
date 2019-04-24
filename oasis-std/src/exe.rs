@@ -27,6 +27,9 @@ pub struct Context {
     pub value: Option<U256>,
 
     #[doc(hidden)]
+    pub gas: Option<U256>,
+
+    #[doc(hidden)]
     pub call_type: CallType,
 }
 
@@ -51,16 +54,23 @@ impl Context {
         }
     }
 
-    /// Sets the sender of this `Context`. Has no effect when called inside of a contract.
+    /// Sets the sender of the RPC receiving this `Context` as an argument.
+    /// Has no effect when called inside of a contract.
     pub fn with_sender(mut self, sender: Address) -> Self {
         self.sender = Some(sender);
         self
     }
 
-    /// Creates a new Context, based on the current environment, that specifies
-    /// a transfer of `value` to the callee.
+    /// Amends a Context with the value that should be transferred to the callee.
     pub fn with_value<V: Into<U256>>(mut self, value: V) -> Self {
         self.value = Some(value.into());
+        self
+    }
+
+    /// Sets the amount of computation resources available to the callee.
+    /// Payed for by the `payer` of the `Context`.
+    pub fn with_gas<V: Into<U256>>(mut self, gas: V) -> Self {
+        self.gas = Some(gas.into());
         self
     }
 

@@ -1,3 +1,5 @@
+#![allow(unused_attributes)]
+
 use crate::types::*;
 
 oasis_macros::test_client!();

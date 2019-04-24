@@ -17,6 +17,8 @@ pub struct RpcInterface {
     imports: Vec<RpcImport>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     type_defs: Vec<RpcTypeDef>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    events: Vec<RpcEvent>,
     constructor: StateConstructor,
     functions: Vec<RpcFunction>,
     idl_gen_version: String,
@@ -74,6 +76,7 @@ impl RpcInterface {
                 namespace: tcx.crate_name.to_string(),
                 imports,
                 type_defs,
+                events: Vec::new(),
                 constructor: ctor.unwrap(),
                 functions,
                 idl_gen_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -469,6 +472,7 @@ impl RpcTypeDef {
                     Ok(RpcField {
                         name: f.ident.to_string(),
                         ty: RpcType::convert_sty(tcx, f.did, tcx.type_of(f.did))?,
+                        indexed: false,
                     })
                 })
                 .collect::<Result<Vec<RpcField>, UnsupportedTypeError>>()?;
@@ -489,8 +493,16 @@ impl RpcTypeDef {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
+pub struct RpcEvent {
+    name: RpcIdent,
+    fields: Vec<RpcField>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
 pub struct RpcField {
     name: RpcIdent,
     #[serde(rename = "type")]
     ty: RpcType,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    indexed: bool, // can only be set when a field of an event
 }

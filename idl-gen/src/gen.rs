@@ -97,10 +97,8 @@ impl rustc_driver::Callbacks for IdlGenerator {
         };
 
         global_ctxt.enter(|tcx| {
-            let mut vis = RpcCollector::new(service_name);
-            tcx.hir()
-                .krate()
-                .visit_all_item_likes(&mut vis.as_deep_visitor());
+            let mut vis = RpcCollector::new(tcx, service_name);
+            tcx.hir().krate().visit_all_item_likes(&mut vis);
 
             let defined_types: Vec<&AdtDef> = vis
                 .rpcs()

@@ -4,14 +4,14 @@ use rustc::{
         intravisit::{self, Visitor},
     },
     ty::{AdtDef, TyCtxt, TyS},
-    util::nodemap::{FxHashMap, FxHashSet},
+    util::nodemap::{FxHashMap, FxHashSet, HirIdSet},
 };
 use syntax_pos::symbol::Symbol;
 
 #[derive(Default)]
 pub struct SyntaxPass {
-    service_name: Option<syntax::source_map::symbol::Symbol>, // set to `Some` once pass is complete
-    event_indices: FxHashMap<Symbol, Vec<Symbol>>,            // event_name -> field_name
+    service_name: Option<Symbol>, // set to `Some` once pass is complete
+    event_indices: FxHashMap<Symbol, Vec<Symbol>>, // event_name -> field_name
 }
 
 impl SyntaxPass {
@@ -72,15 +72,19 @@ impl<'ast> syntax::visit::Visitor<'ast> for SyntaxPass {
 }
 
 /// Collects public functions defined in `impl #service_name`.
-pub struct RpcCollector<'tcx> {
+pub struct RpcCollector<'a, 'gcx, 'tcx> {
+    tcx: TyCtxt<'a, 'gcx, 'tcx>,
     service_name: Symbol,
+    rpc_impls: HirIdSet,
     rpcs: Vec<(Symbol, &'tcx hir::FnDecl)>, // the collected RPC fns
 }
 
-impl<'tcx> RpcCollector<'tcx> {
-    pub fn new(service_name: Symbol) -> Self {
+impl<'a, 'gcx, 'tcx> RpcCollector<'a, 'gcx, 'tcx> {
+    pub fn new(tcx: TyCtxt<'a, 'gcx, 'tcx>, service_name: Symbol) -> Self {
         Self {
+            tcx,
             service_name,
+            rpc_impls: HirIdSet::default(),
             rpcs: Vec::new(),
         }
     }
@@ -90,24 +94,30 @@ impl<'tcx> RpcCollector<'tcx> {
     }
 }
 
-impl<'tcx> Visitor<'tcx> for RpcCollector<'tcx> {
-    fn visit_impl_item(&mut self, impl_item: &'tcx hir::ImplItem) {
-        // Ensure that `ImplItem` is a fn.
-        let fn_decl = match &impl_item.node {
-            hir::ImplItemKind::Method(hir::MethodSig { decl, .. }, _) => decl,
-            _ => return,
-        };
-        // Ensure that the fn is an RPC (public fn) for the Contract.
-        if impl_item.ident.name != self.service_name || !impl_item.vis.node.is_pub() {
-            return;
+impl<'a, 'gcx, 'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx> for RpcCollector<'a, 'gcx, 'tcx> {
+    fn visit_item(&mut self, item: &'tcx hir::Item) {
+        if let hir::ItemKind::Impl(_, _, _, _, None /* `trait_ref` */, ty, _) = &item.node {
+            if let hir::TyKind::Path(hir::QPath::Resolved(_, path)) = &ty.node {
+                if path.segments.last().unwrap().ident.name == self.service_name {
+                    self.rpc_impls.insert(item.hir_id);
+                }
+            }
         }
-
-        self.rpcs.push((impl_item.ident.name, fn_decl));
     }
 
-    fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, 'tcx> {
-        intravisit::NestedVisitorMap::None
+    fn visit_impl_item(&mut self, impl_item: &'tcx hir::ImplItem) {
+        if let hir::ImplItemKind::Method(hir::MethodSig { decl, .. }, _) = &impl_item.node {
+            if impl_item.vis.node.is_pub()
+                && self
+                    .rpc_impls
+                    .contains(&self.tcx.hir().get_parent_item(impl_item.hir_id))
+            {
+                self.rpcs.push((impl_item.ident.name, &decl));
+            }
+        }
     }
+
+    fn visit_trait_item(&mut self, _trait_item: &'tcx hir::TraitItem) {}
 }
 
 /// Visits an RPC method's types and collects structs, unions, enums, and type aliases

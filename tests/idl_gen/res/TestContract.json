@@ -17,6 +17,30 @@
       ]
     },
     {
+      "type": "event",
+      "name": "TestEvent",
+      "fields": [
+        {
+          "name": "indexed",
+          "type": {
+            "defined": {
+              "type": "DefTy"
+            }
+          },
+          "indexed": true
+        },
+        {
+          "name": "non_indexed",
+          "type": {
+            "tuple": [
+              "u32",
+              "u32"
+            ]
+          }
+        }
+      ]
+    },
+    {
       "type": "struct",
       "name": "DefTy",
       "fields": [
@@ -60,6 +84,22 @@
               "address"
             ]
           }
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "name": "TestEvent2",
+      "fields": [
+        {
+          "name": "indexed1",
+          "type": "u32",
+          "indexed": true
+        },
+        {
+          "name": "indexed2",
+          "type": "u32",
+          "indexed": true
         }
       ]
     }

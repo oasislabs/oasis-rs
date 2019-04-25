@@ -31,7 +31,7 @@ impl Interface {
         name: Symbol,
         // the following use BTreeSets to ensure idl is deterministic
         imports: BTreeSet<(Symbol, String)>, // (name, version)
-        adt_defs: BTreeSet<&AdtDef>,
+        adt_defs: BTreeSet<(&AdtDef, bool)>, // (adt_def, is_event)
         event_indices: &FxHashMap<Symbol, Vec<Symbol>>,
         fns: &[(Symbol, &FnDecl)],
     ) -> Result<Self, Vec<UnsupportedTypeError>> {
@@ -46,8 +46,8 @@ impl Interface {
             .collect();
 
         let mut type_defs = Vec::with_capacity(adt_defs.len());
-        for adt_def in adt_defs.iter() {
-            match TypeDef::convert(tcx, adt_def) {
+        for (adt_def, is_event) in adt_defs.iter() {
+            match TypeDef::convert(tcx, adt_def, *is_event) {
                 Ok(mut event_def) => {
                     if let TypeDef::Event {
                         name,
@@ -455,7 +455,7 @@ pub enum TypeDef {
 }
 
 impl TypeDef {
-    fn convert(tcx: TyCtxt, def: &AdtDef) -> Result<Self, UnsupportedTypeError> {
+    fn convert(tcx: TyCtxt, def: &AdtDef, is_event: bool) -> Result<Self, UnsupportedTypeError> {
         let ty_name = tcx
             .def_path(def.did)
             .data
@@ -484,9 +484,16 @@ impl TypeDef {
                     })
                 })
                 .collect::<Result<Vec<Field>, UnsupportedTypeError>>()?;
-            Ok(TypeDef::Struct {
-                name: ty_name,
-                fields,
+            Ok(if is_event {
+                TypeDef::Event {
+                    name: ty_name,
+                    fields,
+                }
+            } else {
+                TypeDef::Struct {
+                    name: ty_name,
+                    fields,
+                }
             })
         } else if def.is_union() {
             // TODO? serde doesn't derive unions. not sure if un-tagged unions are actually useful.

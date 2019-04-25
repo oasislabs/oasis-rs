@@ -1,9 +1,6 @@
 use rustc::{
-    hir::{
-        self,
-        intravisit::{self, Visitor},
-    },
-    ty::{AdtDef, TyCtxt, TyS},
+    hir::{self, intravisit},
+    ty::{self, AdtDef, TyCtxt, TyS},
     util::nodemap::{FxHashMap, FxHashSet, HirIdSet},
 };
 use syntax_pos::symbol::Symbol;
@@ -175,5 +172,74 @@ impl<'a, 'gcx, 'tcx> hir::intravisit::Visitor<'tcx> for DefinedTypeCollector<'a,
 
     fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, 'tcx> {
         intravisit::NestedVisitorMap::None
+    }
+}
+
+/// Visits method bodies to find the structs of emitted events.
+/// Visit all methods because events can be emitted from any context (incl. library functions).
+/// The only constraint is that any event must be emitted in the current crate.
+pub struct EventCollector<'a, 'gcx, 'tcx> {
+    tcx: TyCtxt<'a, 'gcx, 'tcx>,
+    adt_defs: FxHashSet<&'tcx AdtDef>,
+}
+
+impl<'a, 'gcx, 'tcx> EventCollector<'a, 'gcx, 'tcx> {
+    pub fn new(tcx: TyCtxt<'a, 'gcx, 'tcx>) -> Self {
+        Self {
+            tcx,
+            adt_defs: FxHashSet::default(),
+        }
+    }
+
+    pub fn adt_defs(self) -> Vec<&'tcx AdtDef> {
+        self.adt_defs.into_iter().collect()
+    }
+}
+
+// This visit could be made more robust to other traits/methods named Event/emit by actually
+// checking whether the types implement `oasis_std::exe::Event`, but this should suffice for now.
+impl<'a, 'gcx, 'tcx> hir::intravisit::Visitor<'tcx> for EventCollector<'a, 'gcx, 'tcx> {
+    fn visit_expr(&mut self, expr: &'tcx hir::Expr) {
+        let emit_arg = match &expr.node {
+            hir::ExprKind::MethodCall(path_seg, _span, args)
+                if path_seg.ident.to_string() == "emit" =>
+            {
+                Some(&args[0])
+            }
+            hir::ExprKind::Call(func_expr, args) => match &func_expr.node {
+                hir::ExprKind::Path(hir::QPath::Resolved(_, path))
+                    if path.to_string().ends_with("Event::emit") =>
+                {
+                    Some(&args[0])
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(emit_arg) = emit_arg {
+            let emit_arg_ty = self
+                .tcx
+                .typeck_tables_of(emit_arg.hir_id.owner_def_id())
+                .expr_ty(&emit_arg);
+            if let ty::TyKind::Ref(
+                _,
+                TyS {
+                    sty: ty::TyKind::Adt(adt_def, _),
+                    ..
+                },
+                _,
+            ) = emit_arg_ty.sty
+            {
+                self.adt_defs.insert(&adt_def);
+            }
+            if let Some(adt_def) = emit_arg_ty.ty_adt_def() {
+                self.adt_defs.insert(&adt_def);
+            }
+        }
+        intravisit::walk_expr(self, expr);
+    }
+
+    fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, 'tcx> {
+        intravisit::NestedVisitorMap::OnlyBodies(self.tcx.hir())
     }
 }

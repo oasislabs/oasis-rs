@@ -1,11 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet}; // BTree for reproducability
 
-use rustc::{hir::intravisit::Visitor, ty::AdtDef};
+use rustc::hir::intravisit::Visitor;
 use rustc_data_structures::sync::Once;
 
 use crate::{
     rpc,
-    visitor::{DefinedTypeCollector, RpcCollector, SyntaxPass},
+    visitor::{DefinedTypeCollector, EventCollector, RpcCollector, SyntaxPass},
 };
 
 #[derive(Deserialize)]
@@ -97,26 +97,35 @@ impl rustc_driver::Callbacks for IdlGenerator {
         };
 
         global_ctxt.enter(|tcx| {
-            let mut vis = RpcCollector::new(tcx, service_name);
-            tcx.hir().krate().visit_all_item_likes(&mut vis);
+            let mut rpc_collector = RpcCollector::new(tcx, service_name);
+            tcx.hir().krate().visit_all_item_likes(&mut rpc_collector);
 
-            let defined_types: Vec<&AdtDef> = vis
-                .rpcs()
-                .iter()
-                .flat_map(|(_, decl)| {
-                    let mut def_ty_collector = DefinedTypeCollector::new(tcx);
-                    def_ty_collector.visit_fn_decl(decl);
-                    def_ty_collector.adt_defs()
-                })
-                .collect();
+            let defined_types = rpc_collector.rpcs().iter().flat_map(|(_, decl)| {
+                let mut def_ty_collector = DefinedTypeCollector::new(tcx);
+                def_ty_collector.visit_fn_decl(decl);
+                def_ty_collector.adt_defs()
+            });
+
+            let mut event_collector = EventCollector::new(tcx);
+            tcx.hir()
+                .krate()
+                .visit_all_item_likes(&mut event_collector.as_deep_visitor());
+            // .chain(event_collector.adt_defs().iter().map(|def| def.clone()))
+
+            let all_adt_defs = defined_types.map(|def| (def, false /* is_import */)).chain(
+                event_collector
+                    .adt_defs()
+                    .into_iter()
+                    .map(|def| (def, true)),
+            );
 
             let mut imports = BTreeSet::default();
             let mut adt_defs = BTreeSet::default();
-            for def_ty in defined_types.into_iter() {
-                if def_ty.did.is_local() {
-                    adt_defs.insert(def_ty);
+            for (def, is_event) in all_adt_defs.into_iter() {
+                if def.did.is_local() {
+                    adt_defs.insert((def, is_event));
                 } else {
-                    let crate_name = tcx.original_crate_name(def_ty.did.krate);
+                    let crate_name = tcx.original_crate_name(def.did.krate);
                     imports.insert((crate_name, self.crate_version(crate_name.as_str())));
                 }
             }
@@ -127,7 +136,7 @@ impl rustc_driver::Callbacks for IdlGenerator {
                 imports,
                 adt_defs,
                 self.syntax_pass.event_indices(),
-                vis.rpcs(),
+                rpc_collector.rpcs(),
             ) {
                 Ok(iface) => iface,
                 Err(errs) => {

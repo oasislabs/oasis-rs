@@ -3,6 +3,8 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
+use oasis_std::exe::Event;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum InnerTy {
     Field1,
@@ -11,24 +13,32 @@ pub enum InnerTy {
 
 pub type Tuple = (H256, U256, Address);
 
+#[derive(Event, Default)]
+pub struct TestEvent {
+    #[indexed]
+    indexed: DefTy,
+    non_indexed: (u32, u32),
+}
+
 #[oasis_std::contract]
 mod contract {
-    #[derive(Contract, Debug)]
+    #[derive(Contract)]
     pub struct TestContract {}
 
-    #[derive(Event)]
-    pub struct TestEvent {
-        #[indexed]
-        indexed: DefTy,
-        non_indexed: (u32, u32),
-    }
-
-    #[derive(Serialize, Deserialize, Debug, Clone)]
+    #[derive(Serialize, Deserialize, Clone, Default)]
     pub struct DefTy {
         f1: Option<i64>,
         f2: Vec<Option<DefTy>>,
         f3: HashMap<String, InnerTy>,
         f4: Tuple,
+    }
+
+    #[derive(Event, Default)]
+    pub struct TestEvent2 {
+        #[indexed]
+        indexed1: u32,
+        #[indexed]
+        indexed2: u32,
     }
 
     impl TestContract {
@@ -50,10 +60,14 @@ mod contract {
         }
 
         fn private(&self, ctx: &Context, arg: String) -> Result<U256> {
+            TestEvent::default().emit();
             unimplemented!()
         }
 
         pub fn void(&self, ctx: &Context) -> Result<()> {
+            let event = TestEvent2::default();
+            let event_ref = &event;
+            Event::emit(&*event_ref);
             unimplemented!()
         }
 

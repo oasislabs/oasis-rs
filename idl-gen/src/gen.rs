@@ -4,7 +4,7 @@ use rustc::{hir::intravisit::Visitor, ty::AdtDef};
 use rustc_data_structures::sync::Once;
 
 use crate::{
-    rpc::RpcInterface,
+    rpc,
     visitor::{DefinedTypeCollector, RpcCollector, SyntaxPass},
 };
 
@@ -21,7 +21,7 @@ struct LockfileEntry {
 
 pub struct IdlGenerator {
     syntax_pass: SyntaxPass,
-    iface: Once<RpcInterface>,
+    iface: Once<rpc::Interface>,
     deps: Once<BTreeMap<String, LockfileEntry>>,
 }
 
@@ -36,7 +36,7 @@ impl IdlGenerator {
 
     /// Returns the generated interface.
     /// Only valid after rustc callback has been executed. Panics if called before.
-    pub fn get(&self) -> &RpcInterface {
+    pub fn get(&self) -> &rpc::Interface {
         self.iface.get()
     }
 
@@ -123,7 +123,7 @@ impl rustc_driver::Callbacks for IdlGenerator {
                 }
             }
 
-            let iface = match RpcInterface::convert(
+            let iface = match rpc::Interface::convert(
                 tcx,
                 service_name,
                 imports,

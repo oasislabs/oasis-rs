@@ -4,59 +4,93 @@ use rustc::{
         intravisit::{self, Visitor},
     },
     ty::{AdtDef, TyCtxt, TyS},
-    util::nodemap::{FxHashMap, FxHashSet, HirIdSet},
+    util::nodemap::{FxHashMap, FxHashSet},
 };
+use syntax_pos::symbol::Symbol;
 
-/// Collects RPC functions defined on the `Contract`.
-/// From a high level:
-/// 1. Finds the type on which `Contract` is implemented (call it `TheContract`).
-/// 2. Finds all `impl <TheContract>` items and collects their public methods.
 #[derive(Default)]
+pub struct SyntaxPass {
+    service_name: Option<syntax::source_map::symbol::Symbol>, // set to `Some` once pass is complete
+    event_indices: FxHashMap<Symbol, Vec<Symbol>>,            // event_name -> field_name
+}
+
+impl SyntaxPass {
+    pub fn service_name(&self) -> Option<Symbol> {
+        self.service_name
+    }
+
+    pub fn event_indices(&self) -> &FxHashMap<Symbol, Vec<Symbol>> {
+        &self.event_indices
+    }
+}
+
+impl<'ast> syntax::visit::Visitor<'ast> for SyntaxPass {
+    fn visit_item(&mut self, item: &'ast syntax::ast::Item) {
+        for attr in item.attrs.iter() {
+            let meta = attr.meta();
+            let metas = match &meta {
+                Some(syntax::ast::MetaItem {
+                    path,
+                    node: syntax::ast::MetaItemKind::List(metas),
+                    ..
+                }) if path == &"derive" => metas,
+                _ => continue,
+            };
+
+            for nested_meta in metas.iter() {
+                let ident = match nested_meta.ident() {
+                    Some(ident) => ident.as_str(),
+                    None => continue,
+                };
+                if ident == "Contract" {
+                    self.service_name = Some(item.ident.name);
+                } else if ident == "Event" {
+                    if let syntax::ast::ItemKind::Struct(variant_data, _) = &item.node {
+                        let indexed_fields = variant_data
+                            .fields()
+                            .iter()
+                            .filter_map(|field| {
+                                field
+                                    .attrs
+                                    .iter()
+                                    .find(|attr| attr.path == "indexed")
+                                    .and_then(|_| field.ident.map(|ident| ident.name))
+                            })
+                            .collect();
+                        self.event_indices.insert(item.ident.name, indexed_fields);
+                    }
+                }
+            }
+        }
+        syntax::visit::walk_item(self, item);
+    }
+
+    fn visit_mac(&mut self, _mac: &'ast syntax::ast::Mac) {
+        // The default implementation panics. They exist pre-expansion, but we don't need
+        // to look at them. Hopefully nobody generates `Event` structs in a macro.
+    }
+}
+
+/// Collects public functions defined in `impl #service_name`.
 pub struct RpcCollector<'tcx> {
-    // The following `Option`s are set during the course of visitation.
-    // The `oasis_std::service` macro ensures that the name exists and
-    // `RpcCollector::contract_name` will panic otherwise.
-    contract_name: Option<syntax_pos::symbol::Ident>,
-    contract_def: Option<hir::def::Def>,
-    impl_item_ids: FxHashMap<hir::def::Def, HirIdSet>, // ids of `impl`s from which to collect RPC fns
-    rpcs: Vec<(syntax_pos::symbol::Ident, &'tcx hir::FnDecl)>, // the collected RPC fns
+    service_name: Symbol,
+    rpcs: Vec<(Symbol, &'tcx hir::FnDecl)>, // the collected RPC fns
 }
 
 impl<'tcx> RpcCollector<'tcx> {
-    pub fn rpcs(&self) -> &[(syntax_pos::symbol::Ident, &'tcx hir::FnDecl)] {
-        self.rpcs.as_slice()
+    pub fn new(service_name: Symbol) -> Self {
+        Self {
+            service_name,
+            rpcs: Vec::new(),
+        }
     }
 
-    pub fn contract_name(&self) -> &syntax_pos::symbol::Ident {
-        self.contract_name.as_ref().unwrap()
+    pub fn rpcs(&self) -> &[(Symbol, &'tcx hir::FnDecl)] {
+        self.rpcs.as_slice()
     }
 }
 
 impl<'tcx> Visitor<'tcx> for RpcCollector<'tcx> {
-    fn visit_item(&mut self, item: &'tcx hir::Item) {
-        match &item.node {
-            hir::ItemKind::Impl(_, _, _, _, Some(trait_ref), ty, _)
-                if trait_ref.path.segments[0].ident.name == "Contract" =>
-            {
-                if let hir::TyKind::Path(hir::QPath::Resolved(_, path)) = &ty.node {
-                    self.contract_name = Some(path.segments.iter().last().unwrap().ident);
-                    self.contract_def = Some(path.def);
-                }
-            }
-            hir::ItemKind::Impl(_, _, _, _, None /* `trait_ref` */, ty, impl_item_refs) => {
-                if let hir::TyKind::Path(hir::QPath::Resolved(_, path)) = &ty.node {
-                    self.impl_item_ids.insert(
-                        path.def,
-                        impl_item_refs.iter().map(|iir| iir.id.hir_id).collect(),
-                    );
-                }
-            }
-            _ => (),
-        }
-        hir::intravisit::walk_item(self, item);
-    }
-
-    // Runs after `Item`s have been visited, so `self.contract_def` is populated, if it exists.
     fn visit_impl_item(&mut self, impl_item: &'tcx hir::ImplItem) {
         // Ensure that `ImplItem` is a fn.
         let fn_decl = match &impl_item.node {
@@ -64,17 +98,11 @@ impl<'tcx> Visitor<'tcx> for RpcCollector<'tcx> {
             _ => return,
         };
         // Ensure that the fn is an RPC (public fn) for the Contract.
-        if !self
-            .contract_def
-            .and_then(|def| self.impl_item_ids.get(&def))
-            .map(|itm_ids| itm_ids.contains(&impl_item.hir_id))
-            .unwrap_or(false)
-            || !impl_item.vis.node.is_pub()
-        {
+        if impl_item.ident.name != self.service_name || !impl_item.vis.node.is_pub() {
             return;
         }
 
-        self.rpcs.push((impl_item.ident, fn_decl));
+        self.rpcs.push((impl_item.ident.name, fn_decl));
     }
 
     fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, 'tcx> {

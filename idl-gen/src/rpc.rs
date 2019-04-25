@@ -5,7 +5,9 @@ use std::{boxed::Box, collections::BTreeSet};
 use rustc::{
     hir::{self, def_id::DefId, FnDecl},
     ty::{self, AdtDef, TyCtxt, TyS},
+    util::nodemap::FxHashMap,
 };
+use syntax_pos::symbol::Symbol;
 
 use crate::error::UnsupportedTypeError;
 
@@ -17,8 +19,6 @@ pub struct RpcInterface {
     imports: Vec<RpcImport>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     type_defs: Vec<RpcTypeDef>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    events: Vec<RpcEvent>,
     constructor: StateConstructor,
     functions: Vec<RpcFunction>,
     idl_gen_version: String,
@@ -28,11 +28,12 @@ impl RpcInterface {
     // faq: why return a vec of errors? so that the user can see and correct them all at once.
     pub fn convert(
         tcx: TyCtxt,
-        name: syntax_pos::symbol::Ident,
+        name: Symbol,
         // the following use BTreeSets to ensure idl is deterministic
-        imports: BTreeSet<(syntax_pos::symbol::Symbol, String)>, // (name, version)
+        imports: BTreeSet<(Symbol, String)>, // (name, version)
         adt_defs: BTreeSet<&AdtDef>,
-        fns: &[(syntax_pos::symbol::Ident, &FnDecl)],
+        event_indices: &FxHashMap<Symbol, Vec<Symbol>>,
+        fns: &[(Symbol, &FnDecl)],
     ) -> Result<Self, Vec<UnsupportedTypeError>> {
         let mut errs = Vec::new();
 
@@ -47,7 +48,21 @@ impl RpcInterface {
         let mut type_defs = Vec::with_capacity(adt_defs.len());
         for adt_def in adt_defs.iter() {
             match RpcTypeDef::convert(tcx, adt_def) {
-                Ok(type_def) => type_defs.push(type_def),
+                Ok(mut event_def) => {
+                    if let RpcTypeDef::Event {
+                        name,
+                        ref mut fields,
+                    } = &mut event_def
+                    {
+                        if let Some(indexed_fields) = event_indices.get(&Symbol::intern(name)) {
+                            for field in fields.iter_mut() {
+                                field.indexed =
+                                    indexed_fields.iter().any(|f| *f == field.name.as_str());
+                            }
+                        }
+                    }
+                    type_defs.push(event_def);
+                }
                 Err(err) => errs.push(err),
             }
         }
@@ -76,7 +91,6 @@ impl RpcInterface {
                 namespace: tcx.crate_name.to_string(),
                 imports,
                 type_defs,
-                events: Vec::new(),
                 constructor: ctor.unwrap(),
                 functions,
                 idl_gen_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -136,7 +150,7 @@ pub struct RpcFunction {
 impl RpcFunction {
     fn convert(
         tcx: TyCtxt,
-        name: syntax_pos::symbol::Ident,
+        name: Symbol,
         decl: &FnDecl,
     ) -> Result<Self, Vec<UnsupportedTypeError>> {
         let mut errs = Vec::new();
@@ -443,6 +457,10 @@ pub enum RpcTypeDef {
         name: RpcIdent,
         variants: Vec<RpcIdent>,
     },
+    Event {
+        name: RpcIdent,
+        fields: Vec<RpcField>,
+    },
     // TODO: unions and exceptions
 }
 
@@ -490,12 +508,6 @@ impl RpcTypeDef {
             unreachable!("AdtDef must be struct, enum, or union");
         }
     }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
-pub struct RpcEvent {
-    name: RpcIdent,
-    fields: Vec<RpcField>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]

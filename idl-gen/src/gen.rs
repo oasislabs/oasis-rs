@@ -5,7 +5,7 @@ use rustc_data_structures::sync::Once;
 
 use crate::{
     rpc::RpcInterface,
-    visitor::{DefinedTypeCollector, RpcCollector},
+    visitor::{DefinedTypeCollector, RpcCollector, SyntaxPass},
 };
 
 #[derive(Deserialize)]
@@ -20,6 +20,7 @@ struct LockfileEntry {
 }
 
 pub struct IdlGenerator {
+    syntax_pass: SyntaxPass,
     iface: Once<RpcInterface>,
     deps: Once<BTreeMap<String, LockfileEntry>>,
 }
@@ -27,6 +28,7 @@ pub struct IdlGenerator {
 impl IdlGenerator {
     pub fn new() -> Self {
         Self {
+            syntax_pass: SyntaxPass::default(),
             iface: Once::new(),
             deps: Once::new(),
         }
@@ -76,12 +78,26 @@ impl IdlGenerator {
 }
 
 impl rustc_driver::Callbacks for IdlGenerator {
+    fn after_parsing(&mut self, compiler: &rustc_interface::interface::Compiler) -> bool {
+        let parse = compiler
+            .parse()
+            .expect("`after_parsing` is only called after parsing")
+            .peek();
+        syntax::visit::walk_crate(&mut self.syntax_pass, &parse);
+        true
+    }
+
     fn after_analysis(&mut self, compiler: &rustc_interface::interface::Compiler) -> bool {
         let sess = compiler.session();
         let mut global_ctxt = rustc_driver::abort_on_err(compiler.global_ctxt(), sess).peek_mut();
 
+        let service_name = match self.syntax_pass.service_name() {
+            Some(service_name) => service_name,
+            None => return true, // `#[contract]` will complain about missing `derive(Contract)`.
+        };
+
         global_ctxt.enter(|tcx| {
-            let mut vis = RpcCollector::default();
+            let mut vis = RpcCollector::new(service_name);
             tcx.hir()
                 .krate()
                 .visit_all_item_likes(&mut vis.as_deep_visitor());
@@ -109,9 +125,10 @@ impl rustc_driver::Callbacks for IdlGenerator {
 
             let iface = match RpcInterface::convert(
                 tcx,
-                *vis.contract_name(),
+                service_name,
                 imports,
                 adt_defs,
+                self.syntax_pass.event_indices(),
                 vis.rpcs(),
             ) {
                 Ok(iface) => iface,

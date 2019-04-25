@@ -38,23 +38,6 @@ mod contract {
         Right(R),
     }
 
-    #[derive(Event)]
-    pub struct Announement {
-        #[indexed]
-        category: AnnounementType,
-        from: UserId,
-        message: String,
-    }
-
-    #[derive(Clone, Serialize, Deserialize, Debug)]
-    pub enum AnnounementType {
-        Unimportant,
-        Important,
-        VeryImportant,
-        ExtremeleyImportant,
-        NewRustVersionReleased,
-    }
-
     impl Forum {
         pub fn new(
             ctx: &Context,

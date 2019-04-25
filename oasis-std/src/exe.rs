@@ -16,6 +16,10 @@ pub trait Contract {
     fn sunder(c: Self);
 }
 
+pub trait Event {
+    fn emit(&self);
+}
+
 /// The context of the current RPC.
 // `Option` values are set by the user. `None` when populated by runting (during call/deploy).
 #[derive(Default, Copy, Clone, Debug)]

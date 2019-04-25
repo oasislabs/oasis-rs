@@ -16,6 +16,13 @@ mod contract {
     #[derive(Contract, Debug)]
     pub struct TestContract {}
 
+    #[derive(Event)]
+    pub struct TestEvent {
+        #[indexed]
+        indexed: DefTy,
+        non_indexed: (u32, u32),
+    }
+
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct DefTy {
         f1: Option<i64>,

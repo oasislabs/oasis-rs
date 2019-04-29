@@ -3,8 +3,6 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use oasis_std::exe::Event;
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum InnerTy {
     Field1,
@@ -76,7 +74,11 @@ mod contract {
             ctx: &Context,
             imported: testlib::RpcType,
         ) -> Result<(bool, char)> {
-            unimplemented!()
+            Event::emit(&testlib::RandomEvent {
+                the_topic: "hello".to_string(),
+                the_data: "world".to_string(),
+            });
+            unimplemented!();
         }
     }
 }

@@ -16,3 +16,10 @@ pub struct PrivateField {
 pub struct NonPod {
     pub value: std::boxed::Box<NonPod>,
 }
+
+#[derive(Serialize, Deserialize, Clone, oasis_std::Event)]
+pub struct RandomEvent {
+    #[indexed]
+    pub the_topic: String,
+    pub the_data: String,
+}

@@ -26,4 +26,4 @@ pub mod prelude {
 }
 
 pub use build::build_contract;
-pub use macros::contract;
+pub use macros::{contract, Event};

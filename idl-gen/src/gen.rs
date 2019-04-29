@@ -110,7 +110,6 @@ impl rustc_driver::Callbacks for IdlGenerator {
             tcx.hir()
                 .krate()
                 .visit_all_item_likes(&mut event_collector.as_deep_visitor());
-            // .chain(event_collector.adt_defs().iter().map(|def| def.clone()))
 
             let all_adt_defs = defined_types.map(|def| (def, false /* is_import */)).chain(
                 event_collector

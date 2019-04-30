@@ -9,7 +9,7 @@ fn run_mode(mode: &'static str) {
              --extern failure \
              --extern oasis_std \
              --extern oasis_test \
-             --extern serde \
+             --extern ../target/debug/deps/libserde-240cf976141a7f51.rlib \
              --extern serde_derive \
              --extern serde_cbor"
                 .to_string(),

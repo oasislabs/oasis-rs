@@ -5,7 +5,7 @@ pub fn contract_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
     proc_macro::TokenStream::from(match get_serde(&input) {
         Ok((ser, de)) => {
             quote! {
-                impl Contract for #contract {
+                impl oasis_std::exe::Contract for #contract {
                     fn coalesce() -> Self {
                         #de
                     }

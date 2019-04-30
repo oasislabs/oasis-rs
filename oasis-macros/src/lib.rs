@@ -20,5 +20,6 @@ use syn::{spanned::Spanned as _, visit_mut::VisitMut as _};
 include!("utils.rs");
 include!("contract_attr.rs");
 include!("contract_derive.rs");
+include!("event_derive.rs");
 include!("rpc.rs");
 include!("testing.rs");

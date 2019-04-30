@@ -11,17 +11,32 @@ pub enum InnerTy {
 
 pub type Tuple = (H256, U256, Address);
 
+#[derive(Serialize, Deserialize, Event, Default)]
+pub struct TestEvent {
+    #[indexed]
+    indexed: DefTy,
+    non_indexed: (u32, u32),
+}
+
 #[oasis_std::contract]
 mod contract {
-    #[derive(Contract, Debug)]
+    #[derive(Contract)]
     pub struct TestContract {}
 
-    #[derive(Serialize, Deserialize, Debug, Clone)]
+    #[derive(Serialize, Deserialize, Clone, Default)]
     pub struct DefTy {
         f1: Option<i64>,
         f2: Vec<Option<DefTy>>,
         f3: HashMap<String, InnerTy>,
         f4: Tuple,
+    }
+
+    #[derive(Serialize, Deserialize, Event, Default)]
+    pub struct TestEvent2 {
+        #[indexed]
+        indexed1: u32,
+        #[indexed]
+        indexed2: u32,
     }
 
     impl TestContract {
@@ -43,10 +58,14 @@ mod contract {
         }
 
         fn private(&self, ctx: &Context, arg: String) -> Result<U256> {
+            TestEvent::default().emit();
             unimplemented!()
         }
 
         pub fn void(&self, ctx: &Context) -> Result<()> {
+            let event = TestEvent2::default();
+            let event_ref = &event;
+            Event::emit(&*event_ref);
             unimplemented!()
         }
 
@@ -55,7 +74,11 @@ mod contract {
             ctx: &Context,
             imported: testlib::RpcType,
         ) -> Result<(bool, char)> {
-            unimplemented!()
+            Event::emit(&testlib::RandomEvent {
+                the_topic: "hello".to_string(),
+                the_data: "world".to_string(),
+            });
+            unimplemented!();
         }
     }
 }

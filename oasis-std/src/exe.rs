@@ -16,6 +16,30 @@ pub trait Contract {
     fn sunder(c: Self);
 }
 
+pub trait Event {
+    /// A struct implementing the builder pattern for setting topics.
+    ///
+    /// For example,
+    /// ```
+    /// #[derive(Event)]
+    /// struct MyEvent {
+    ///    #[indexed]
+    ///    my_topic: U256
+    ///    #[indexed]
+    ///    my_other_topic: U256,
+    /// }
+    ///
+    /// let topics: Vec<H256> = MyTopics::Topics::default()
+    ///    .set_my_other_topic(&U256::from(42))
+    ///    .hash();
+    /// // topics = vec![0, keccak256(abi_encode(my_other_topic))]
+    /// ```
+    type Topics;
+
+    /// Emits an event tagged with the (keccak) hashed function name and topics.
+    fn emit(&self);
+}
+
 /// The context of the current RPC.
 // `Option` values are set by the user. `None` when populated by runting (during call/deploy).
 #[derive(Default, Copy, Clone, Debug)]

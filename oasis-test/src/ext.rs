@@ -119,6 +119,11 @@ pub fn ret(ptr: *const u8, len: u32) {
 }
 
 #[no_mangle]
+pub fn elog(topic_ptr: *const u8, topic_count: u32, data_ptr: *const u8, data_len: u32) {
+    unimplemented!();
+}
+
+#[no_mangle]
 pub fn balance(address: *const u8, dest: *mut u8) {
     let addr = Address::from_raw(address);
     ACCOUNTS.with(|accounts| {

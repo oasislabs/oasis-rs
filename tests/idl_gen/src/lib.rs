@@ -18,10 +18,10 @@ pub struct TestEvent {
     non_indexed: (u32, u32),
 }
 
-#[oasis_std::contract]
-mod contract {
-    #[derive(Contract)]
-    pub struct TestContract {}
+#[oasis_std::service]
+mod service {
+    #[derive(Service)]
+    pub struct TestService {}
 
     #[derive(Serialize, Deserialize, Clone, Default)]
     pub struct DefTy {
@@ -39,7 +39,7 @@ mod contract {
         indexed2: u32,
     }
 
-    impl TestContract {
+    impl TestService {
         pub fn new(ctx: &Context, name: String) -> Result<Self> {
             unimplemented!()
         }
@@ -87,14 +87,14 @@ mod contract {
 fn test_idl_gen() {
     let idl_json = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/target/contract/TestContract.json"
+        "/target/service/TestService.json"
     ))
     .unwrap();
 
     let actual: serde_json::Value = serde_json::from_str(&idl_json).unwrap();
     let expected: serde_json::Value = serde_json::from_str(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/res/TestContract.json"
+        "/res/TestService.json"
     )))
     .unwrap();
 

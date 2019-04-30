@@ -102,7 +102,7 @@ pub fn balance(address: &Address) -> U256 {
 }
 
 /// Create a new account with the given code
-/// Returns an error if the contract constructor failed.
+/// Returns an error if the service constructor failed.
 pub fn create(endowment: U256, code: &[u8]) -> Result<Address, ExtCallError> {
     let mut endowment_arr = [0u8; 32];
     endowment.to_big_endian(&mut endowment_arr);
@@ -123,7 +123,7 @@ pub fn create(endowment: U256, code: &[u8]) -> Result<Address, ExtCallError> {
 }
 
 /// Create a new account with the given code and salt.
-/// Returns an error if the contract constructor failed.
+/// Returns an error if the service constructor failed.
 #[cfg(feature = "create2")]
 pub fn create2(endowment: U256, salt: H256, code: &[u8]) -> Result<Address, ExtCallError> {
     let mut endowment_arr = [0u8; 32];
@@ -149,7 +149,7 @@ pub fn create2(endowment: U256, salt: H256, code: &[u8]) -> Result<Address, ExtC
 ///
 ///  # Arguments:
 /// * `gas`- a gas limit for a call. A call execution will halt if call exceed this amount
-/// * `address` - an address of contract to send a call
+/// * `address` - an address of service to send a call
 /// * `value` - a value in Wei to send with a call
 /// * `input` - a data to send with a call
 /// * `result` - a mutable reference to be filled with a result data
@@ -305,7 +305,7 @@ pub fn sender() -> Address {
 /// Get execution origination address
 ///
 /// This is the sender of original transaction.
-/// It could be only external account, not a contract
+/// It could be only external account, not a service
 pub fn origin() -> Address {
     unsafe { fetch_address(|x| eth::origin(x)) }
 }
@@ -374,7 +374,7 @@ pub fn write(key: &H256, val: &[u8; 32]) {
     }
 }
 
-/// Retrieve data directly from the contract storage trie.
+/// Retrieve data directly from the service storage trie.
 pub fn get_bytes(key: &H256) -> Result<Vec<u8>, ExtCallError> {
     let result_len = get_bytes_len(key)?;
     let mut result = vec![0; result_len as usize];
@@ -388,7 +388,7 @@ fn get_bytes_len(key: &H256) -> Result<u32, ExtCallError> {
     unsafe { Ok(oasis::get_bytes_len(key.as_ptr()) as u32) }
 }
 
-/// Store data directly into the contract storage trie.
+/// Store data directly into the service storage trie.
 pub fn set_bytes<T: AsRef<[u8]>>(key: &H256, bytes: T) -> Result<(), ExtCallError> {
     let bytes = bytes.as_ref();
     let len = bytes.len() as u64;

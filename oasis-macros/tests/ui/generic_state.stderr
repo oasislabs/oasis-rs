@@ -1,4 +1,4 @@
-error: Contract cannot contain generic types.
+error: Service cannot contain generic types.
  --> $DIR/generic_state.rs:5:21
   |
 5 |     pub struct State<T>(Option<T>);

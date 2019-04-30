@@ -8,11 +8,11 @@ use crate::{
 /// A type that can be stored in Oasis Storage.
 pub trait Storage = serde::Serialize + serde::de::DeserializeOwned;
 
-pub trait Contract {
-    /// Builds a contract struct from items in Storage.
+pub trait Service {
+    /// Builds a service struct from items in Storage.
     fn coalesce() -> Self;
 
-    /// Stores a contract struct to Storage.
+    /// Stores a service struct to Storage.
     fn sunder(c: Self);
 }
 
@@ -79,7 +79,7 @@ impl Context {
     }
 
     /// Sets the sender of the RPC receiving this `Context` as an argument.
-    /// Has no effect when called inside of a contract.
+    /// Has no effect when called inside of a service.
     pub fn with_sender(mut self, sender: Address) -> Self {
         self.sender = Some(sender);
         self
@@ -103,8 +103,8 @@ impl Context {
         self.sender.unwrap_or_else(ext::sender)
     }
 
-    /// Returns the `Address` of the currently executing contract.
-    /// Panics if not currently in a contract.
+    /// Returns the `Address` of the currently executing service.
+    /// Panics if not currently in a service.
     pub fn address(&self) -> Address {
         ext::address()
     }
@@ -120,15 +120,15 @@ impl Context {
     }
 }
 
-/// Container for contract state that is lazily loaded from storage.
+/// Container for service state that is lazily loaded from storage.
 /// Currently can only be used as a top-level type (e.g., `Lazy<Vec<T>>`, not `Vec<Lazy<T>>`).
 /// where the entire Vec will be lazily instantiated (as opposed to each individual element).
 ///
 /// ## Example
 ///
 /// ```
-/// oasis_std::contract! {
-/// #[derive(Contract)]
+/// oasis_std::service! {
+/// #[derive(Service)]
 /// pub struct SinglePlayerRPG {
 ///     player_name: String,
 ///     inventory: Vec<InventoryItem>,

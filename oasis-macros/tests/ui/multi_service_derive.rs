@@ -1,10 +1,10 @@
 #![feature(proc_macro_hygiene)]
-#[oasis_std::contract]
-mod contract {
-    #[derive(Contract)]
+#[oasis_std::service]
+mod service {
+    #[derive(Service)]
     pub struct Counter(u32);
 
-    #[derive(Contract)]
+    #[derive(Service)]
     pub struct Counter2(u32);
 
     impl Counter {

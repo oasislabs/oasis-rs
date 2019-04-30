@@ -93,7 +93,7 @@ impl rustc_driver::Callbacks for IdlGenerator {
 
         let service_name = match self.syntax_pass.service_name() {
             Some(service_name) => service_name,
-            None => return true, // `#[contract]` will complain about missing `derive(Contract)`.
+            None => return true, // `#[service]` will complain about missing `derive(Service)`.
         };
 
         global_ctxt.enter(|tcx| {

@@ -22,8 +22,8 @@ include!("alloc.rs");
 
 pub mod prelude {
     pub use crate::{errors::*, exe::*, ext as oasis, types::*};
-    pub use macros::{contract, Contract, Event};
+    pub use macros::{service, Event, Service};
 }
 
-pub use build::build_contract;
-pub use macros::{contract, Event};
+pub use build::build_service;
+pub use macros::{service, Event};

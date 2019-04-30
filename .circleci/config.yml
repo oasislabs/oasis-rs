@@ -32,7 +32,7 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Cross-contract call integration test
+          name: Cross-service call integration test
           working_directory: tests/xcc-a
           command: cargo test --tests
 

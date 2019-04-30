@@ -49,7 +49,7 @@ fn invoke_export<S: AsRef<str>>(addr: Address, name: S) {
         exports
             .borrow()
             .get(&addr)
-            .and_then(|contract_exports| contract_exports.get(name.as_ref()))
+            .and_then(|service_exports| service_exports.get(name.as_ref()))
             .unwrap()()
     });
 }

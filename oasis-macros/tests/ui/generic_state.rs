@@ -1,7 +1,7 @@
 #![feature(proc_macro_hygiene)]
-#[oasis_std::contract]
-mod contract {
-    #[derive(Contract, Default)]
+#[oasis_std::service]
+mod service {
+    #[derive(Service, Default)]
     pub struct State<T>(Option<T>);
 
     impl<T: Default> State<T> {

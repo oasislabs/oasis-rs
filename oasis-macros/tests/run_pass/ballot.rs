@@ -3,10 +3,10 @@
 #[macro_use]
 extern crate failure;
 
-#[oasis_std::contract]
-mod contract {
+#[oasis_std::service]
+mod service {
 
-    #[derive(Contract)]
+    #[derive(Service)]
     pub struct Ballot {
         owner: Address,
         options: Vec<String>,

@@ -1,6 +1,6 @@
 #![feature(proc_macro_hygiene)]
-#[oasis_std::contract]
-mod contract {
+#[oasis_std::service]
+mod service {
     pub struct Counter(u32);
 
     impl Counter {

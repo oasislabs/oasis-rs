@@ -1,3 +1,3 @@
 fn main() {
-    oasis_std::build_contract().unwrap();
+    oasis_std::build_service().unwrap();
 }

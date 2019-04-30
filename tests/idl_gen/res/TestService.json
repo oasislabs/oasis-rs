@@ -1,5 +1,5 @@
 {
-  "name": "TestContract",
+  "name": "TestService",
   "namespace": "test_idl_gen",
   "imports": [
     {

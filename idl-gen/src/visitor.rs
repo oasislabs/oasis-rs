@@ -39,7 +39,7 @@ impl<'ast> syntax::visit::Visitor<'ast> for SyntaxPass {
                     Some(ident) => ident.as_str(),
                     None => continue,
                 };
-                if ident == "Contract" {
+                if ident == "Service" {
                     self.service_name = Some(item.ident.name);
                 } else if ident == "Event" {
                     if let syntax::ast::ItemKind::Struct(variant_data, _) = &item.node {

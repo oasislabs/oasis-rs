@@ -158,7 +158,7 @@ impl Function {
         let mutability = match decl.implicit_self {
             hir::ImplicitSelfKind::ImmRef => StateMutability::Immutable,
             hir::ImplicitSelfKind::MutRef => StateMutability::Mutable,
-            _ => unreachable!("`#[contract]` should have checked RPCs for `self`."),
+            _ => unreachable!("`#[service]` should have checked RPCs for `self`."),
         };
 
         let mut inputs = Vec::with_capacity(decl.inputs.len());

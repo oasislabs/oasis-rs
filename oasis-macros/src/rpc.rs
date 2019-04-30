@@ -51,7 +51,7 @@ impl<'a> RPC<'a> {
                 "`{}::new` must take `&Context` as its first argument",
                 self_ty
             );
-            if let None = Self::unpack_output(&decl.output) {
+            if Self::unpack_output(&decl.output).is_none() {
                 err!(decl.output: "`{}::new` must return `Result<Self>`", quote!(#self_ty));
                 has_err = true;
             }

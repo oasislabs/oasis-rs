@@ -11,7 +11,7 @@ pub enum InnerTy {
 
 pub type Tuple = (H256, U256, Address);
 
-#[derive(Event, Default)]
+#[derive(Serialize, Deserialize, Event, Default)]
 pub struct TestEvent {
     #[indexed]
     indexed: DefTy,
@@ -31,7 +31,7 @@ mod contract {
         f4: Tuple,
     }
 
-    #[derive(Event, Default)]
+    #[derive(Serialize, Deserialize, Event, Default)]
     pub struct TestEvent2 {
         #[indexed]
         indexed1: u32,

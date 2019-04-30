@@ -210,7 +210,7 @@ pub enum StateMutability {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "lowercase", tag = "type", content = "params")]
 pub enum Type {
     Bool,
     U8,

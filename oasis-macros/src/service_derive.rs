@@ -2,18 +2,21 @@
 pub fn service_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
     let service = &input.ident;
+    let wrapper_ident = format_ident!("_IMPL_SERVICE_FOR_{}", service);
     proc_macro::TokenStream::from(match get_serde(&input) {
         Ok((ser, de)) => {
             quote! {
-                impl oasis_std::exe::Service for #service {
-                    fn coalesce() -> Self {
-                        #de
-                    }
+                const #wrapper_ident: () = {
+                    impl oasis_std::exe::Service for #service {
+                        fn coalesce() -> Self {
+                            #de
+                        }
 
-                    fn sunder(service: Self) {
-                        #ser
+                        fn sunder(service: Self) {
+                            #ser
+                        }
                     }
-                }
+                };
             }
         }
         Err(_) => quote! {},
@@ -48,7 +51,7 @@ fn get_serde(
         .enumerate()
         .map(|(index, field)| {
             let (struct_idx, key) = match &field.ident {
-                Some(ident) => (parse_quote!(#ident): syn::Member, keccak_key(ident)),
+                Some(ident) => (parse_quote!(#ident): syn::Member, static_hash(ident)),
                 None => {
                     // this is a hack for rustc nightly which quotes a bogus suffix onto index
                     let struct_index: proc_macro2::TokenStream = quote! { #index }

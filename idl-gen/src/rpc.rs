@@ -5,7 +5,6 @@ use std::{boxed::Box, collections::BTreeSet};
 use rustc::{
     hir::{self, def_id::DefId, FnDecl},
     ty::{self, AdtDef, TyCtxt, TyS},
-    util::nodemap::FxHashMap,
 };
 use syntax_pos::symbol::Symbol;
 
@@ -32,7 +31,6 @@ impl Interface {
         // the following use BTreeSets to ensure idl is deterministic
         imports: BTreeSet<(Symbol, String)>, // (name, version)
         adt_defs: BTreeSet<(&AdtDef, bool)>, // (adt_def, is_event)
-        event_indices: &FxHashMap<Symbol, Vec<Symbol>>,
         fns: &[(Symbol, &FnDecl)],
     ) -> Result<Self, Vec<UnsupportedTypeError>> {
         let mut errs = Vec::new();
@@ -48,21 +46,7 @@ impl Interface {
         let mut type_defs = Vec::with_capacity(adt_defs.len());
         for (adt_def, is_event) in adt_defs.iter() {
             match TypeDef::convert(tcx, adt_def, *is_event) {
-                Ok(mut event_def) => {
-                    if let TypeDef::Event {
-                        name,
-                        ref mut fields,
-                    } = &mut event_def
-                    {
-                        if let Some(indexed_fields) = event_indices.get(&Symbol::intern(name)) {
-                            for field in fields.iter_mut() {
-                                field.indexed =
-                                    indexed_fields.iter().any(|f| *f == field.name.as_str());
-                            }
-                        }
-                    }
-                    type_defs.push(event_def);
-                }
+                Ok(def) => type_defs.push(def),
                 Err(err) => errs.push(err),
             }
         }
@@ -480,7 +464,6 @@ impl TypeDef {
                     Ok(Field {
                         name: f.ident.to_string(),
                         ty: Type::convert_sty(tcx, f.did, tcx.type_of(f.did))?,
-                        indexed: false,
                     })
                 })
                 .collect::<Result<Vec<Field>, UnsupportedTypeError>>()?;
@@ -512,6 +495,4 @@ pub struct Field {
     name: Ident,
     #[serde(rename = "type")]
     ty: Type,
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    indexed: bool, // can only be set when a field of an event
 }

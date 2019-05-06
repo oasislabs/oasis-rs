@@ -21,17 +21,16 @@
       "name": "TestEvent",
       "fields": [
         {
-          "name": "indexed",
+          "name": "field1",
           "type": {
             "type": "defined",
             "params": {
               "type": "DefTy"
             }
-          },
-          "indexed": true
+          }
         },
         {
-          "name": "non_indexed",
+          "name": "field2",
           "type": {
             "type": "tuple",
             "params": [
@@ -115,18 +114,16 @@
       "name": "TestEvent2",
       "fields": [
         {
-          "name": "indexed1",
+          "name": "field1",
           "type": {
             "type": "u32"
-          },
-          "indexed": true
+          }
         },
         {
-          "name": "indexed2",
+          "name": "field2",
           "type": {
             "type": "u32"
-          },
-          "indexed": true
+          }
         }
       ]
     }

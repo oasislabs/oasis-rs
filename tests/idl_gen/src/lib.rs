@@ -13,9 +13,8 @@ pub type Tuple = (H256, U256, Address);
 
 #[derive(Serialize, Deserialize, Event, Default)]
 pub struct TestEvent {
-    #[indexed]
-    indexed: DefTy,
-    non_indexed: (u32, u32),
+    field1: DefTy,
+    field2: (u32, u32),
 }
 
 #[oasis_std::service]
@@ -33,10 +32,8 @@ mod service {
 
     #[derive(Serialize, Deserialize, Event, Default)]
     pub struct TestEvent2 {
-        #[indexed]
-        indexed1: u32,
-        #[indexed]
-        indexed2: u32,
+        field1: u32,
+        field2: u32,
     }
 
     impl TestService {

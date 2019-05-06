@@ -1,26 +1,24 @@
 use rustc::{
     hir::{self, intravisit},
     ty::{self, AdtDef, TyCtxt, TyS},
-    util::nodemap::{FxHashMap, FxHashSet, HirIdSet},
+    util::nodemap::{FxHashSet, HirIdSet},
 };
 use syntax_pos::symbol::Symbol;
 
 #[derive(Default)]
 pub struct SyntaxPass {
     service_name: Option<Symbol>, // set to `Some` once pass is complete
-    event_indices: FxHashMap<Symbol, Vec<Symbol>>, // event_name -> field_name
 }
 
 impl SyntaxPass {
     pub fn service_name(&self) -> Option<Symbol> {
         self.service_name
     }
-
-    pub fn event_indices(&self) -> &FxHashMap<Symbol, Vec<Symbol>> {
-        &self.event_indices
-    }
 }
 
+/// Identify the service name based on the existence of a `#[derive(Service)]`.
+/// This is simpler than looking for the post-expansion `impl Service for T`
+/// ref: 582b47c3d02f8cdbcdb187d1d67007ab613a070d/idl-gen/src/visitor.rs#L38-L45
 impl<'ast> syntax::visit::Visitor<'ast> for SyntaxPass {
     fn visit_item(&mut self, item: &'ast syntax::ast::Item) {
         for attr in item.attrs.iter() {
@@ -41,21 +39,6 @@ impl<'ast> syntax::visit::Visitor<'ast> for SyntaxPass {
                 };
                 if ident == "Service" {
                     self.service_name = Some(item.ident.name);
-                } else if ident == "Event" {
-                    if let syntax::ast::ItemKind::Struct(variant_data, _) = &item.node {
-                        let indexed_fields = variant_data
-                            .fields()
-                            .iter()
-                            .filter_map(|field| {
-                                field
-                                    .attrs
-                                    .iter()
-                                    .find(|attr| attr.path == "indexed")
-                                    .and_then(|_| field.ident.map(|ident| ident.name))
-                            })
-                            .collect();
-                        self.event_indices.insert(item.ident.name, indexed_fields);
-                    }
                 }
             }
         }
@@ -63,8 +46,7 @@ impl<'ast> syntax::visit::Visitor<'ast> for SyntaxPass {
     }
 
     fn visit_mac(&mut self, _mac: &'ast syntax::ast::Mac) {
-        // The default implementation panics. They exist pre-expansion, but we don't need
-        // to look at them. Hopefully nobody generates `Event` structs in a macro.
+        // The default implementation panics. Macro exprs exist but we don't need to look at them.
     }
 }
 

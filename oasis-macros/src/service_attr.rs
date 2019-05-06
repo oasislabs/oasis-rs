@@ -376,7 +376,7 @@ impl syn::visit_mut::VisitMut for LazyInserter {
         match fv.expr {
             syn::Expr::Macro(ref m) if m.mac.path.is_ident("lazy") => {
                 let key = match fv.member {
-                    syn::Member::Named(ref ident) => keccak_key(ident),
+                    syn::Member::Named(ref ident) => static_hash(ident),
                     syn::Member::Unnamed(syn::Index { index, .. }) => {
                         quote! { H256::from(#index as u32) }
                     }

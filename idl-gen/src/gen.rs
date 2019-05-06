@@ -134,7 +134,6 @@ impl rustc_driver::Callbacks for IdlGenerator {
                 service_name,
                 imports,
                 adt_defs,
-                self.syntax_pass.event_indices(),
                 rpc_collector.rpcs(),
             ) {
                 Ok(iface) => iface,

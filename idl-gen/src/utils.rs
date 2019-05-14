@@ -8,7 +8,7 @@ pub fn is_std(crate_name: Symbol) -> bool {
     crate_name == "std"
         || crate_name == "core"
         || crate_name == "alloc"
-        || crate_name == "oasis_std"
+        || crate_name.as_str().starts_with("oasis_")
 }
 
 /// Returns the crate name and path components of a `DefId`.

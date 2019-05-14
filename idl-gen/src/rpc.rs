@@ -56,8 +56,9 @@ impl Interface {
                     {
                         if let Some(indexed_fields) = event_indices.get(&Symbol::intern(name)) {
                             for field in fields.iter_mut() {
-                                field.indexed =
-                                    indexed_fields.iter().any(|f| *f == field.name.as_str());
+                                field.indexed = indexed_fields
+                                    .iter()
+                                    .any(|f| *f == Symbol::intern(field.name.as_str()));
                             }
                         }
                     }

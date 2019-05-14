@@ -30,7 +30,7 @@ impl<'ast> syntax::visit::Visitor<'ast> for SyntaxPass {
                     path,
                     node: syntax::ast::MetaItemKind::List(metas),
                     ..
-                }) if path == &"derive" => metas,
+                }) if *path == Symbol::intern("derive") => metas,
                 _ => continue,
             };
 
@@ -50,7 +50,7 @@ impl<'ast> syntax::visit::Visitor<'ast> for SyntaxPass {
                                 field
                                     .attrs
                                     .iter()
-                                    .find(|attr| attr.path == "indexed")
+                                    .find(|attr| attr.path == Symbol::intern("indexed"))
                                     .and_then(|_| field.ident.map(|ident| ident.name))
                             })
                             .collect();

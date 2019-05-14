@@ -5,10 +5,11 @@ use rustc::{
 use syntax_pos::symbol::Symbol;
 
 pub fn is_std(crate_name: Symbol) -> bool {
+    let crate_name = crate_name.as_str();
     crate_name == "std"
         || crate_name == "core"
         || crate_name == "alloc"
-        || crate_name.as_str().starts_with("oasis_")
+        || crate_name.starts_with("oasis_")
 }
 
 /// Returns the crate name and path components of a `DefId`.

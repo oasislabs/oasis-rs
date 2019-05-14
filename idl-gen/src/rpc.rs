@@ -56,8 +56,9 @@ impl Interface {
                     {
                         if let Some(indexed_fields) = event_indices.get(&Symbol::intern(name)) {
                             for field in fields.iter_mut() {
-                                field.indexed =
-                                    indexed_fields.iter().any(|f| *f == field.name.as_str());
+                                field.indexed = indexed_fields
+                                    .iter()
+                                    .any(|f| *f == Symbol::intern(field.name.as_str()));
                             }
                         }
                     }
@@ -315,32 +316,40 @@ impl Type {
                     .collect::<Result<Vec<_>, UnsupportedTypeError>>()?,
             ),
             TyKind::Path(hir::QPath::Resolved(_, path)) => {
-                use hir::def::Def;
-                match path.def {
-                    Def::Struct(did)
-                    | Def::Union(did)
-                    | Def::Enum(did)
-                    | Def::Variant(did)
-                    | Def::TyAlias(did)
-                    | Def::Const(did) => {
-                        let type_args = crate::utils::get_type_args(&path);
-                        let is_vec_u8 = |vec_ty: &hir::Ty| match vec_ty.node {
-                            hir::TyKind::Path(hir::QPath::Resolved(_, ref path))
-                                if path.to_string() == "u8" =>
-                            {
-                                true
-                            }
-                            _ => false,
-                        };
-                        convert_def!(
-                            tcx,
-                            did,
-                            |tcx, _, ty| Type::convert_ty(tcx, ty),
-                            |i| { type_args[i] },
-                            is_vec_u8
-                        )?
-                    }
-                    Def::PrimTy(ty) => match ty {
+                use hir::def::{DefKind, Res};
+                match path.res {
+                    Res::Def(kind, id) => match kind {
+                        DefKind::Struct
+                        | DefKind::Union
+                        | DefKind::Enum
+                        | DefKind::Variant
+                        | DefKind::TyAlias
+                        | DefKind::Const => {
+                            let type_args = crate::utils::get_type_args(&path);
+                            let is_vec_u8 = |vec_ty: &hir::Ty| match vec_ty.node {
+                                hir::TyKind::Path(hir::QPath::Resolved(_, ref path))
+                                    if path.to_string() == "u8" =>
+                                {
+                                    true
+                                }
+                                _ => false,
+                            };
+                            convert_def!(
+                                tcx,
+                                id,
+                                |tcx, _, ty| Type::convert_ty(tcx, ty),
+                                |i| { type_args[i] },
+                                is_vec_u8
+                            )?
+                        }
+                        _ => {
+                            return Err(UnsupportedTypeError::NotReprC(
+                                format!("{:?}", path),
+                                path.span,
+                            ))
+                        }
+                    },
+                    Res::PrimTy(ty) => match ty {
                         hir::PrimTy::Int(ty) => Type::convert_int(ty, path.span)?,
                         hir::PrimTy::Uint(ty) => Type::convert_uint(ty, path.span)?,
                         hir::PrimTy::Float(ty) => Type::convert_float(ty, path.span)?,
@@ -349,7 +358,10 @@ impl Type {
                         hir::PrimTy::Char => Type::I8,
                     },
                     _ => {
-                        return Err(UnsupportedTypeError::NotReprC(path.to_string(), path.span));
+                        return Err(UnsupportedTypeError::NotReprC(
+                            format!("{:?}", path),
+                            path.span,
+                        ))
                     }
                 }
             }
@@ -387,8 +399,9 @@ impl Type {
             }
             Slice(ty) => Type::List(box Type::convert_sty(tcx, did, ty)?),
             Ref(_, ty, _) => return Type::convert_sty(tcx, did, ty),
-            Tuple(tys) => Type::Tuple(
-                tys.iter()
+            Tuple(substs) => Type::Tuple(
+                substs
+                    .types()
                     .map(|ty| Type::convert_sty(tcx, did, ty))
                     .collect::<Result<Vec<_>, UnsupportedTypeError>>()?,
             ),

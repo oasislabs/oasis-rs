@@ -11,11 +11,10 @@ keywords = ["oasis", "owasm"]
 
 [dependencies]
 failure = "0.1"
-fixed-hash = { version = "0.3", default-features = false, features = ["byteorder"] }
 oasis-macros = { version = "0.1", path = "../oasis-macros" }
+oasis-types = { version = "0.1", path = "../oasis-types" }
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.9"
-uint = "0.6"
 
 [dev-dependencies]
 oasis-test = { path = "../oasis-test" }

@@ -1,5 +1,5 @@
 [workspace]
-members = ["oasis-std", "oasis-macros", "oasis-test", "idl-gen"]
+members = ["oasis-std", "oasis-macros", "oasis-test", "oasis-types", "idl-gen"]
 exclude = ["tests"]
 
 [profile.release]

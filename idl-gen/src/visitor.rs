@@ -30,7 +30,7 @@ impl<'ast> syntax::visit::Visitor<'ast> for SyntaxPass {
                     path,
                     node: syntax::ast::MetaItemKind::List(metas),
                     ..
-                }) if path == &"derive" => metas,
+                }) if *path == Symbol::intern("derive") => metas,
                 _ => continue,
             };
 
@@ -50,7 +50,7 @@ impl<'ast> syntax::visit::Visitor<'ast> for SyntaxPass {
                                 field
                                     .attrs
                                     .iter()
-                                    .find(|attr| attr.path == "indexed")
+                                    .find(|attr| attr.path == Symbol::intern("indexed"))
                                     .and_then(|_| field.ident.map(|ident| ident.name))
                             })
                             .collect();
@@ -159,12 +159,14 @@ impl<'a, 'gcx, 'tcx> DefinedTypeCollector<'a, 'gcx, 'tcx> {
 impl<'a, 'gcx, 'tcx> hir::intravisit::Visitor<'tcx> for DefinedTypeCollector<'a, 'gcx, 'tcx> {
     fn visit_ty(&mut self, ty: &'tcx hir::Ty) {
         if let hir::TyKind::Path(hir::QPath::Resolved(_, path)) = &ty.node {
-            use hir::def::Def;
-            match path.def {
-                Def::Struct(id) | Def::Union(id) | Def::Enum(id) | Def::TyAlias(id) => {
-                    self.visit_sty(self.tcx.type_of(id));
+            use hir::def::{DefKind, Res};
+            if let Res::Def(kind, id) = path.res {
+                match kind {
+                    DefKind::Struct | DefKind::Union | DefKind::Enum | DefKind::TyAlias => {
+                        self.visit_sty(self.tcx.type_of(id));
+                    }
+                    _ => (),
                 }
-                _ => (),
             }
         }
         intravisit::walk_ty(self, ty);

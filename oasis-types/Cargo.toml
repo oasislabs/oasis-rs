@@ -1,0 +1,10 @@
+[package]
+name = "oasis-types"
+version = "0.1.0"
+authors = ["Oasis Labs <info@oasislabs.com>"]
+edition = "2018"
+
+[dependencies]
+fixed-hash = { version = "0.3", default-features = false, features = ["byteorder"] }
+serde = { version = "1.0", features = ["derive"] }
+uint = "0.6"

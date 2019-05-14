@@ -1,6 +1,15 @@
 [workspace]
-members = ["oasis-std", "oasis-macros", "oasis-test", "oasis-types", "idl-gen"]
+members = [
+    "bcfs",
+    "idl-gen",
+    "memchain",
+    "oasis-std",
+    "oasis-macros",
+    "oasis-test",
+    "oasis-types",
+]
 exclude = ["tests"]
+
 
 [profile.release]
 incremental = false

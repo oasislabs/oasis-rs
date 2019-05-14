@@ -291,7 +291,7 @@ pub fn gas_limit() -> U256 {
 
 /// Get amount of gas left.
 pub fn gas_left() -> U256 {
-    U256::from_raw(unsafe { eth::gasleft() })
+    unsafe { U256::from_raw(eth::gasleft()) }
 }
 
 /// Get caller address

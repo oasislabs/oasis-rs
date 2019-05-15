@@ -1,5 +1,4 @@
-#![allow(unused)]
-mod ffi;
+pub mod ffi;
 
 use oasis_types::Address;
 
@@ -8,7 +7,7 @@ use crate::{AccountMetadata, BlockchainIntrinsics, KVStore};
 impl<'bc> KVStore for memchain::Blockchain<'bc> {
     fn contains(&self, key: &[u8]) -> bool {
         self.current_tx()
-            .and_then(|tx| tx.current_account())
+            .and_then(memchain::Transaction::current_account)
             .map(|acct| acct.storage.contains_key(key))
             .unwrap_or(false)
     }
@@ -19,9 +18,9 @@ impl<'bc> KVStore for memchain::Blockchain<'bc> {
 
     fn get(&self, key: &[u8]) -> Option<&[u8]> {
         self.current_tx()
-            .and_then(|tx| tx.current_account())
+            .and_then(memchain::Transaction::current_account)
             .and_then(|acct| acct.storage.get(key))
-            .map(|v| v.as_slice())
+            .map(Vec::as_slice)
     }
 
     fn set(&mut self, key: Vec<u8>, value: Vec<u8>) {
@@ -58,15 +57,23 @@ impl<'b> BlockchainIntrinsics for memchain::Blockchain<'b> {
         self.with_current_tx(|tx| tx.log(topics, data));
     }
 
-    fn code_at(&self, addr: &Address) -> Option<Vec<u8>> {
-        None
+    fn code_at(&self, addr: &Address) -> Option<&[u8]> {
+        self.current_state()
+            .get(addr)
+            .map(|acct| acct.code.as_slice())
     }
 
     fn code_len(&self, addr: &Address) -> u64 {
-        0
+        self.current_state()
+            .get(addr)
+            .map(|acct| acct.code.len() as u64)
+            .unwrap_or_default()
     }
 
     fn metadata_at(&self, addr: &Address) -> Option<AccountMetadata> {
-        None
+        self.current_state().get(addr).map(|acct| AccountMetadata {
+            balance: acct.balance,
+            expiry: acct.expiry,
+        })
     }
 }

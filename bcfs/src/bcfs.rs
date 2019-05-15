@@ -351,7 +351,7 @@ impl BCFS {
             }
             FileKind::Bytecode { addr } => match self.bci.borrow().code_at(addr) {
                 Some(code) => {
-                    let nbytes = code.as_slice().read_vectored(bufs)?;
+                    let nbytes = code.to_vec().as_slice().read_vectored(bufs)?;
                     Ok((nbytes, FileOffset::FromStart(nbytes as u64)))
                 }
                 None => Err(ErrNo::NoEnt),

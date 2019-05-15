@@ -1,8 +1,8 @@
 enum Filelike {
     File(File),
-    Directory,
-    Socket,
-    Link,
+    // Directory,
+    // Socket,
+    // Link,
 }
 
 struct File {

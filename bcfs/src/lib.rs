@@ -11,7 +11,7 @@ use std::{
     rc::Rc,
 };
 
-use oasis_types::Address;
+use oasis_types::{Address, U256};
 use wasi_types::{
     ErrNo, Fd, FdFlags, FdStat, FileDelta, FileSize, FileStat, FileType, Inode, OpenFlags, Rights,
     Whence,
@@ -49,7 +49,7 @@ pub trait BlockchainIntrinsics {
 
     /// Returns the bytecode stored at `addr`, if it exists.
     /// `None` signifies that no account exists at `addr`.
-    fn code_at(&self, addr: &Address) -> Option<Vec<u8>>;
+    fn code_at(&self, addr: &Address) -> Option<&[u8]>;
     fn code_len(&self, addr: &Address) -> u64;
 
     /// Returns the metadata of the account stored at `addr`, if it exists.
@@ -57,10 +57,8 @@ pub trait BlockchainIntrinsics {
 }
 
 pub struct AccountMetadata {
-    pub balance: u64,
-    /// expiry timestamp, in seconds
-    pub expiry: u64,
-    pub confidental: bool,
+    pub balance: U256,
+    pub expiry: Option<std::time::Duration>,
 }
 
 include!("bcfs.rs");

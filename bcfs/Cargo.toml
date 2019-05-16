@@ -8,10 +8,11 @@ edition = "2018"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
+blockchain-traits = { version = "0.1", path = "../blockchain-traits" }
 hex = "0.3"
 memchain = { version = "0.1", path = "../memchain", optional = true }
 oasis-types = { version = "0.1", path = "../oasis-types" }
 wasi-types = "0.1"
 
 [features]
-testing = ["memchain"]
+ffi = ["memchain"]

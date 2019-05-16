@@ -1,6 +1,4 @@
-use std::{
-    borrow::Cow, cell::RefCell, collections::hash_map::Entry, ffi::CStr, pin::Pin, rc::Rc, slice,
-};
+use std::{borrow::Cow, cell::RefCell, collections::hash_map::Entry, ffi::CStr, rc::Rc, slice};
 
 use oasis_types::{Address, U256};
 
@@ -27,7 +25,7 @@ pub struct CStorageItem<'a> {
     value: &'a CStr,
 }
 
-type Memchain = Pin<Rc<RefCell<Blockchain<'static>>>>;
+type Memchain = RefCell<Blockchain<'static>>;
 
 impl<'a> From<CAccount<'a>> for Account {
     fn from(ca: CAccount<'a>) -> Self {
@@ -54,29 +52,30 @@ impl<'a> From<CAccount<'a>> for Account {
     }
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn create_memchain(
     genesis_accounts: *const CAccount,
     num_genesis_accounts: u32,
-) -> *mut Memchain {
+) -> *const Memchain {
     let genesis_state = slice::from_raw_parts(genesis_accounts, num_genesis_accounts as usize)
         .iter()
         .map(|ca| (ca.address, Cow::Owned(Account::from(*ca))))
         .collect();
-    let mut bc = Blockchain::new(genesis_state);
-    let p_bc = &mut bc as *mut _;
-    std::mem::forget(bc);
-    p_bc
+    Rc::into_raw(Blockchain::new(genesis_state))
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn destroy_memchain(memchain: *mut Memchain) {
-    std::mem::drop(&mut *memchain)
+    std::mem::drop(Rc::from_raw(memchain))
 }
 
 /// Adds a new account to the blockchain at the current block.
 /// Requires that a transaction is currently in progress.
 /// Returns nonzero on error. An error will occur if the account already exists.
-pub unsafe extern "C" fn create_account(memchain: *mut Memchain, new_account: CAccount) -> u8 {
-    let bc = &mut (*memchain).borrow_mut();
+#[no_mangle]
+pub unsafe extern "C" fn create_account(memchain: *const Memchain, new_account: CAccount) -> u8 {
+    let rc_bc = Rc::from_raw(memchain);
+    let mut bc = rc_bc.borrow_mut();
     let current_state = bc.current_state_mut();
     match current_state.entry(new_account.address) {
         Entry::Occupied(_) => 1,

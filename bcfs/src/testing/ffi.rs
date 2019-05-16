@@ -7,7 +7,6 @@ use std::{
     slice,
 };
 
-use memchain::Blockchain;
 use oasis_types::Address;
 use wasi_types::{ErrNo, Fd, FdFlags, FdStat, FileDelta, FileSize, FileStat, OpenFlags, Whence};
 
@@ -15,7 +14,7 @@ use crate::{BlockchainIntrinsics, KVStore, BCFS};
 
 #[no_mangle]
 pub unsafe extern "C" fn create_memory_bcfs(
-    blockchain: *mut Rc<RefCell<Blockchain<'static>>>,
+    blockchain: *mut Rc<RefCell<memchain::Blockchain<'static>>>,
     owner_addr: Address,
 ) -> *mut BCFS {
     let bc = &*blockchain;
@@ -24,6 +23,11 @@ pub unsafe extern "C" fn create_memory_bcfs(
         Rc::clone(bc) as Rc<RefCell<dyn BlockchainIntrinsics>>,
         owner_addr,
     )))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn destroy_memory_bcfs(bcfs: *mut BCFS) {
+    std::mem::drop(Box::from_raw(bcfs))
 }
 
 #[no_mangle]

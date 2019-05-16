@@ -6,8 +6,6 @@ use std::{
     borrow::{Borrow, Cow},
     cell::RefCell,
     collections::HashMap,
-    marker::PhantomPinned,
-    pin::Pin,
     ptr::NonNull,
     rc::Rc,
 };
@@ -18,15 +16,11 @@ type State<'bc> = HashMap<Address, Cow<'bc, Account>>;
 
 pub struct Blockchain<'bc> {
     blocks: Vec<Block<'bc>>, // A cleaner implementation is as an intrusive linked list.
-    _pin: PhantomPinned,     // Pin so that contained blocks can reference the owning blockchain.
 }
 
 impl<'bc> Blockchain<'bc> {
-    pub fn new(genesis_state: State<'bc>) -> Pin<Rc<RefCell<Self>>> {
-        let rc_bc = Rc::pin(RefCell::new(Self {
-            blocks: Vec::new(),
-            _pin: PhantomPinned,
-        }));
+    pub fn new(genesis_state: State<'bc>) -> Rc<RefCell<Self>> {
+        let rc_bc = Rc::new(RefCell::new(Self { blocks: Vec::new() }));
 
         {
             let mut bc = rc_bc.borrow_mut();

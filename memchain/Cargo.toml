@@ -4,5 +4,8 @@ version = "0.1.0"
 authors = ["Oasis Labs <info@oasislabs.com>"]
 edition = "2018"
 
+[lib]
+crate_type = ["rlib", "cdylib"]
+
 [dependencies]
 oasis-types = { version = "0.1", path = "../oasis-types" }

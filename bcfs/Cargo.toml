@@ -11,7 +11,7 @@ crate-type = ["rlib", "cdylib"]
 hex = "0.3"
 memchain = { version = "0.1", path = "../memchain", optional = true }
 oasis-types = { version = "0.1", path = "../oasis-types" }
-wasi-types = { path = "../../wasi-types" }
+wasi-types = "0.1"
 
 [features]
 testing = ["memchain"]

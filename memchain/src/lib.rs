@@ -1,9 +1,15 @@
-#![allow(unused)]
+#![feature(rc_into_raw_non_null)]
+
+pub mod ffi;
 
 use std::{
     borrow::{Borrow, Cow},
     cell::RefCell,
     collections::HashMap,
+    marker::PhantomPinned,
+    pin::Pin,
+    ptr::NonNull,
+    rc::Rc,
 };
 
 use oasis_types::{Address, U256};
@@ -11,30 +17,37 @@ use oasis_types::{Address, U256};
 type State<'bc> = HashMap<Address, Cow<'bc, Account>>;
 
 pub struct Blockchain<'bc> {
-    blocks: Vec<Block<'bc>>,
+    blocks: Vec<Block<'bc>>, // A cleaner implementation is as an intrusive linked list.
+    _pin: PhantomPinned,     // Pin so that contained blocks can reference the owning blockchain.
 }
 
 impl<'bc> Blockchain<'bc> {
-    pub fn new(genesis_state: State<'bc>) -> Self {
-        let mut blocks = Vec::new();
-        blocks.push(Block {
-            prev: None,
-            transactions: vec![Transaction {
+    pub fn new(genesis_state: State<'bc>) -> Pin<Rc<RefCell<Self>>> {
+        let rc_bc = Rc::pin(RefCell::new(Self {
+            blocks: Vec::new(),
+            _pin: PhantomPinned,
+        }));
+
+        {
+            let mut bc = rc_bc.borrow_mut();
+
+            let genesis = bc.create_block();
+            genesis.transactions.push(Transaction {
                 state: genesis_state,
                 call_stack: vec![Frame::default()],
                 logs: Vec::new(),
-            }],
-        });
-        blocks.push(Block {
-            prev: Some(unsafe { &*(blocks.last().unwrap() as *const Block) }),
-            transactions: Vec::new(),
-        });
-        Self { blocks }
+            });
+
+            bc.create_block(); // Create the first user block.
+        }
+
+        rc_bc
     }
 
-    fn create_block(&mut self) -> &mut Block<'bc> {
+    pub fn create_block(&mut self) -> &mut Block<'bc> {
         self.blocks.push(Block {
-            prev: Some(unsafe { &*(self.last_block() as *const Block) }),
+            number: self.blocks.len(),
+            bc: NonNull::from(&*self),
             transactions: Vec::new(),
         });
         self.last_block_mut()
@@ -63,22 +76,23 @@ impl<'bc> Blockchain<'bc> {
     pub fn with_current_tx<T, F: FnOnce(&mut Transaction<'bc>) -> T>(&mut self, f: F) -> Option<T> {
         self.last_block_mut().with_current_tx(f)
     }
+
+    fn block(&self, number: usize) -> Option<&Block<'bc>> {
+        self.blocks.get(number)
+    }
 }
 
 pub struct Block<'bc> {
-    prev: Option<&'bc Block<'bc>>,
+    bc: NonNull<Blockchain<'bc>>,
+
+    // store the number instead of a pointer to the previous block because the `Blockcahin`'s
+    // Vec will probably move if it reallocates.
+    number: usize,
     transactions: Vec<Transaction<'bc>>,
 }
 
 impl<'bc> Block<'bc> {
-    pub fn transact(
-        &mut self,
-        caller: Address,
-        callee: Address,
-        gas: U256,
-        method: String,
-        input: Vec<u8>,
-    ) {
+    pub fn transact(&mut self, caller: Address, callee: Address, gas: U256, input: Vec<u8>) {
         let init_frame = Frame {
             caller,
             callee,
@@ -102,8 +116,8 @@ impl<'bc> Block<'bc> {
     pub fn state(&self) -> &State<'bc> {
         match self.transactions.last() {
             Some(tx) => &tx.state,
-            None => self
-                .prev
+            None => unsafe { self.bc.as_ref() }
+                .block(self.number - 1)
                 .unwrap() // Recursion will reach genesis transaction.
                 .state(),
         }
@@ -123,16 +137,8 @@ pub struct Account {
     pub balance: U256,
     pub code: Vec<u8>,
     pub storage: HashMap<Vec<u8>, Vec<u8>>,
-    methods: HashMap<String, extern "C" fn()>,
-}
-
-impl Account {
-    pub fn new(balance: U256) -> Self {
-        Self {
-            balance,
-            ..Default::default()
-        }
-    }
+    pub expiry: Option<std::time::Duration>,
+    pub main: Option<extern "C" fn()>,
 }
 
 pub struct Transaction<'bc> {

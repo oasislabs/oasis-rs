@@ -1,43 +1,63 @@
-use std::{borrow::Cow, cell::RefCell, collections::hash_map::Entry, ffi::CStr, rc::Rc, slice};
+use std::{borrow::Cow, cell::RefCell, collections::hash_map::Entry, rc::Rc, slice};
 
 use oasis_types::{Address, U256};
 
 use crate::{Account, Blockchain};
 
 #[repr(C)]
-#[derive(Clone, Copy)]
-pub struct CAccount<'a> {
+#[derive(Clone, Copy, Debug)]
+pub struct CAccount {
     address: Address,
     balance: U256,
-    code: *const u8,
-    code_len: u64,
+    code: CSlice<u8>,
     /// Seconds since unix epoch. A value of 0 represents no expiry.
     expiry: u64,
     /// Pointer to callable main function. Set to nullptr if account has no code.
-    main: extern "C" fn(),
-    storage_items: *const CStorageItem<'a>,
-    num_storage_items: u64,
+    main: unsafe extern "C" fn(),
+    storage: CSlice<CStorageItem>,
 }
 
 #[repr(C)]
-pub struct CStorageItem<'a> {
-    key: &'a CStr,
-    value: &'a CStr,
+#[derive(Clone, Copy, Debug)]
+pub struct CStorageItem {
+    key: CSlice<u8>,
+    value: CSlice<u8>,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct CSlice<T> {
+    pub base: *const T,
+    pub len: u64,
+}
+
+impl<T> CSlice<T> {
+    unsafe fn as_slice(&self) -> &'static [T] {
+        slice::from_raw_parts(self.base, self.len as usize)
+    }
+}
+
+impl<T, S: AsRef<[T]>> From<S> for CSlice<T> {
+    fn from(sl: S) -> Self {
+        let sl = sl.as_ref();
+        Self {
+            base: sl.as_ptr(),
+            len: sl.len() as u64,
+        }
+    }
 }
 
 type Memchain = RefCell<Blockchain<'static>>;
 
-impl<'a> From<CAccount<'a>> for Account {
-    fn from(ca: CAccount<'a>) -> Self {
+impl From<CAccount> for Account {
+    fn from(ca: CAccount) -> Self {
         Self {
             balance: ca.balance,
-            code: unsafe { slice::from_raw_parts(ca.code, ca.code_len as usize) }.to_vec(),
-            storage: unsafe {
-                slice::from_raw_parts(ca.storage_items, ca.num_storage_items as usize)
-            }
-            .iter()
-            .map(|itm| (itm.key.to_bytes().to_vec(), itm.value.to_bytes().to_vec()))
-            .collect(),
+            code: unsafe { ca.code.as_slice() }.to_vec(),
+            storage: unsafe { ca.storage.as_slice() }
+                .iter()
+                .map(|itm| unsafe { (itm.key.as_slice().to_vec(), itm.value.as_slice().to_vec()) })
+                .collect(),
             expiry: if ca.expiry == 0 {
                 None
             } else {
@@ -52,12 +72,20 @@ impl<'a> From<CAccount<'a>> for Account {
     }
 }
 
+#[repr(u8)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum ErrNo {
+    Success,
+    NoAccount,
+    AccountExists,
+    NoKey,
+    NoTx,
+}
+
 #[no_mangle]
-pub unsafe extern "C" fn create_memchain(
-    genesis_accounts: *const CAccount,
-    num_genesis_accounts: u32,
-) -> *const Memchain {
-    let genesis_state = slice::from_raw_parts(genesis_accounts, num_genesis_accounts as usize)
+pub unsafe extern "C" fn memchain_create(genesis_accounts: CSlice<CAccount>) -> *const Memchain {
+    let genesis_state = genesis_accounts
+        .as_slice()
         .iter()
         .map(|ca| (ca.address, Cow::Owned(Account::from(*ca))))
         .collect();
@@ -65,23 +93,112 @@ pub unsafe extern "C" fn create_memchain(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn destroy_memchain(memchain: *mut Memchain) {
+pub unsafe extern "C" fn memchain_destroy(memchain: *const Memchain) {
     std::mem::drop(Rc::from_raw(memchain))
 }
 
 /// Adds a new account to the blockchain at the current block.
-/// Requires that a transaction is currently in progress.
-/// Returns nonzero on error. An error will occur if the account already exists.
 #[no_mangle]
-pub unsafe extern "C" fn create_account(memchain: *const Memchain, new_account: CAccount) -> u8 {
-    let rc_bc = Rc::from_raw(memchain);
-    let mut bc = rc_bc.borrow_mut();
-    let current_state = bc.current_state_mut();
-    match current_state.entry(new_account.address) {
-        Entry::Occupied(_) => 1,
+pub unsafe extern "C" fn memchain_create_account(
+    memchain: *const Memchain,
+    new_account: *const CAccount,
+) -> ErrNo {
+    let memchain = &*memchain;
+    let mut bc = memchain.borrow_mut();
+    match bc.current_state_mut().entry((*new_account).address) {
+        Entry::Occupied(_) => ErrNo::AccountExists,
         Entry::Vacant(v) => {
-            v.insert(Cow::Owned(Account::from(new_account)));
-            0
+            v.insert(Cow::Owned(Account::from(*new_account)));
+            ErrNo::Success
+        }
+    }
+}
+
+/// Retrieves a value from storage at the current block through the current transaction.
+#[no_mangle]
+pub unsafe extern "C" fn memchain_storage_at(
+    memchain: *const Memchain,
+    address: Address,
+    key: CSlice<u8>,
+    value: *mut CSlice<u8>,
+) -> ErrNo {
+    let memchain = &*memchain;
+    let bc = memchain.borrow();
+    let account = match bc.current_state().get(&address) {
+        Some(account) => account,
+        None => return ErrNo::NoAccount,
+    };
+    match account.storage.get(key.as_slice()) {
+        Some(val) => {
+            *value = val.as_slice().into();
+            ErrNo::Success
+        }
+        None => ErrNo::NoKey,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    unsafe extern "C" fn dummy_main() {}
+
+    #[test]
+    fn account_storage() {
+        let key = "hello";
+        let v_0 = "world";
+        let v_1 = "general kenobi";
+
+        unsafe {
+            let account_0_storage = vec![CStorageItem {
+                key: key.into(),
+                value: v_0.into(),
+            }];
+            let genesis_accounts = vec![CAccount {
+                address: Address::zero(),
+                balance: U256::from(1),
+                code: vec![].as_slice().into(),
+                expiry: 0,
+                main: dummy_main,
+                storage: account_0_storage.as_slice().into(),
+            }];
+
+            let handle = memchain_create(genesis_accounts.as_slice().into());
+
+            let account_1_storage = vec![CStorageItem {
+                key: key.into(),
+                value: v_1.into(),
+            }];
+            let account_1 = CAccount {
+                address: Address::from(1),
+                balance: U256::from(2),
+                code: "\0asm this is not wasm".as_bytes().into(),
+                expiry: 0,
+                main: dummy_main,
+                storage: account_1_storage.as_slice().into(),
+            };
+
+            let create_account_1 = || memchain_create_account(handle, &account_1 as *const _);
+            assert_eq!(create_account_1(), ErrNo::Success);
+            assert_eq!(create_account_1(), ErrNo::AccountExists);
+
+            let mut value_buf = std::mem::MaybeUninit::uninit();
+            macro_rules! storage_at {
+                ($addr:expr, $key:expr) => {
+                    memchain_storage_at(handle, $addr, $key.into(), value_buf.as_mut_ptr())
+                };
+            }
+
+            assert_eq!(storage_at!(Address::from(0), key), ErrNo::Success);
+            assert_eq!(value_buf.assume_init().as_slice(), v_0.as_bytes());
+
+            assert_eq!(storage_at!(Address::from(1), key), ErrNo::Success);
+            assert_eq!(value_buf.assume_init().as_slice(), v_1.as_bytes());
+
+            assert_eq!(storage_at!(Address::from(2), key), ErrNo::NoAccount);
+            assert_eq!(storage_at!(Address::from(0), b"yodawg"), ErrNo::NoKey);
+
+            memchain_destroy(handle);
         }
     }
 }

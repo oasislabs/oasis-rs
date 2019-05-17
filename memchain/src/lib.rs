@@ -1,4 +1,4 @@
-#![feature(rc_into_raw_non_null)]
+#![feature(maybe_uninit)]
 
 pub mod ffi;
 
@@ -161,7 +161,13 @@ pub struct Block<'bc> {
 }
 
 impl<'bc> Block<'bc> {
-    pub fn transact(&mut self, caller: Address, callee: Address, gas: U256, input: Vec<u8>) {
+    pub fn transact(
+        &mut self,
+        caller: Address,
+        callee: Address,
+        gas: U256,
+        input: Vec<u8>,
+    ) -> &[u8] {
         let init_frame = Frame {
             caller,
             callee,
@@ -172,6 +178,9 @@ impl<'bc> Block<'bc> {
         };
         self.transactions
             .push(Transaction::new(init_frame, self.state()));
+        self.transactions.last().unwrap().call_stack[0]
+            .ret_buf
+            .as_slice()
     }
 
     pub fn current_tx(&self) -> Option<&Transaction<'bc>> {
@@ -182,32 +191,39 @@ impl<'bc> Block<'bc> {
         self.transactions.last_mut().map(|tx| f(tx))
     }
 
+    fn prev(&self) -> Option<&Block<'bc>> {
+        unsafe { self.bc.as_ref() }.block(self.number - 1)
+    }
+
     pub fn state(&self) -> &State<'bc> {
         match self.transactions.last() {
             Some(tx) => &tx.state,
-            None => unsafe { self.bc.as_ref() }
-                .block(self.number - 1)
+            None => self
+                .prev()
                 .unwrap() // Recursion will reach genesis transaction.
                 .state(),
         }
     }
 
     pub fn state_mut(&mut self) -> &mut State<'bc> {
-        &mut self
-            .transactions
-            .last_mut()
-            .expect("No current transaction.")
-            .state
+        if self.transactions.is_empty() {
+            self.transactions.push(Transaction {
+                state: self.state().clone(),
+                call_stack: Vec::new(),
+                logs: Vec::new(),
+            });
+        }
+        &mut self.transactions.last_mut().unwrap().state
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct Account {
     pub balance: U256,
     pub code: Vec<u8>,
     pub storage: HashMap<Vec<u8>, Vec<u8>>,
     pub expiry: Option<std::time::Duration>,
-    pub main: Option<extern "C" fn()>,
+    pub main: Option<unsafe extern "C" fn()>,
 }
 
 pub struct Transaction<'bc> {

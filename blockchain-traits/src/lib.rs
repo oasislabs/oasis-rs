@@ -15,6 +15,16 @@ pub trait KVStore {
 }
 
 pub trait BlockchainIntrinsics {
+    /// Executes a transaction.
+    fn transact(
+        &mut self,
+        caller: Address,
+        callee: Address,
+        value: U256,
+        input: Vec<u8>,
+        gas: U256,
+    );
+
     /// Returns the input provided by the calling context.
     fn fetch_input(&self) -> Vec<u8>;
     fn input_len(&self) -> u64;

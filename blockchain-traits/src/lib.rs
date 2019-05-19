@@ -43,6 +43,18 @@ pub trait BlockchainIntrinsics {
 
     /// Returns the metadata of the account stored at `addr`, if it exists.
     fn metadata_at(&self, addr: &Address) -> Option<AccountMetadata>;
+
+    /// Returns the value sent with the current transaction.
+    /// Panics if there is no pending transaction.
+    fn value(&self) -> U256;
+
+    /// Returns the gas sent with the current transaction.
+    /// Panics if there is no pending transaction.
+    fn gas(&self) -> U256;
+
+    /// Returns the address of the sender of the current transaction.
+    /// Panics if there is no pending transaction.
+    fn sender(&self) -> Address;
 }
 
 pub struct AccountMetadata {

@@ -137,6 +137,35 @@ pub unsafe extern "C" fn memchain_storage_at(
     }
 }
 
+/// Creates a new block.
+#[no_mangle]
+pub unsafe extern "C" fn memchain_create_block(memchain: *const Memchain) -> ErrNo {
+    let memchain = &*memchain;
+    memchain.borrow_mut().create_block();
+    ErrNo::Success
+}
+
+/// Executes a transaction.
+#[no_mangle]
+pub unsafe extern "C" fn memchain_transact(
+    memchain: *const Memchain,
+    caller: Address,
+    callee: Address,
+    value: U256,
+    input: CSlice<u8>,
+    gas: U256,
+) -> ErrNo {
+    let memchain = &*memchain;
+    memchain.borrow_mut().last_block_mut().transact(
+        caller,
+        callee,
+        value,
+        input.as_slice().to_vec(),
+        gas,
+    );
+    ErrNo::Success
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

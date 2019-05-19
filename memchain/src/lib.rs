@@ -2,18 +2,14 @@
 
 pub mod ffi;
 
-use std::{
-    borrow::{Borrow, Cow},
-    cell::RefCell,
-    collections::HashMap,
-    ptr::NonNull,
-    rc::Rc,
-};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
 
 use blockchain_traits::{AccountMetadata, BlockchainIntrinsics, KVStore};
 use oasis_types::{Address, U256};
 
 type State<'bc> = HashMap<Address, Cow<'bc, Account>>;
+
+const BASE_GAS: u64 = 2100;
 
 pub struct Blockchain<'bc> {
     blocks: Vec<Block<'bc>>, // A cleaner implementation is as an intrusive linked list.
@@ -27,11 +23,7 @@ impl<'bc> Blockchain<'bc> {
             let mut bc = rc_bc.borrow_mut();
 
             let genesis = bc.create_block();
-            genesis.transactions.push(Transaction {
-                state: genesis_state,
-                call_stack: vec![Frame::default()],
-                logs: Vec::new(),
-            });
+            genesis.state = genesis_state;
 
             bc.create_block(); // Create the first user block.
         }
@@ -41,9 +33,13 @@ impl<'bc> Blockchain<'bc> {
 
     pub fn create_block(&mut self) -> &mut Block<'bc> {
         self.blocks.push(Block {
-            number: self.blocks.len(),
-            bc: NonNull::from(&*self),
-            transactions: Vec::new(),
+            state: if self.blocks.is_empty() {
+                State::default()
+            } else {
+                self.last_block().state.clone()
+            },
+            pending_transaction: None,
+            completed_transactions: Vec::new(),
         });
         self.last_block_mut()
     }
@@ -56,31 +52,32 @@ impl<'bc> Blockchain<'bc> {
         self.blocks.last_mut().unwrap() // There is always at least one block.
     }
 
-    pub fn current_state(&self) -> &State<'bc> {
-        self.last_block().state()
+    pub fn block(&self, height: usize) -> Option<&Block<'bc>> {
+        self.blocks.get(height)
     }
 
-    pub fn current_state_mut(&mut self) -> &mut State<'bc> {
-        self.last_block_mut().state_mut()
+    fn current_state(&self) -> &State<'bc> {
+        let last_block = self.last_block();
+        match last_block.pending_transaction {
+            Some(ref ptx) => &ptx.state,
+            None => &last_block.state,
+        }
     }
 
-    pub fn current_tx(&'bc self) -> Option<&'bc Transaction<'bc>> {
-        self.last_block().current_tx()
-    }
-
-    pub fn with_current_tx<T, F: FnOnce(&mut Transaction<'bc>) -> T>(&mut self, f: F) -> Option<T> {
-        self.last_block_mut().with_current_tx(f)
-    }
-
-    fn block(&self, number: usize) -> Option<&Block<'bc>> {
-        self.blocks.get(number)
+    fn current_state_mut(&mut self) -> &mut State<'bc> {
+        let last_block = self.last_block_mut();
+        match last_block.pending_transaction {
+            Some(ref mut ptx) => &mut ptx.state,
+            None => &mut last_block.state,
+        }
     }
 }
 
 impl<'bc> KVStore for Blockchain<'bc> {
     fn contains(&self, key: &[u8]) -> bool {
-        self.current_tx()
-            .and_then(Transaction::current_account)
+        self.last_block()
+            .pending_transaction()
+            .and_then(|tx| tx.state.get(&tx.call_stack.last().unwrap().callee))
             .map(|acct| acct.storage.contains_key(key))
             .unwrap_or(false)
     }
@@ -90,74 +87,148 @@ impl<'bc> KVStore for Blockchain<'bc> {
     }
 
     fn get(&self, key: &[u8]) -> Option<&[u8]> {
-        self.current_tx()
-            .and_then(Transaction::current_account)
+        self.last_block()
+            .pending_transaction()
+            .and_then(|tx| tx.state.get(&tx.call_stack.last().unwrap().callee))
             .and_then(|acct| acct.storage.get(key))
             .map(Vec::as_slice)
     }
 
     fn set(&mut self, key: Vec<u8>, value: Vec<u8>) {
-        self.with_current_tx(move |tx| {
-            if let Some(acct) = tx.current_account_mut() {
-                acct.storage.insert(key, value);
-            }
-        });
+        self.last_block_mut()
+            .pending_transaction_mut()
+            .and_then(|tx| tx.state.get_mut(&tx.call_stack.last().unwrap().callee))
+            .and_then(|acct| acct.to_mut().storage.insert(key, value));
     }
 }
 
 impl<'b> BlockchainIntrinsics for Blockchain<'b> {
-    fn input(&self) -> Vec<u8> {
-        self.current_tx()
-            .map(|tx| tx.current_frame().input.to_vec())
+    fn fetch_input(&self) -> Vec<u8> {
+        self.last_block()
+            .pending_transaction()
+            .map(|tx| tx.input().clone())
             .unwrap_or_default()
     }
 
     fn input_len(&self) -> u64 {
-        self.current_tx()
-            .map(|tx| tx.current_frame().input.len() as u64)
+        self.last_block()
+            .pending_transaction()
+            .map(|tx| tx.input().len() as u64)
             .unwrap_or_default()
     }
 
-    fn ret(&mut self, mut data: Vec<u8>) {
-        self.with_current_tx(|tx| tx.current_frame_mut().ret_buf.append(&mut data));
+    fn ret(&mut self, data: Vec<u8>) {
+        self.last_block_mut()
+            .pending_transaction_mut()
+            .map(|tx| tx.ret_buf = data);
     }
 
-    fn ret_err(&mut self, mut data: Vec<u8>) {
-        self.with_current_tx(|tx| tx.current_frame_mut().err_buf.append(&mut data));
+    fn err(&mut self, data: Vec<u8>) {
+        self.last_block_mut()
+            .pending_transaction_mut()
+            .map(|tx| tx.err_buf = data);
+    }
+
+    fn fetch_ret(&self) -> Vec<u8> {
+        self.last_block()
+            .pending_transaction()
+            .map(|tx| tx.ret_buf.to_vec())
+            .unwrap_or_default()
+    }
+
+    fn ret_len(&self) -> u64 {
+        self.last_block()
+            .pending_transaction()
+            .map(|tx| tx.ret_buf.len() as u64)
+            .unwrap_or_default()
+    }
+
+    fn fetch_err(&self) -> Vec<u8> {
+        self.last_block()
+            .pending_transaction()
+            .map(|tx| tx.err_buf.to_vec())
+            .unwrap_or_default()
+    }
+
+    fn err_len(&self) -> u64 {
+        self.last_block()
+            .pending_transaction()
+            .map(|tx| tx.err_buf.len() as u64)
+            .unwrap_or_default()
     }
 
     fn emit(&mut self, topics: Vec<[u8; 32]>, data: Vec<u8>) {
-        self.with_current_tx(|tx| tx.log(topics, data));
+        self.last_block_mut()
+            .pending_transaction_mut()
+            .map(|tx| tx.logs.push(Log { topics, data }));
     }
 
     fn code_at(&self, addr: &Address) -> Option<&[u8]> {
-        self.current_state()
-            .get(addr)
+        self.last_block()
+            .pending_transaction()
+            .and_then(|tx| tx.state.get(&addr))
             .map(|acct| acct.code.as_slice())
     }
 
     fn code_len(&self, addr: &Address) -> u64 {
-        self.current_state()
-            .get(addr)
+        self.last_block()
+            .pending_transaction()
+            .and_then(|tx| tx.state.get(&addr))
             .map(|acct| acct.code.len() as u64)
             .unwrap_or_default()
     }
 
     fn metadata_at(&self, addr: &Address) -> Option<AccountMetadata> {
-        self.current_state().get(addr).map(|acct| AccountMetadata {
-            balance: acct.balance,
-            expiry: acct.expiry,
-        })
+        self.last_block()
+            .pending_transaction()
+            .and_then(|tx| tx.state.get(&addr))
+            .map(|acct| AccountMetadata {
+                balance: acct.balance,
+                expiry: acct.expiry,
+            })
+    }
+
+    fn value(&self) -> U256 {
+        self.last_block()
+            .pending_transaction()
+            .map(|tx| tx.call_stack.last().unwrap().value)
+            .expect("No pending transaction.")
+    }
+
+    fn gas(&self) -> U256 {
+        self.last_block()
+            .pending_transaction()
+            .map(|tx| tx.call_stack.last().unwrap().gas)
+            .expect("No pending transaction.")
+    }
+
+    fn sender(&self) -> Address {
+        self.last_block()
+            .pending_transaction()
+            .map(|tx| tx.call_stack.last().unwrap().caller)
+            .expect("No pending transaction.")
     }
 }
 
 pub struct Block<'bc> {
-    bc: NonNull<Blockchain<'bc>>,
+    state: State<'bc>,
+    pending_transaction: Option<PendingTransaction<'bc>>,
+    completed_transactions: Vec<Receipt>,
+}
 
-    // store the number instead of a pointer to the previous block because the `Blockcahin`'s
-    // Vec will probably move if it reallocates.
-    number: usize,
-    transactions: Vec<Transaction<'bc>>,
+struct PendingTransaction<'bc> {
+    state: State<'bc>,
+    logs: Vec<Log>,
+    call_stack: Vec<Transaction>,
+    ret_buf: Vec<u8>,
+    err_buf: Vec<u8>,
+    outcome: TransactionOutcome,
+}
+
+impl<'bc> PendingTransaction<'bc> {
+    fn input(&self) -> Vec<u8> {
+        self.call_stack.last().unwrap().input.to_vec()
+    }
 }
 
 impl<'bc> Block<'bc> {
@@ -165,55 +236,120 @@ impl<'bc> Block<'bc> {
         &mut self,
         caller: Address,
         callee: Address,
-        gas: U256,
+        value: U256,
         input: Vec<u8>,
-    ) -> &[u8] {
-        let init_frame = Frame {
+        gas: U256,
+    ) {
+        let mut receipt = Receipt {
             caller,
             callee,
-            gas,
-            input,
+            value,
+            gas_used: gas,
             ret_buf: Vec::new(),
-            err_buf: Vec::new(),
+            logs: Vec::new(),
+            outcome: TransactionOutcome::Success,
         };
-        self.transactions
-            .push(Transaction::new(init_frame, self.state()));
-        self.transactions.last().unwrap().call_stack[0]
-            .ret_buf
-            .as_slice()
+
+        macro_rules! early_return {
+            ($outcome:ident) => {{
+                match &mut self.pending_transaction {
+                    Some(ptx) => {
+                        ptx.outcome = TransactionOutcome::$outcome;
+                    }
+                    None => {
+                        receipt.outcome = TransactionOutcome::$outcome;
+                        self.completed_transactions.push(receipt);
+                    }
+                }
+                return;
+            }};
+        }
+
+        // Check callee existence here so that caller balances can be modified
+        // and dropped before `&mut callee` is required.
+        if !self.state.contains_key(&callee) {
+            early_return!(NoCallee);
+        }
+
+        let caller_acct = match self.state.get_mut(&caller) {
+            Some(acct) => acct.to_mut(),
+            None => early_return!(NoCaller),
+        };
+
+        if gas < U256::from(BASE_GAS) {
+            early_return!(InsufficientGas);
+        }
+
+        if caller_acct.balance < (gas + value) {
+            caller_acct.balance = U256::zero();
+            early_return!(InsuffientFunds)
+        }
+        caller_acct.balance -= gas;
+        caller_acct.balance -= value;
+
+        let callee_acct = match self.state.get_mut(&callee) {
+            Some(acct) => acct.to_mut(),
+            None => early_return!(NoCallee),
+        };
+        callee_acct.balance += value;
+
+        let tx = Transaction {
+            caller,
+            callee,
+            value,
+            input,
+            gas,
+        };
+
+        let main_fn = callee_acct.main.map(|f| f.clone());
+
+        match &mut self.pending_transaction {
+            Some(ptx) => {
+                ptx.call_stack.push(tx);
+            }
+            None => {
+                self.pending_transaction = Some(PendingTransaction {
+                    state: self.state.clone(),
+                    logs: Vec::new(),
+                    call_stack: vec![tx],
+                    ret_buf: Vec::new(),
+                    err_buf: Vec::new(),
+                    outcome: TransactionOutcome::Success,
+                })
+            }
+        }
+
+        if let Some(main) = main_fn {
+            unsafe { main() }
+        }
+
+        self.pending_transaction.as_mut().unwrap().call_stack.pop();
+        if self
+            .pending_transaction
+            .as_ref()
+            .unwrap()
+            .call_stack
+            .is_empty()
+        {
+            let ptx = self.pending_transaction.take().unwrap();
+            receipt.outcome = ptx.outcome;
+            receipt.ret_buf = ptx.ret_buf;
+            receipt.logs = ptx.logs;
+            self.completed_transactions.push(receipt);
+        }
     }
 
-    pub fn current_tx(&self) -> Option<&Transaction<'bc>> {
-        self.transactions.last()
+    fn pending_transaction(&self) -> Option<&PendingTransaction> {
+        self.pending_transaction.as_ref()
     }
 
-    pub fn with_current_tx<T, F: FnOnce(&mut Transaction<'bc>) -> T>(&mut self, f: F) -> Option<T> {
-        self.transactions.last_mut().map(|tx| f(tx))
+    fn pending_transaction_mut(&mut self) -> Option<&mut PendingTransaction<'bc>> {
+        self.pending_transaction.as_mut()
     }
 
-    fn prev(&self) -> Option<&Block<'bc>> {
-        unsafe { self.bc.as_ref() }.block(self.number - 1)
-    }
-
+    /// Returns the current state that does not include any pending transaction.
     pub fn state(&self) -> &State<'bc> {
-        match self.transactions.last() {
-            Some(tx) => &tx.state,
-            None => self
-                .prev()
-                .unwrap() // Recursion will reach genesis transaction.
-                .state(),
-        }
-    }
-
-    pub fn state_mut(&mut self) -> &mut State<'bc> {
-        if self.transactions.is_empty() {
-            self.transactions.push(Transaction {
-                state: self.state().clone(),
-                call_stack: Vec::new(),
-                logs: Vec::new(),
-            });
-        }
-        &mut self.transactions.last_mut().unwrap().state
+        &self.state
     }
 }
 
@@ -226,63 +362,45 @@ pub struct Account {
     pub main: Option<unsafe extern "C" fn()>,
 }
 
-pub struct Transaction<'bc> {
-    state: State<'bc>,
-    call_stack: Vec<Frame>,
-    logs: Vec<Log>,
-}
-
-impl<'bc> Transaction<'bc> {
-    pub fn new(init_frame: Frame, init_state: &State<'bc>) -> Self {
-        let new_state = init_state.clone();
-        Self {
-            call_stack: vec![init_frame],
-            state: new_state,
-            logs: Vec::new(),
-        }
-    }
-
-    pub fn state(&mut self) -> &State<'bc> {
-        &self.state
-    }
-
-    pub fn current_account(&self) -> Option<&Account> {
-        self.state
-            .get(&self.current_frame().callee)
-            .map(Cow::borrow)
-    }
-
-    pub fn current_account_mut(&mut self) -> Option<&mut Account> {
-        let callee = self.current_frame_mut().callee;
-        self.state.get_mut(&callee).map(Cow::to_mut)
-    }
-
-    pub fn current_frame(&self) -> &Frame {
-        self.call_stack.last().unwrap()
-    }
-
-    pub fn current_frame_mut(&mut self) -> &mut Frame {
-        self.call_stack.last_mut().unwrap()
-    }
-
-    pub fn log(&mut self, topics: Vec<[u8; 32]>, data: Vec<u8>) {
-        self.logs.push(Log { topics, data });
-    }
-}
-
-#[derive(Default)]
-pub struct Frame {
-    pub caller: Address,
-    pub callee: Address,
-    pub input: Vec<u8>,
-    pub gas: U256,
-    pub ret_buf: Vec<u8>,
-    pub err_buf: Vec<u8>,
+pub struct Transaction {
+    caller: Address,
+    callee: Address,
+    value: U256,
+    input: Vec<u8>,
+    gas: U256,
 }
 
 pub struct Log {
     pub topics: Vec<[u8; 32]>,
     pub data: Vec<u8>,
+}
+
+pub struct Receipt {
+    pub outcome: TransactionOutcome,
+    pub caller: Address,
+    pub callee: Address,
+    pub value: U256,
+    pub gas_used: U256,
+    pub logs: Vec<Log>,
+    pub ret_buf: Vec<u8>,
+}
+
+#[repr(u8)]
+pub enum TransactionOutcome {
+    Success,
+    NoCaller,
+    NoCallee,
+    InsufficientGas,
+    InsuffientFunds,
+}
+
+impl TransactionOutcome {
+    pub fn reverted(&self) -> bool {
+        match self {
+            TransactionOutcome::Success => false,
+            _ => true,
+        }
+    }
 }
 
 #[cfg(test)]

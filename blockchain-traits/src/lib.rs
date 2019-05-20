@@ -23,6 +23,7 @@ pub trait BlockchainIntrinsics {
         value: U256,
         input: Vec<u8>,
         gas: U256,
+        gas_price: U256,
     );
 
     /// Returns the input provided by the calling context.

@@ -1,11 +1,12 @@
 use std::{borrow::Cow, cell::RefCell, collections::hash_map::Entry, rc::Rc, slice};
 
+use blockchain_traits::BlockchainIntrinsics;
 use oasis_types::{Address, U256};
 
 use crate::{Account, Blockchain};
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct CAccount {
     address: Address,
     balance: U256,
@@ -13,19 +14,19 @@ pub struct CAccount {
     /// Seconds since unix epoch. A value of 0 represents no expiry.
     expiry: u64,
     /// Pointer to callable main function. Set to nullptr if account has no code.
-    main: unsafe extern "C" fn(),
+    main: extern "C" fn(*mut dyn BlockchainIntrinsics) -> u16,
     storage: CSlice<CStorageItem>,
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct CStorageItem {
     key: CSlice<u8>,
     value: CSlice<u8>,
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct CSlice<T> {
     pub base: *const T,
     pub len: u64,
@@ -154,6 +155,7 @@ pub unsafe extern "C" fn memchain_transact(
     value: U256,
     input: CSlice<u8>,
     gas: U256,
+    gas_price: U256,
 ) -> ErrNo {
     let memchain = &*memchain;
     memchain.borrow_mut().last_block_mut().transact(
@@ -162,6 +164,7 @@ pub unsafe extern "C" fn memchain_transact(
         value,
         input.as_slice().to_vec(),
         gas,
+        gas_price,
     );
     ErrNo::Success
 }
@@ -170,7 +173,9 @@ pub unsafe extern "C" fn memchain_transact(
 mod tests {
     use super::*;
 
-    unsafe extern "C" fn dummy_main() {}
+    extern "C" fn nop_main(_: *mut dyn BlockchainIntrinsics) -> u16 {
+        0
+    }
 
     #[test]
     fn account_storage() {
@@ -179,37 +184,37 @@ mod tests {
         let v_1 = "general kenobi";
 
         unsafe {
-            let account_0_storage = vec![CStorageItem {
+            let account_1_storage = vec![CStorageItem {
                 key: key.into(),
                 value: v_0.into(),
             }];
             let genesis_accounts = vec![CAccount {
-                address: Address::zero(),
+                address: Address::from(1),
                 balance: U256::from(1),
                 code: vec![].as_slice().into(),
                 expiry: 0,
-                main: dummy_main,
-                storage: account_0_storage.as_slice().into(),
+                main: nop_main,
+                storage: account_1_storage.as_slice().into(),
             }];
 
             let handle = memchain_create(genesis_accounts.as_slice().into());
 
-            let account_1_storage = vec![CStorageItem {
+            let account_2_storage = vec![CStorageItem {
                 key: key.into(),
                 value: v_1.into(),
             }];
-            let account_1 = CAccount {
-                address: Address::from(1),
+            let account_2 = CAccount {
+                address: Address::from(2),
                 balance: U256::from(2),
                 code: "\0asm this is not wasm".as_bytes().into(),
                 expiry: 0,
-                main: dummy_main,
-                storage: account_1_storage.as_slice().into(),
+                main: nop_main,
+                storage: account_2_storage.as_slice().into(),
             };
 
-            let create_account_1 = || memchain_create_account(handle, &account_1 as *const _);
-            assert_eq!(create_account_1(), ErrNo::Success);
-            assert_eq!(create_account_1(), ErrNo::AccountExists);
+            let create_account_2 = || memchain_create_account(handle, &account_2 as *const _);
+            assert_eq!(create_account_2(), ErrNo::Success);
+            assert_eq!(create_account_2(), ErrNo::AccountExists);
 
             let mut value_buf = std::mem::MaybeUninit::uninit();
             macro_rules! storage_at {
@@ -218,14 +223,14 @@ mod tests {
                 };
             }
 
-            assert_eq!(storage_at!(Address::from(0), key), ErrNo::Success);
+            assert_eq!(storage_at!(Address::from(1), key), ErrNo::Success);
             assert_eq!(value_buf.assume_init().as_slice(), v_0.as_bytes());
 
-            assert_eq!(storage_at!(Address::from(1), key), ErrNo::Success);
+            assert_eq!(storage_at!(Address::from(2), key), ErrNo::Success);
             assert_eq!(value_buf.assume_init().as_slice(), v_1.as_bytes());
 
-            assert_eq!(storage_at!(Address::from(2), key), ErrNo::NoAccount);
-            assert_eq!(storage_at!(Address::from(0), b"yodawg"), ErrNo::NoKey);
+            assert_eq!(storage_at!(Address::from(0), key), ErrNo::NoAccount);
+            assert_eq!(storage_at!(Address::from(1), b"yodawg"), ErrNo::NoKey);
 
             memchain_destroy(handle);
         }

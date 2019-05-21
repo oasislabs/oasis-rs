@@ -13,7 +13,7 @@ extern "C" fn nop_main(_bc: *mut dyn BlockchainIntrinsics) -> u16 {
 }
 
 extern "C" fn simple_main(bc: *mut dyn BlockchainIntrinsics) -> u16 {
-    let mut bc = unsafe { &mut *bc };
+    let bc = unsafe { &mut *bc };
 
     assert!(bc.value() >= U256::zero());
     assert_eq!(bc.sender(), Address::from(2));
@@ -28,13 +28,13 @@ extern "C" fn simple_main(bc: *mut dyn BlockchainIntrinsics) -> u16 {
 }
 
 extern "C" fn fail_main(bc: *mut dyn BlockchainIntrinsics) -> u16 {
-    let mut bc = unsafe { &mut *bc };
+    let bc = unsafe { &mut *bc };
     bc.err(r"¯\_(ツ)_/¯".as_bytes().to_vec());
     1
 }
 
 extern "C" fn subtx_main(bc: *mut dyn BlockchainIntrinsics) -> u16 {
-    let mut bc = unsafe { &mut *bc };
+    let bc = unsafe { &mut *bc };
     bc.transact(
         Address::default(), /* caller */
         Address::from(1),   /* callee */

@@ -189,7 +189,7 @@ impl<'bc> BlockchainIntrinsics for Block<'bc> {
             let errno = main(unsafe { std::mem::transmute::<_, &'static mut _>(bci) });
             if errno == 0 {
                 // success
-                let mut ptx = self.pending_transaction_mut().unwrap();
+                let ptx = self.pending_transaction_mut().unwrap();
                 ptx.state.get_mut(&caller).unwrap().to_mut().balance -= value;
                 ptx.state.get_mut(&callee).unwrap().to_mut().balance += value;
             } else {

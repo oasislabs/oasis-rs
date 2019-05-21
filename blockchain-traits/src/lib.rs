@@ -19,7 +19,10 @@ pub trait KVStore {
 }
 
 pub trait BlockchainIntrinsics: KVStore {
-    /// Executes a transaction.
+    /// Executes a RPC to `callee` with provided `input` and `gas` computational resources.
+    /// `value` tokens will be transferred from the `caller` to the `callee`.
+    /// The `caller` is charged `gas * gas_price` for the computation.
+    /// A transaction that aborts (panics) will have its changes rolled back.
     fn transact(
         &mut self,
         caller: Address,

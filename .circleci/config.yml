@@ -12,6 +12,18 @@ jobs:
           name: Checkstyle
           command: cargo fmt -- --check
 
+  wasm_build:
+    docker:
+      - image: nhdh/rust:latest
+        environment:
+          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    resource_class: xlarge
+    steps:
+      - checkout
+      - run:
+          name: Wasm build
+          command: cargo build --target wasm32-unknown-unknown --all-features -p memchain
+
   unit_test:
     docker:
       - image: nhdh/rust:latest
@@ -64,5 +76,8 @@ workflows:
           requires:
             - init
       - test_idl:
+          requires:
+            - init
+      - wasm_build:
           requires:
             - init

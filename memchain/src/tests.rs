@@ -8,11 +8,11 @@ fn eth(num: u64) -> U256 {
     U256::from(num * ETH)
 }
 
-extern "C" fn nop_main(_bc: *mut dyn BlockchainIntrinsics) -> u16 {
+extern "C" fn nop_main(_bc: *mut dyn Blockchain) -> u16 {
     0
 }
 
-extern "C" fn simple_main(bc: *mut dyn BlockchainIntrinsics) -> u16 {
+extern "C" fn simple_main(bc: *mut dyn Blockchain) -> u16 {
     let bc = unsafe { &mut *bc };
 
     assert!(bc.value() >= U256::zero());
@@ -27,13 +27,13 @@ extern "C" fn simple_main(bc: *mut dyn BlockchainIntrinsics) -> u16 {
     0
 }
 
-extern "C" fn fail_main(bc: *mut dyn BlockchainIntrinsics) -> u16 {
+extern "C" fn fail_main(bc: *mut dyn Blockchain) -> u16 {
     let bc = unsafe { &mut *bc };
     bc.err(r"¯\_(ツ)_/¯".as_bytes().to_vec());
     1
 }
 
-extern "C" fn subtx_main(bc: *mut dyn BlockchainIntrinsics) -> u16 {
+extern "C" fn subtx_main(bc: *mut dyn Blockchain) -> u16 {
     let bc = unsafe { &mut *bc };
     bc.transact(
         Address::default(), /* caller */
@@ -57,8 +57,8 @@ extern "C" fn subtx_main(bc: *mut dyn BlockchainIntrinsics) -> u16 {
 }
 
 fn create_bc<'bc>(
-    mains: Vec<Option<extern "C" fn(*mut dyn BlockchainIntrinsics) -> u16>>,
-) -> Rc<RefCell<Blockchain<'bc>>> {
+    mains: Vec<Option<extern "C" fn(*mut dyn Blockchain) -> u16>>,
+) -> Rc<RefCell<Memchain<'bc>>> {
     let genesis_state = mains
         .into_iter()
         .enumerate()
@@ -88,7 +88,7 @@ fn create_bc<'bc>(
         })
         .collect();
 
-    Blockchain::new(genesis_state)
+    Memchain::new(genesis_state)
 }
 
 #[test]

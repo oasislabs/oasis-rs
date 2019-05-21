@@ -18,7 +18,7 @@ pub trait KVStore {
     fn set(&mut self, address: &Address, key: Vec<u8>, value: Vec<u8>);
 }
 
-pub trait BlockchainIntrinsics: KVStore {
+pub trait Blockchain: KVStore {
     /// Executes a RPC to `callee` with provided `input` and `gas` computational resources.
     /// `value` tokens will be transferred from the `caller` to the `callee`.
     /// The `caller` is charged `gas * gas_price` for the computation.

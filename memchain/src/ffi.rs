@@ -1,9 +1,9 @@
 use std::{borrow::Cow, cell::RefCell, collections::hash_map::Entry, rc::Rc, slice};
 
-use blockchain_traits::BlockchainIntrinsics;
+use blockchain_traits::Blockchain;
 use oasis_types::{Address, U256};
 
-use crate::{Account, Blockchain};
+use crate::{Account, Memchain};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -14,7 +14,7 @@ pub struct CAccount {
     /// Seconds since unix epoch. A value of 0 represents no expiry.
     expiry: u64,
     /// Pointer to callable main function. Set to nullptr if account has no code.
-    main: extern "C" fn(*mut dyn BlockchainIntrinsics) -> u16,
+    main: extern "C" fn(*mut dyn Blockchain) -> u16,
     storage: CSlice<CStorageItem>,
 }
 
@@ -47,8 +47,6 @@ impl<T, S: AsRef<[T]>> From<S> for CSlice<T> {
         }
     }
 }
-
-type Memchain = RefCell<Blockchain<'static>>;
 
 impl From<CAccount> for Account {
     fn from(ca: CAccount) -> Self {
@@ -84,24 +82,26 @@ pub enum ErrNo {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn memchain_create(genesis_accounts: CSlice<CAccount>) -> *const Memchain {
+pub unsafe extern "C" fn memchain_create(
+    genesis_accounts: CSlice<CAccount>,
+) -> *const RefCell<Memchain<'static>> {
     let genesis_state = genesis_accounts
         .as_slice()
         .iter()
         .map(|ca| (ca.address, Cow::Owned(Account::from(*ca))))
         .collect();
-    Rc::into_raw(Blockchain::new(genesis_state))
+    Rc::into_raw(Memchain::new(genesis_state))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn memchain_destroy(memchain: *const Memchain) {
+pub unsafe extern "C" fn memchain_destroy(memchain: *const RefCell<Memchain>) {
     std::mem::drop(Rc::from_raw(memchain))
 }
 
 /// Adds a new account to the blockchain at the current block.
 #[no_mangle]
 pub unsafe extern "C" fn memchain_create_account(
-    memchain: *const Memchain,
+    memchain: *const RefCell<Memchain>,
     new_account: *const CAccount,
 ) -> ErrNo {
     let memchain = &*memchain;
@@ -118,7 +118,7 @@ pub unsafe extern "C" fn memchain_create_account(
 /// Retrieves a value from storage at the current block through the current transaction.
 #[no_mangle]
 pub unsafe extern "C" fn memchain_storage_at(
-    memchain: *const Memchain,
+    memchain: *const RefCell<Memchain>,
     address: Address,
     key: CSlice<u8>,
     value: *mut CSlice<u8>,
@@ -140,7 +140,7 @@ pub unsafe extern "C" fn memchain_storage_at(
 
 /// Creates a new block.
 #[no_mangle]
-pub unsafe extern "C" fn memchain_create_block(memchain: *const Memchain) -> ErrNo {
+pub unsafe extern "C" fn memchain_create_block(memchain: *const RefCell<Memchain>) -> ErrNo {
     let memchain = &*memchain;
     memchain.borrow_mut().create_block();
     ErrNo::Success
@@ -149,7 +149,7 @@ pub unsafe extern "C" fn memchain_create_block(memchain: *const Memchain) -> Err
 /// Executes a transaction.
 #[no_mangle]
 pub unsafe extern "C" fn memchain_transact(
-    memchain: *const Memchain,
+    memchain: *const RefCell<Memchain>,
     caller: Address,
     callee: Address,
     value: U256,
@@ -173,7 +173,7 @@ pub unsafe extern "C" fn memchain_transact(
 mod tests {
     use super::*;
 
-    extern "C" fn nop_main(_: *mut dyn BlockchainIntrinsics) -> u16 {
+    extern "C" fn nop_main(_: *mut dyn Blockchain) -> u16 {
         0
     }
 

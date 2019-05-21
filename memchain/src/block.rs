@@ -85,7 +85,7 @@ impl<'bc> KVStore for Block<'bc> {
     }
 }
 
-impl<'bc> BlockchainIntrinsics for Block<'bc> {
+impl<'bc> Blockchain for Block<'bc> {
     fn transact(
         &mut self,
         mut caller: Address,
@@ -185,7 +185,7 @@ impl<'bc> BlockchainIntrinsics for Block<'bc> {
         }
 
         if let Some(main) = main_fn {
-            let bci: &mut dyn BlockchainIntrinsics = self;
+            let bci: &mut dyn Blockchain = self;
             let errno = main(unsafe { std::mem::transmute::<_, &'static mut _>(bci) });
             if errno == 0 {
                 // success

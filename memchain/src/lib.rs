@@ -4,7 +4,7 @@ pub mod ffi;
 
 use std::{borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
 
-use blockchain_traits::{AccountMetadata, BlockchainIntrinsics, KVStore};
+use blockchain_traits::{AccountMetadata, Blockchain, KVStore};
 use oasis_types::{Address, U256};
 
 include!("block.rs");
@@ -13,15 +13,15 @@ const BASE_GAS: u64 = 2100;
 
 type State<'bc> = HashMap<Address, Cow<'bc, Account>>;
 
-pub struct Blockchain<'bc> {
+pub struct Memchain<'bc> {
     blocks: Vec<Block<'bc>>, // A cleaner implementation is as an intrusive linked list.
 }
 
-impl<'bc> Blockchain<'bc> {
+impl<'bc> Memchain<'bc> {
     // This function returns `Rc<RefCell<_>>` because it keeps the inner
-    // `Blockchain` from being moved post-construction when wrapped in
+    // `Memchain` from being moved post-construction when wrapped in
     // these structs anyway. This allows blocks to refer to each other by
-    // storing a(n unmoving) pointer to their owning `Blockchain`.
+    // storing a(n unmoving) pointer to their owning `Memchain`.
     pub fn new(genesis_state: State<'bc>) -> Rc<RefCell<Self>> {
         let rc_bc = Rc::new(RefCell::new(Self { blocks: Vec::new() }));
 
@@ -83,7 +83,7 @@ impl<'bc> Blockchain<'bc> {
     }
 }
 
-impl<'bc> KVStore for Blockchain<'bc> {
+impl<'bc> KVStore for Memchain<'bc> {
     fn contains(&self, addr: &Address, key: &[u8]) -> bool {
         self.last_block().contains(addr, key)
     }
@@ -101,7 +101,7 @@ impl<'bc> KVStore for Blockchain<'bc> {
     }
 }
 
-impl<'bc> BlockchainIntrinsics for Blockchain<'bc> {
+impl<'bc> Blockchain for Memchain<'bc> {
     fn transact(
         &mut self,
         caller: Address,
@@ -184,9 +184,9 @@ pub struct Account {
     pub expiry: Option<std::time::Duration>,
 
     /// Callable account entrypoint. `main` takes an pointer to a
-    /// `BlockchainIntrinsics` trait object which can be used via FFI bindings
+    /// `Blockchain` trait object which can be used via FFI bindings
     /// to interact with the memchain. Returns nonzero to revert transaction.
-    pub main: Option<extern "C" fn(*mut dyn BlockchainIntrinsics) -> u16>,
+    pub main: Option<extern "C" fn(*mut dyn Blockchain) -> u16>,
 }
 
 pub struct Transaction {

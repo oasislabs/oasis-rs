@@ -20,6 +20,13 @@ impl<'bc> PendingTransaction<'bc> {
 }
 
 impl<'bc> Block<'bc> {
+    pub fn logs(&self) -> Vec<&Log> {
+        self.completed_transactions
+            .iter()
+            .flat_map(|tx| tx.logs.iter())
+            .collect()
+    }
+
     fn pending_transaction(&self) -> Option<&PendingTransaction> {
         self.pending_transaction.as_ref()
     }
@@ -37,28 +44,44 @@ impl<'bc> Block<'bc> {
 }
 
 impl<'bc> KVStore for Block<'bc> {
-    fn contains(&self, key: &[u8]) -> bool {
-        self.pending_transaction()
-            .and_then(|tx| tx.state.get(&tx.call_stack.last().unwrap().callee))
+    fn contains(&self, addr: &Address, key: &[u8]) -> bool {
+        self.current_state()
+            .get(addr)
             .map(|acct| acct.storage.contains_key(key))
             .unwrap_or(false)
     }
 
-    fn size(&self, key: &[u8]) -> u64 {
-        self.get(key).map(|v| v.len() as u64).unwrap_or(0)
+    fn size(&self, address: &Address, key: &[u8]) -> u64 {
+        self.get(address, key).map(|v| v.len() as u64).unwrap_or(0)
     }
 
-    fn get(&self, key: &[u8]) -> Option<&[u8]> {
-        self.pending_transaction()
-            .and_then(|tx| tx.state.get(&tx.call_stack.last().unwrap().callee))
+    fn get(&self, addr: &Address, key: &[u8]) -> Option<&[u8]> {
+        self.current_state()
+            .get(addr)
             .and_then(|acct| acct.storage.get(key))
             .map(Vec::as_slice)
     }
 
-    fn set(&mut self, key: Vec<u8>, value: Vec<u8>) {
+    fn set(&mut self, addr: &Address, key: Vec<u8>, value: Vec<u8>) {
         self.pending_transaction_mut()
-            .and_then(|tx| tx.state.get_mut(&tx.call_stack.last().unwrap().callee))
-            .and_then(|acct| acct.to_mut().storage.insert(key, value));
+            .and_then(|tx| {
+                let callee = &tx.call_stack.last().unwrap().callee;
+                let mut addr = addr;
+                if addr == &Address::default() {
+                    addr = callee;
+                }
+                if addr == callee {
+                    tx.state.get_mut(&addr)
+                } else {
+                    // capabilities to other services' storage are unimplemented
+                    // would panic if there were a way to catch it?
+                    if !tx.outcome.reverted() {
+                        tx.outcome = TransactionOutcome::InvalidOperation;
+                    }
+                    None
+                }
+            })
+            .map(|acct| acct.to_mut().storage.insert(key, value));
     }
 }
 
@@ -91,6 +114,8 @@ impl<'bc> BlockchainIntrinsics for Block<'bc> {
                     }
                     None => {
                         receipt.outcome = TransactionOutcome::$outcome;
+                        receipt.ret_buf.clear();
+                        receipt.logs.clear();
                         self.completed_transactions.push(receipt);
                     }
                 }
@@ -139,10 +164,9 @@ impl<'bc> BlockchainIntrinsics for Block<'bc> {
             value,
             input,
             gas,
-            gas_price,
         };
 
-        let main_fn = callee_acct.main.map(|f| f.clone());
+        let main_fn = callee_acct.main;
 
         match &mut self.pending_transaction {
             Some(ptx) => {
@@ -163,11 +187,13 @@ impl<'bc> BlockchainIntrinsics for Block<'bc> {
         if let Some(main) = main_fn {
             let bci: &mut dyn BlockchainIntrinsics = self;
             let errno = main(unsafe { std::mem::transmute::<_, &'static mut _>(bci) });
-            if errno != 0 {
-                early_return!(Aborted)
+            if errno == 0 {
+                // success
+                self.state.get_mut(&caller).unwrap().to_mut().balance -= value;
+                self.state.get_mut(&callee).unwrap().to_mut().balance += value;
+            } else {
+                self.pending_transaction.as_mut().unwrap().outcome = TransactionOutcome::Aborted;
             }
-            self.state.get_mut(&caller).unwrap().to_mut().balance -= value;
-            self.state.get_mut(&callee).unwrap().to_mut().balance += value;
         }
 
         self.pending_transaction.as_mut().unwrap().call_stack.pop();
@@ -181,7 +207,14 @@ impl<'bc> BlockchainIntrinsics for Block<'bc> {
             let ptx = self.pending_transaction.take().unwrap();
             receipt.outcome = ptx.outcome;
             receipt.ret_buf = ptx.ret_buf;
+            receipt.err_buf = ptx.err_buf;
             receipt.logs = ptx.logs;
+            if receipt.outcome.reverted() {
+                receipt.ret_buf.clear();
+                receipt.logs.clear();
+            } else {
+                self.state = ptx.state;
+            }
             self.completed_transactions.push(receipt);
         }
     }
@@ -199,11 +232,15 @@ impl<'bc> BlockchainIntrinsics for Block<'bc> {
     }
 
     fn ret(&mut self, data: Vec<u8>) {
-        self.pending_transaction_mut().map(|tx| tx.ret_buf = data);
+        if let Some(tx) = self.pending_transaction_mut() {
+            tx.ret_buf = data
+        }
     }
 
     fn err(&mut self, data: Vec<u8>) {
-        self.pending_transaction_mut().map(|tx| tx.err_buf = data);
+        if let Some(tx) = self.pending_transaction_mut() {
+            tx.err_buf = data
+        }
     }
 
     fn fetch_ret(&self) -> Vec<u8> {
@@ -237,8 +274,9 @@ impl<'bc> BlockchainIntrinsics for Block<'bc> {
     }
 
     fn emit(&mut self, topics: Vec<[u8; 32]>, data: Vec<u8>) {
-        self.pending_transaction_mut()
-            .map(|tx| tx.logs.push(Log { topics, data }));
+        if let Some(tx) = self.pending_transaction_mut() {
+            tx.logs.push(Log { topics, data })
+        }
     }
 
     fn code_at(&self, addr: &Address) -> Option<&[u8]> {

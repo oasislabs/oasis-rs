@@ -1,20 +1,24 @@
 use oasis_types::{Address, U256};
 
+/// Interface for a Blockchain-flavored key-value store.
+/// The semantics of `address = Address::default()` are context-dependent but
+/// generally refer to the address of the current `callee`.
 pub trait KVStore {
-    /// Returns whether the key is present in storage.
-    fn contains(&self, key: &[u8]) -> bool;
+    /// Returns whether the key is present in account storage.
+    fn contains(&self, address: &Address, key: &[u8]) -> bool;
 
-    /// Returns the size of the data stored at `key`.
-    fn size(&self, key: &[u8]) -> u64;
+    /// Returns the size of the data stored in the account at `addr` under the given `key`.
+    fn size(&self, address: &Address, key: &[u8]) -> u64;
 
-    /// Returns the data stored at `key`.
-    fn get(&self, key: &[u8]) -> Option<&[u8]>;
+    /// Returns the data stored in the account at `addr` under the given `key`.
+    fn get(&self, address: &Address, key: &[u8]) -> Option<&[u8]>;
 
-    /// Sets the data stored at `key`, overwriting any existing data.
-    fn set(&mut self, key: Vec<u8>, value: Vec<u8>);
+    /// Sets the data stored in the account at `addr` under the given  `key`.
+    /// Overwrites any existing data.
+    fn set(&mut self, address: &Address, key: Vec<u8>, value: Vec<u8>);
 }
 
-pub trait BlockchainIntrinsics {
+pub trait BlockchainIntrinsics: KVStore {
     /// Executes a transaction.
     fn transact(
         &mut self,

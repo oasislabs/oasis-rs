@@ -84,20 +84,20 @@ impl<'bc> Blockchain<'bc> {
 }
 
 impl<'bc> KVStore for Blockchain<'bc> {
-    fn contains(&self, key: &[u8]) -> bool {
-        self.last_block().contains(key)
+    fn contains(&self, addr: &Address, key: &[u8]) -> bool {
+        self.last_block().contains(addr, key)
     }
 
-    fn size(&self, key: &[u8]) -> u64 {
-        self.get(key).map(|v| v.len() as u64).unwrap_or(0)
+    fn size(&self, addr: &Address, key: &[u8]) -> u64 {
+        self.get(addr, key).map(|v| v.len() as u64).unwrap_or(0)
     }
 
-    fn get(&self, key: &[u8]) -> Option<&[u8]> {
-        self.last_block().get(key)
+    fn get(&self, addr: &Address, key: &[u8]) -> Option<&[u8]> {
+        self.last_block().get(addr, key)
     }
 
-    fn set(&mut self, key: Vec<u8>, value: Vec<u8>) {
-        self.last_block_mut().set(key, value)
+    fn set(&mut self, addr: &Address, key: Vec<u8>, value: Vec<u8>) {
+        self.last_block_mut().set(addr, key, value)
     }
 }
 
@@ -195,7 +195,6 @@ pub struct Transaction {
     value: U256,
     input: Vec<u8>,
     gas: U256,
-    gas_price: U256,
 }
 
 pub struct Log {
@@ -214,6 +213,7 @@ pub struct Receipt {
     pub err_buf: Vec<u8>,
 }
 
+#[derive(Debug)]
 #[repr(u8)]
 pub enum TransactionOutcome {
     Success,
@@ -223,6 +223,7 @@ pub enum TransactionOutcome {
     NoCallee,
     InsufficientGas,
     InsuffientFunds,
+    InvalidOperation,
 }
 
 impl TransactionOutcome {

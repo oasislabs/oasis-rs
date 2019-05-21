@@ -7,23 +7,19 @@ use std::{
     slice,
 };
 
-use blockchain_traits::{BlockchainIntrinsics, KVStore};
+use blockchain_traits::Blockchain;
 use oasis_types::Address;
 use wasi_types::{ErrNo, Fd, FdFlags, FdStat, FileDelta, FileSize, FileStat, OpenFlags, Whence};
 
 use crate::BCFS;
 
 #[no_mangle]
-pub unsafe extern "C" fn create_memory_bcfs(
-    blockchain: *mut Rc<RefCell<memchain::Blockchain<'static>>>,
+pub unsafe extern "C" fn create_bcfs(
+    blockchain: *mut Rc<RefCell<dyn Blockchain>>,
     owner_addr: Address,
 ) -> *mut BCFS {
     let bc = &*blockchain;
-    Box::into_raw(Box::new(BCFS::new(
-        Rc::clone(bc) as Rc<RefCell<dyn KVStore>>,
-        Rc::clone(bc) as Rc<RefCell<dyn BlockchainIntrinsics>>,
-        owner_addr,
-    )))
+    Box::into_raw(Box::new(BCFS::new(Rc::clone(bc), owner_addr)))
 }
 
 #[no_mangle]

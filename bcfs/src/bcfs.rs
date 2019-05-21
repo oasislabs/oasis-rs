@@ -1,20 +1,15 @@
 pub struct BCFS {
-    backing: Rc<RefCell<dyn KVStore>>,
-    bci: Rc<RefCell<dyn BlockchainIntrinsics>>,
+    blockchain: Rc<RefCell<dyn Blockchain>>,
     files: Vec<Option<Filelike>>,
     home_dir: PathBuf,
 }
 
 impl BCFS {
-    /// Creates a new Blockchain FS with a backing KVStore and hex stringified owner address.
-    pub fn new(
-        backing: Rc<RefCell<dyn KVStore>>,
-        bci: Rc<RefCell<dyn BlockchainIntrinsics>>,
-        owner_addr: Address,
-    ) -> Self {
+    /// Creates a new Blockchain FS with a backing `Blockchain` and hex stringified
+    /// owner address.
+    pub fn new(blockchain: Rc<RefCell<dyn Blockchain>>, owner_addr: Address) -> Self {
         Self {
-            backing,
-            bci,
+            blockchain,
             files: vec![
                 Some(Filelike::File(File::stdin())),
                 Some(Filelike::File(File::stdout())),
@@ -78,7 +73,7 @@ impl BCFS {
         }
 
         let file_exists = self
-            .backing
+            .blockchain
             .borrow()
             .contains(&Address::default(), Self::key_for_path(rel_path)?);
 
@@ -191,14 +186,14 @@ impl BCFS {
             return Ok(meta);
         }
         let (file_size, inode) = match &file.kind {
-            FileKind::Stdin => (self.bci.borrow().input_len(), u32::from(fd).into()),
+            FileKind::Stdin => (self.blockchain.borrow().input_len(), u32::from(fd).into()),
             FileKind::Stdout | FileKind::Stderr | FileKind::Log => return Err(ErrNo::Inval),
             FileKind::Bytecode { addr } => (
-                self.bci.borrow().code_len(addr),
+                self.blockchain.borrow().code_len(addr),
                 Self::hash_inode(addr.as_ref()),
             ),
             FileKind::Regular { key } => (
-                self.backing.borrow().size(&Address::default(), key),
+                self.blockchain.borrow().size(&Address::default(), key),
                 Self::hash_inode(key),
             ),
         };
@@ -350,14 +345,14 @@ impl BCFS {
             FileKind::Stdout | FileKind::Stderr | FileKind::Log => Err(ErrNo::Inval),
             FileKind::Stdin => {
                 let nbytes = self
-                    .bci
+                    .blockchain
                     .borrow()
                     .fetch_input()
                     .as_slice()
                     .read_vectored(bufs)?;
                 Ok((nbytes, FileOffset::FromStart(nbytes as u64)))
             }
-            FileKind::Bytecode { addr } => match self.bci.borrow().code_at(addr) {
+            FileKind::Bytecode { addr } => match self.blockchain.borrow().code_at(addr) {
                 Some(code) => {
                     let nbytes = code.to_vec().as_slice().read_vectored(bufs)?;
                     Ok((nbytes, FileOffset::FromStart(nbytes as u64)))
@@ -365,8 +360,8 @@ impl BCFS {
                 None => Err(ErrNo::NoEnt),
             },
             FileKind::Regular { key } => {
-                let kvs = self.backing.borrow();
-                let mut bytes = match kvs.get(&Address::default(), key) {
+                let bc = self.blockchain.borrow();
+                let mut bytes = match bc.get(&Address::default(), key) {
                     Some(bytes) => bytes,
                     None => return Err(ErrNo::NoEnt),
                 };
@@ -393,11 +388,11 @@ impl BCFS {
 
         let new_offset = match &file.kind {
             FileKind::Stdout => {
-                self.bci.borrow_mut().ret(cat_buf);
+                self.blockchain.borrow_mut().ret(cat_buf);
                 FileOffset::FromEnd(0)
             }
             FileKind::Stderr => {
-                self.bci.borrow_mut().err(cat_buf);
+                self.blockchain.borrow_mut().err(cat_buf);
                 FileOffset::FromEnd(0)
             }
             FileKind::Log => {
@@ -414,7 +409,7 @@ impl BCFS {
                         arr
                     })
                     .collect();
-                self.bci.borrow_mut().emit(topics, data);
+                self.blockchain.borrow_mut().emit(topics, data);
                 FileOffset::FromEnd(0)
             }
             FileKind::Regular { key } => {
@@ -422,7 +417,7 @@ impl BCFS {
                     FileOffset::FromStart(0) => (),
                     _ => return Err(ErrNo::NotSup),
                 }
-                self.backing
+                self.blockchain
                     .borrow_mut()
                     .set(&Address::default(), key.to_vec(), cat_buf);
                 match write_offset {

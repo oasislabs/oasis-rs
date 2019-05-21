@@ -11,7 +11,7 @@ use std::{
     rc::Rc,
 };
 
-use blockchain_traits::{BlockchainIntrinsics, KVStore};
+use blockchain_traits::Blockchain;
 use oasis_types::Address;
 use wasi_types::{
     ErrNo, Fd, FdFlags, FdStat, FileDelta, FileSize, FileStat, FileType, Inode, OpenFlags, Rights,

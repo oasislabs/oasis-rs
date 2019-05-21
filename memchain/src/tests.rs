@@ -2,10 +2,8 @@
 
 use crate::*;
 
-const ETH: u64 = 1_000_000_000;
-
-fn eth(num: u64) -> U256 {
-    U256::from(num * ETH)
+fn giga(num: u64) -> U256 {
+    U256::from(num * 1_000_000_000)
 }
 
 extern "C" fn nop_main(_bc: *mut dyn Blockchain) -> u16 {
@@ -67,7 +65,7 @@ fn create_bc<'bc>(
             (
                 Address::from(i),
                 Cow::Owned(Account {
-                    balance: U256::from((i as u64) * ETH),
+                    balance: U256::from(giga(i as u64)),
                     code: format!("\0asm not wasm {}", i).into_bytes(),
                     storage: {
                         let mut storage = HashMap::new();
@@ -96,11 +94,11 @@ fn transfer() {
     let bc = create_bc(vec![None, Some(nop_main)]);
     assert_eq!(
         bc.borrow().metadata_at(&Address::from(1)).unwrap().balance,
-        eth(1)
+        giga(1)
     );
     assert_eq!(
         bc.borrow().metadata_at(&Address::from(2)).unwrap().balance,
-        eth(2)
+        giga(2)
     );
     let value = U256::from(50);
     bc.borrow_mut().transact(
@@ -113,11 +111,11 @@ fn transfer() {
     );
     assert_eq!(
         bc.borrow().metadata_at(&Address::from(1)).unwrap().balance,
-        U256::from(eth(1) - U256::from(BASE_GAS) - value),
+        U256::from(giga(1) - U256::from(BASE_GAS) - value),
     );
     assert_eq!(
         bc.borrow().metadata_at(&Address::from(2)).unwrap().balance,
-        U256::from(eth(2) + value),
+        U256::from(giga(2) + value),
     );
 }
 
@@ -132,12 +130,12 @@ fn static_account() {
 
     assert_eq!(
         bc.borrow().metadata_at(&addr1).unwrap().balance,
-        U256::from(eth(1)),
+        U256::from(giga(1)),
     );
 
     assert_eq!(
         bc.borrow().metadata_at(&addr2).unwrap().balance,
-        U256::from(eth(2)),
+        U256::from(giga(2)),
     );
 
     let code2 = "\0asm not wasm 2".as_bytes();
@@ -190,11 +188,11 @@ fn revert_tx() {
     );
     assert_eq!(
         bc.borrow().metadata_at(&Address::from(1)).unwrap().balance,
-        U256::from(eth(1) - U256::from(BASE_GAS)),
+        U256::from(giga(1) - U256::from(BASE_GAS)),
     );
     assert_eq!(
         bc.borrow().metadata_at(&Address::from(2)).unwrap().balance,
-        U256::from(eth(2)),
+        U256::from(giga(2)),
     );
 }
 

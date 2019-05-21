@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "bcfs",
     "blockchain-traits",
     "idl-gen",
     "memchain",

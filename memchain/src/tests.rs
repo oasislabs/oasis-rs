@@ -2,19 +2,18 @@
 
 use crate::*;
 
-fn giga(num: u64) -> U256 {
-    U256::from(num * 1_000_000_000)
+fn giga(num: u64) -> u64 {
+    num * 1_000_000_000
 }
 
-extern "C" fn nop_main(_bc: *mut dyn Blockchain) -> u16 {
+extern "C" fn nop_main(_bc: *mut dyn Blockchain<Address>) -> u16 {
     0
 }
 
-extern "C" fn simple_main(bc: *mut dyn Blockchain) -> u16 {
+extern "C" fn simple_main(bc: *mut dyn Blockchain<Address>) -> u16 {
     let bc = unsafe { &mut *bc };
 
-    assert!(bc.value() >= U256::zero());
-    assert_eq!(bc.sender(), Address::from(2));
+    assert_eq!(bc.sender(), &Address::from(2));
 
     bc.emit(vec![[42u8; 32]], vec![0u8; 3]);
 
@@ -25,21 +24,21 @@ extern "C" fn simple_main(bc: *mut dyn Blockchain) -> u16 {
     0
 }
 
-extern "C" fn fail_main(bc: *mut dyn Blockchain) -> u16 {
+extern "C" fn fail_main(bc: *mut dyn Blockchain<Address>) -> u16 {
     let bc = unsafe { &mut *bc };
     bc.err(r"¯\_(ツ)_/¯".as_bytes().to_vec());
     1
 }
 
-extern "C" fn subtx_main(bc: *mut dyn Blockchain) -> u16 {
+extern "C" fn subtx_main(bc: *mut dyn Blockchain<Address>) -> u16 {
     let bc = unsafe { &mut *bc };
     bc.transact(
         Address::default(), /* caller */
         Address::from(1),   /* callee */
-        U256::zero(),
+        0,
         bc.fetch_input(),
-        U256::from(1_000_000),
-        U256::zero(),
+        1_000_000,
+        0,
     );
 
     bc.set(
@@ -55,7 +54,7 @@ extern "C" fn subtx_main(bc: *mut dyn Blockchain) -> u16 {
 }
 
 fn create_bc<'bc>(
-    mains: Vec<Option<extern "C" fn(*mut dyn Blockchain) -> u16>>,
+    mains: Vec<Option<extern "C" fn(*mut dyn Blockchain<Address>) -> u16>>,
 ) -> Rc<RefCell<Memchain<'bc>>> {
     let genesis_state = mains
         .into_iter()
@@ -100,18 +99,18 @@ fn transfer() {
         bc.borrow().metadata_at(&Address::from(2)).unwrap().balance,
         giga(2)
     );
-    let value = U256::from(50);
+    let value = 50;
     bc.borrow_mut().transact(
         Address::from(1),
         Address::from(2),
         value,
         Vec::new(),
-        U256::from(BASE_GAS),
-        U256::from(1),
+        BASE_GAS,
+        1,
     );
     assert_eq!(
         bc.borrow().metadata_at(&Address::from(1)).unwrap().balance,
-        giga(1) - U256::from(BASE_GAS) - value,
+        giga(1) - BASE_GAS - value,
     );
     assert_eq!(
         bc.borrow().metadata_at(&Address::from(2)).unwrap().balance,
@@ -158,10 +157,10 @@ fn simple_tx() {
     bc.borrow_mut().transact(
         Address::from(2),
         Address::from(1),
-        U256::from(50),
+        50,
         vec![1, 2, 3],
-        U256::from(BASE_GAS),
-        U256::zero(),
+        BASE_GAS,
+        0,
     );
     assert_eq!(bc.borrow().fetch_ret(), vec![1, 2, 3, 4]);
 }
@@ -172,14 +171,14 @@ fn revert_tx() {
     bc.borrow_mut().transact(
         Address::from(1),
         Address::from(2),
-        U256::from(10000),
+        10_000,
         Vec::new(),
-        U256::from(BASE_GAS),
-        U256::from(1),
+        BASE_GAS,
+        1,
     );
     assert_eq!(
         bc.borrow().metadata_at(&Address::from(1)).unwrap().balance,
-        giga(1) - U256::from(BASE_GAS),
+        giga(1) - BASE_GAS,
     );
     assert_eq!(
         bc.borrow().metadata_at(&Address::from(2)).unwrap().balance,
@@ -193,10 +192,10 @@ fn subtx_ok() {
     bc.borrow_mut().transact(
         Address::from(1),
         Address::from(2),
-        U256::from(1000),
+        1000,
         vec![1, 2, 3],
-        U256::from(BASE_GAS),
-        U256::zero(),
+        BASE_GAS,
+        0,
     );
 
     let bc_ref = bc.borrow();
@@ -219,10 +218,10 @@ fn subtx_revert() {
     bc.borrow_mut().transact(
         Address::from(1),
         Address::from(2),
-        U256::zero(),
+        0,
         vec![1, 2, 3],
-        U256::from(BASE_GAS),
-        U256::zero(),
+        BASE_GAS,
+        0,
     );
     let bc_ref = bc.borrow();
     assert_eq!(bc_ref.fetch_ret(), vec![]);

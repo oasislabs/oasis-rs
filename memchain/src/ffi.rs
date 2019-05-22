@@ -1,7 +1,7 @@
 use std::{borrow::Cow, cell::RefCell, rc::Rc, slice};
 
 use blockchain_traits::Blockchain;
-use oasis_types::{Address, U256};
+use oasis_types::Address;
 
 use crate::{Account, Memchain};
 
@@ -9,12 +9,12 @@ use crate::{Account, Memchain};
 #[derive(Clone, Copy)]
 pub struct CAccount {
     address: Address,
-    balance: U256,
+    balance: u64,
     code: CSlice<u8>,
     /// Seconds since unix epoch. A value of 0 represents no expiry.
     expiry: u64,
     /// Pointer to callable main function. Set to nullptr if account has no code.
-    main: extern "C" fn(*mut dyn Blockchain) -> u16,
+    main: extern "C" fn(*mut dyn Blockchain<Address>) -> u16,
     storage: CSlice<CStorageItem>,
 }
 
@@ -151,17 +151,17 @@ pub unsafe extern "C" fn memchain_create_block(memchain: *const RefCell<Memchain
 #[no_mangle]
 pub unsafe extern "C" fn memchain_transact(
     memchain: *const RefCell<Memchain>,
-    caller: Address,
-    callee: Address,
-    value: U256,
+    caller: *const Address,
+    callee: *const Address,
+    value: u64,
     input: CSlice<u8>,
-    gas: U256,
-    gas_price: U256,
+    gas: u64,
+    gas_price: u64,
 ) -> ErrNo {
     let memchain = &*memchain;
     memchain.borrow_mut().last_block_mut().transact(
-        caller,
-        callee,
+        *caller,
+        *callee,
         value,
         input.as_slice().to_vec(),
         gas,
@@ -174,7 +174,7 @@ pub unsafe extern "C" fn memchain_transact(
 mod tests {
     use super::*;
 
-    extern "C" fn nop_main(_: *mut dyn Blockchain) -> u16 {
+    extern "C" fn nop_main(_: *mut dyn Blockchain<Address>) -> u16 {
         0
     }
 
@@ -191,7 +191,7 @@ mod tests {
             }];
             let genesis_accounts = vec![CAccount {
                 address: Address::from(1),
-                balance: U256::from(1),
+                balance: 1,
                 code: vec![].as_slice().into(),
                 expiry: 0,
                 main: nop_main,
@@ -206,7 +206,7 @@ mod tests {
             }];
             let account_2 = CAccount {
                 address: Address::from(2),
-                balance: U256::from(2),
+                balance: 2,
                 code: "\0asm this is not wasm".as_bytes().into(),
                 expiry: 0,
                 main: nop_main,

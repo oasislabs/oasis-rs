@@ -1,3 +1,4 @@
+//! An in-memory blockchain with Ethereum-like semantics.
 #![feature(maybe_uninit)]
 
 mod block;
@@ -8,7 +9,7 @@ const BASE_GAS: u64 = 2100;
 use std::{borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
 
 use blockchain_traits::{AccountMetadata, Blockchain, KVStore};
-use oasis_types::{Address, U256};
+use oasis_types::Address;
 
 use block::Block;
 
@@ -59,7 +60,7 @@ impl<'bc> Memchain<'bc> {
     }
 }
 
-impl<'bc> KVStore for Memchain<'bc> {
+impl<'bc> KVStore<Address> for Memchain<'bc> {
     fn contains(&self, addr: &Address, key: &[u8]) -> bool {
         self.last_block().contains(addr, key)
     }
@@ -77,15 +78,15 @@ impl<'bc> KVStore for Memchain<'bc> {
     }
 }
 
-impl<'bc> Blockchain for Memchain<'bc> {
+impl<'bc> Blockchain<Address> for Memchain<'bc> {
     fn transact(
         &mut self,
         caller: Address,
         callee: Address,
-        value: U256,
+        value: u64,
         input: Vec<u8>,
-        gas: U256,
-        gas_price: U256,
+        gas: u64,
+        gas_price: u64,
     ) {
         self.last_block_mut()
             .transact(caller, callee, value, input, gas, gas_price);
@@ -139,22 +140,22 @@ impl<'bc> Blockchain for Memchain<'bc> {
         self.last_block().metadata_at(addr)
     }
 
-    fn value(&self) -> U256 {
+    fn value(&self) -> u64 {
         self.last_block().value()
     }
 
-    fn gas(&self) -> U256 {
+    fn gas(&self) -> u64 {
         self.last_block().gas()
     }
 
-    fn sender(&self) -> Address {
+    fn sender(&self) -> &Address {
         self.last_block().sender()
     }
 }
 
 #[derive(Clone, Default)]
 pub struct Account {
-    pub balance: U256,
+    pub balance: u64,
     pub code: Vec<u8>,
     pub storage: HashMap<Vec<u8>, Vec<u8>>,
     pub expiry: Option<std::time::Duration>,
@@ -162,15 +163,15 @@ pub struct Account {
     /// Callable account entrypoint. `main` takes an pointer to a
     /// `Blockchain` trait object which can be used via FFI bindings
     /// to interact with the memchain. Returns nonzero to revert transaction.
-    pub main: Option<extern "C" fn(*mut dyn Blockchain) -> u16>,
+    pub main: Option<extern "C" fn(*mut dyn Blockchain<Address>) -> u16>,
 }
 
 pub struct Transaction {
     caller: Address,
     callee: Address,
-    value: U256,
+    value: u64,
     input: Vec<u8>,
-    gas: U256,
+    gas: u64,
 }
 
 pub struct Log {
@@ -182,8 +183,8 @@ pub struct Receipt {
     pub outcome: TransactionOutcome,
     pub caller: Address,
     pub callee: Address,
-    pub value: U256,
-    pub gas_used: U256,
+    pub value: u64,
+    pub gas_used: u64,
     pub logs: Vec<Log>,
     pub ret_buf: Vec<u8>,
     pub err_buf: Vec<u8>,

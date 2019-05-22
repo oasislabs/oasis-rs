@@ -1,7 +1,7 @@
 use std::{borrow::Cow, collections::hash_map::Entry};
 
 use blockchain_traits::{AccountMetadata, Blockchain, KVStore};
-use oasis_types::{Address, U256};
+use oasis_types::Address;
 
 use crate::{Account, Log, Receipt, State, Transaction, TransactionOutcome, BASE_GAS};
 
@@ -79,7 +79,7 @@ impl<'bc> Block<'bc> {
     }
 }
 
-impl<'bc> KVStore for Block<'bc> {
+impl<'bc> KVStore<Address> for Block<'bc> {
     fn contains(&self, addr: &Address, key: &[u8]) -> bool {
         self.current_state()
             .get(addr)
@@ -121,15 +121,15 @@ impl<'bc> KVStore for Block<'bc> {
     }
 }
 
-impl<'bc> Blockchain for Block<'bc> {
+impl<'bc> Blockchain<Address> for Block<'bc> {
     fn transact(
         &mut self,
         mut caller: Address,
         callee: Address,
-        value: U256,
+        value: u64,
         input: Vec<u8>,
-        gas: U256,
-        gas_price: U256,
+        gas: u64,
+        gas_price: u64,
     ) {
         let mut receipt = Receipt {
             caller,
@@ -179,12 +179,12 @@ impl<'bc> Blockchain for Block<'bc> {
             None => early_return!(NoCaller),
         };
 
-        if gas < U256::from(BASE_GAS) {
+        if gas < BASE_GAS {
             early_return!(InsufficientGas);
         }
 
         if caller_acct.balance < (gas * gas_price + value) {
-            caller_acct.balance = U256::zero();
+            caller_acct.balance = 0;
             early_return!(InsuffientFunds)
         }
         caller_acct.balance -= gas * gas_price;
@@ -221,7 +221,7 @@ impl<'bc> Blockchain for Block<'bc> {
         }
 
         if let Some(main) = main_fn {
-            let bci: &mut dyn Blockchain = self;
+            let bci: &mut dyn Blockchain<Address> = self;
             let errno = main(unsafe { std::mem::transmute::<_, &'static mut _>(bci) });
             if errno == 0 {
                 // success
@@ -336,21 +336,21 @@ impl<'bc> Blockchain for Block<'bc> {
         })
     }
 
-    fn value(&self) -> U256 {
+    fn value(&self) -> u64 {
         self.pending_transaction()
             .map(|tx| tx.call_stack.last().unwrap().value)
             .expect("No pending transaction.")
     }
 
-    fn gas(&self) -> U256 {
+    fn gas(&self) -> u64 {
         self.pending_transaction()
             .map(|tx| tx.call_stack.last().unwrap().gas)
             .expect("No pending transaction.")
     }
 
-    fn sender(&self) -> Address {
+    fn sender(&self) -> &Address {
         self.pending_transaction()
-            .map(|tx| tx.call_stack.last().unwrap().caller)
+            .map(|tx| &tx.call_stack.last().unwrap().caller)
             .expect("No pending transaction.")
     }
 }

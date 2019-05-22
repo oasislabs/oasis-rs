@@ -36,6 +36,8 @@ impl Address {
     }
 }
 
+impl blockchain_traits::Address for Address {}
+
 impl H256 {
     pub unsafe fn from_raw(bytes: *const u8) -> Self {
         Self::from_slice(std::slice::from_raw_parts(bytes, 32))

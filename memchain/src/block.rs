@@ -1,3 +1,10 @@
+use std::{borrow::Cow, collections::hash_map::Entry};
+
+use blockchain_traits::{AccountMetadata, Blockchain, KVStore};
+use oasis_types::{Address, U256};
+
+use crate::{Account, Log, Receipt, State, Transaction, TransactionOutcome, BASE_GAS};
+
 pub struct Block<'bc> {
     state: State<'bc>,
     pending_transaction: Option<PendingTransaction<'bc>>,
@@ -20,11 +27,29 @@ impl<'bc> PendingTransaction<'bc> {
 }
 
 impl<'bc> Block<'bc> {
+    pub fn new(state: State<'bc>) -> Self {
+        Self {
+            state,
+            pending_transaction: None,
+            completed_transactions: Vec::new(),
+        }
+    }
+
     pub fn logs(&self) -> Vec<&Log> {
         self.completed_transactions
             .iter()
             .flat_map(|tx| tx.logs.iter())
             .collect()
+    }
+
+    pub fn create_account(&mut self, address: Address, account: Account) -> bool {
+        match self.current_state_mut().entry(address) {
+            Entry::Occupied(_) => false,
+            Entry::Vacant(v) => {
+                v.insert(Cow::Owned(account));
+                true
+            }
+        }
     }
 
     fn pending_transaction(&self) -> Option<&PendingTransaction> {
@@ -35,11 +60,22 @@ impl<'bc> Block<'bc> {
         self.pending_transaction.as_mut()
     }
 
-    fn current_state(&self) -> &State<'bc> {
+    pub fn current_state(&self) -> &State<'bc> {
         match &self.pending_transaction {
             Some(ptx) => &ptx.state,
             None => &self.state,
         }
+    }
+
+    fn current_state_mut(&mut self) -> &mut State<'bc> {
+        match &mut self.pending_transaction {
+            Some(ptx) => &mut ptx.state,
+            None => &mut self.state,
+        }
+    }
+
+    pub fn has_pending_transaction(&self) -> bool {
+        self.pending_transaction.is_some()
     }
 }
 

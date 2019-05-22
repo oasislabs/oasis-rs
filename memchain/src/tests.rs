@@ -44,8 +44,8 @@ extern "C" fn subtx_main(bc: *mut dyn Blockchain) -> u16 {
 
     bc.set(
         &Address::default(),
-        "common_key".as_bytes().to_vec(),
-        "uncommon_value".as_bytes().to_vec(),
+        b"common_key".to_vec(),
+        b"uncommon_value".to_vec(),
     );
 
     let mut rv = bc.fetch_ret();
@@ -65,7 +65,7 @@ fn create_bc<'bc>(
             (
                 Address::from(i),
                 Cow::Owned(Account {
-                    balance: U256::from(giga(i as u64)),
+                    balance: giga(i as u64),
                     code: format!("\0asm not wasm {}", i).into_bytes(),
                     storage: {
                         let mut storage = HashMap::new();
@@ -111,11 +111,11 @@ fn transfer() {
     );
     assert_eq!(
         bc.borrow().metadata_at(&Address::from(1)).unwrap().balance,
-        U256::from(giga(1) - U256::from(BASE_GAS) - value),
+        giga(1) - U256::from(BASE_GAS) - value,
     );
     assert_eq!(
         bc.borrow().metadata_at(&Address::from(2)).unwrap().balance,
-        U256::from(giga(2) + value),
+        giga(2) + value,
     );
 }
 
@@ -128,34 +128,25 @@ fn static_account() {
     let addr1 = Address::from(1);
     let addr2 = Address::from(2);
 
-    assert_eq!(
-        bc.borrow().metadata_at(&addr1).unwrap().balance,
-        U256::from(giga(1)),
-    );
+    assert_eq!(bc.borrow().metadata_at(&addr1).unwrap().balance, giga(1),);
 
-    assert_eq!(
-        bc.borrow().metadata_at(&addr2).unwrap().balance,
-        U256::from(giga(2)),
-    );
+    assert_eq!(bc.borrow().metadata_at(&addr2).unwrap().balance, giga(2),);
 
     let code2 = "\0asm not wasm 2".as_bytes();
     assert_eq!(bc.borrow().code_at(&addr2).unwrap(), code2);
     assert_eq!(bc.borrow().code_len(&addr2), code2.len() as u64);
 
-    let common_key = "common_key".as_bytes();
+    let common_key = b"common_key".as_ref();
     assert_eq!(
         bc.borrow().get(&addr1, common_key),
-        Some("common_value".as_bytes())
+        Some(b"common_value".as_ref())
     );
     assert_eq!(
         bc.borrow().get(&addr2, common_key),
-        Some("common_value".as_bytes())
+        Some(b"common_value".as_ref())
     );
 
-    assert_eq!(
-        bc.borrow().get(&addr1, "key_1".as_bytes()),
-        Some("value_1".as_bytes())
-    );
+    assert_eq!(bc.borrow().get(&addr1, b"key_1"), Some(b"value_1".as_ref()));
 
     assert!(bc.borrow().get(&Address::zero(), common_key).is_none());
     assert!(bc.borrow().get(&addr1, &Vec::new()).is_none());
@@ -188,11 +179,11 @@ fn revert_tx() {
     );
     assert_eq!(
         bc.borrow().metadata_at(&Address::from(1)).unwrap().balance,
-        U256::from(giga(1) - U256::from(BASE_GAS)),
+        giga(1) - U256::from(BASE_GAS),
     );
     assert_eq!(
         bc.borrow().metadata_at(&Address::from(2)).unwrap().balance,
-        U256::from(giga(2)),
+        giga(2),
     );
 }
 
@@ -217,8 +208,8 @@ fn subtx_ok() {
     assert_eq!(logs[0].data, vec![0u8; 3]);
 
     assert_eq!(
-        bc_ref.get(&Address::from(2), "common_key".as_bytes()),
-        Some("uncommon_value".as_bytes())
+        bc_ref.get(&Address::from(2), b"common_key"),
+        Some(b"uncommon_value".as_ref())
     );
 }
 
@@ -237,7 +228,7 @@ fn subtx_revert() {
     assert_eq!(bc_ref.fetch_ret(), vec![]);
     assert!(bc_ref.last_block().logs().is_empty());
     assert_eq!(
-        bc_ref.get(&Address::from(2), "common_key".as_bytes()),
-        Some("common_value".as_bytes())
+        bc_ref.get(&Address::from(2), b"common_key"),
+        Some(b"common_value".as_ref())
     );
 }

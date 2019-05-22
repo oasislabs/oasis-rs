@@ -1,15 +1,16 @@
 #![feature(maybe_uninit)]
 
+mod block;
 pub mod ffi;
+
+const BASE_GAS: u64 = 2100;
 
 use std::{borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
 
 use blockchain_traits::{AccountMetadata, Blockchain, KVStore};
 use oasis_types::{Address, U256};
 
-include!("block.rs");
-
-const BASE_GAS: u64 = 2100;
+use block::Block;
 
 type State<'bc> = HashMap<Address, Cow<'bc, Account>>;
 
@@ -24,33 +25,20 @@ impl<'bc> Memchain<'bc> {
     // storing a(n unmoving) pointer to their owning `Memchain`.
     pub fn new(genesis_state: State<'bc>) -> Rc<RefCell<Self>> {
         let rc_bc = Rc::new(RefCell::new(Self { blocks: Vec::new() }));
-
-        {
-            let mut bc = rc_bc.borrow_mut();
-
-            let genesis = bc.create_block();
-            genesis.state = genesis_state;
-
-            bc.create_block(); // Create the first user block.
-        }
-
+        rc_bc.borrow_mut().create_block_with_state(genesis_state);
         rc_bc
     }
 
     pub fn create_block(&mut self) -> &mut Block<'bc> {
         assert!(
-            self.blocks.is_empty() || self.last_block().pending_transaction.is_none(),
+            !self.last_block().has_pending_transaction(),
             "Cannot create new block while there is a pending transaction"
         );
-        self.blocks.push(Block {
-            state: if self.blocks.is_empty() {
-                State::default()
-            } else {
-                self.last_block().state.clone()
-            },
-            pending_transaction: None,
-            completed_transactions: Vec::new(),
-        });
+        self.create_block_with_state(self.last_block().current_state().clone())
+    }
+
+    fn create_block_with_state(&mut self, state: State<'bc>) -> &mut Block<'bc> {
+        self.blocks.push(Block::new(state));
         self.last_block_mut()
     }
 
@@ -67,19 +55,7 @@ impl<'bc> Memchain<'bc> {
     }
 
     fn current_state(&self) -> &State<'bc> {
-        let last_block = self.last_block();
-        match last_block.pending_transaction {
-            Some(ref ptx) => &ptx.state,
-            None => &last_block.state,
-        }
-    }
-
-    fn current_state_mut(&mut self) -> &mut State<'bc> {
-        let last_block = self.last_block_mut();
-        match last_block.pending_transaction {
-            Some(ref mut ptx) => &mut ptx.state,
-            None => &mut last_block.state,
-        }
+        self.last_block().current_state()
     }
 }
 

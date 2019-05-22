@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cell::RefCell, collections::hash_map::Entry, rc::Rc, slice};
+use std::{borrow::Cow, cell::RefCell, rc::Rc, slice};
 
 use blockchain_traits::Blockchain;
 use oasis_types::{Address, U256};
@@ -106,12 +106,13 @@ pub unsafe extern "C" fn memchain_create_account(
 ) -> ErrNo {
     let memchain = &*memchain;
     let mut bc = memchain.borrow_mut();
-    match bc.current_state_mut().entry((*new_account).address) {
-        Entry::Occupied(_) => ErrNo::AccountExists,
-        Entry::Vacant(v) => {
-            v.insert(Cow::Owned(Account::from(*new_account)));
-            ErrNo::Success
-        }
+    if bc
+        .last_block_mut()
+        .create_account((*new_account).address, Account::from(*new_account))
+    {
+        ErrNo::Success
+    } else {
+        ErrNo::AccountExists
     }
 }
 

@@ -6,11 +6,11 @@ fn giga(num: u64) -> u64 {
     num * 1_000_000_000
 }
 
-extern "C" fn nop_main(_bc: *mut dyn Blockchain<Address>) -> u16 {
+extern "C" fn nop_main(_bc: *mut dyn Blockchain<Address = Address>) -> u16 {
     0
 }
 
-extern "C" fn simple_main(bc: *mut dyn Blockchain<Address>) -> u16 {
+extern "C" fn simple_main(bc: *mut dyn Blockchain<Address = Address>) -> u16 {
     let bc = unsafe { &mut *bc };
 
     assert_eq!(bc.sender(), &Address::from(2));
@@ -24,13 +24,13 @@ extern "C" fn simple_main(bc: *mut dyn Blockchain<Address>) -> u16 {
     0
 }
 
-extern "C" fn fail_main(bc: *mut dyn Blockchain<Address>) -> u16 {
+extern "C" fn fail_main(bc: *mut dyn Blockchain<Address = Address>) -> u16 {
     let bc = unsafe { &mut *bc };
     bc.err(r"¯\_(ツ)_/¯".as_bytes().to_vec());
     1
 }
 
-extern "C" fn subtx_main(bc: *mut dyn Blockchain<Address>) -> u16 {
+extern "C" fn subtx_main(bc: *mut dyn Blockchain<Address = Address>) -> u16 {
     let bc = unsafe { &mut *bc };
     bc.transact(
         Address::default(), /* caller */
@@ -54,7 +54,7 @@ extern "C" fn subtx_main(bc: *mut dyn Blockchain<Address>) -> u16 {
 }
 
 fn create_bc<'bc>(
-    mains: Vec<Option<extern "C" fn(*mut dyn Blockchain<Address>) -> u16>>,
+    mains: Vec<Option<extern "C" fn(*mut dyn Blockchain<Address = Address>) -> u16>>,
 ) -> Rc<RefCell<Memchain<'bc>>> {
     let genesis_state = mains
         .into_iter()

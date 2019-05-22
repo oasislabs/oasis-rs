@@ -1,32 +1,33 @@
-pub trait Address: Eq + Copy + Default {}
+pub trait Address: Eq + Copy + Default + AsRef<[u8]> + core::str::FromStr {}
 
 /// Interface for a Blockchain-flavored key-value store.
 /// The semantics of `address = Address::default()` are context-dependent but
 /// generally refer to the address of the current `callee`.
-pub trait KVStore<A: Address> {
+pub trait KVStore {
+    type Address: Address;
     /// Returns whether the key is present in account storage.
-    fn contains(&self, address: &A, key: &[u8]) -> bool;
+    fn contains(&self, address: &Self::Address, key: &[u8]) -> bool;
 
     /// Returns the size of the data stored in the account at `addr` under the given `key`.
-    fn size(&self, address: &A, key: &[u8]) -> u64;
+    fn size(&self, address: &Self::Address, key: &[u8]) -> u64;
 
     /// Returns the data stored in the account at `addr` under the given `key`.
-    fn get(&self, address: &A, key: &[u8]) -> Option<&[u8]>;
+    fn get(&self, address: &Self::Address, key: &[u8]) -> Option<&[u8]>;
 
     /// Sets the data stored in the account at `addr` under the given  `key`.
     /// Overwrites any existing data.
-    fn set(&mut self, address: &A, key: Vec<u8>, value: Vec<u8>);
+    fn set(&mut self, address: &Self::Address, key: Vec<u8>, value: Vec<u8>);
 }
 
-pub trait Blockchain<A: Address>: KVStore<A> {
+pub trait Blockchain: KVStore {
     /// Executes a RPC to `callee` with provided `input` and `gas` computational resources.
     /// `value` tokens will be transferred from the `caller` to the `callee`.
     /// The `caller` is charged `gas * gas_price` for the computation.
     /// A transaction that aborts (panics) will have its changes rolled back.
     fn transact(
         &mut self,
-        caller: A,
-        callee: A,
+        caller: Self::Address,
+        callee: Self::Address,
         value: u64,
         input: Vec<u8>,
         gas: u64,
@@ -56,11 +57,11 @@ pub trait Blockchain<A: Address>: KVStore<A> {
 
     /// Returns the bytecode stored at `addr`, if it exists.
     /// `None` signifies that no account exists at `addr`.
-    fn code_at(&self, addr: &A) -> Option<&[u8]>;
-    fn code_len(&self, addr: &A) -> u64;
+    fn code_at(&self, addr: &Self::Address) -> Option<&[u8]>;
+    fn code_len(&self, addr: &Self::Address) -> u64;
 
     /// Returns the metadata of the account stored at `addr`, if it exists.
-    fn metadata_at(&self, addr: &A) -> Option<AccountMetadata>;
+    fn metadata_at(&self, addr: &Self::Address) -> Option<AccountMetadata>;
 
     /// Returns the value sent with the current transaction.
     /// Panics if there is no pending transaction.
@@ -72,7 +73,7 @@ pub trait Blockchain<A: Address>: KVStore<A> {
 
     /// Returns the address of the sender of the current transaction.
     /// Panics if there is no pending transaction.
-    fn sender(&self) -> &A;
+    fn sender(&self) -> &Self::Address;
 }
 
 pub struct AccountMetadata {

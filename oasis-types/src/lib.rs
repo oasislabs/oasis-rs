@@ -38,6 +38,17 @@ impl Address {
 
 impl blockchain_traits::Address for Address {}
 
+impl std::str::FromStr for Address {
+    type Err = hex::FromHexError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let bytes: Vec<u8> = hex::decode(s)?;
+        if bytes.len() != Self::len_bytes() {
+            return Err(hex::FromHexError::InvalidStringLength);
+        }
+        Ok(Self::from_slice(&bytes))
+    }
+}
+
 impl H256 {
     pub unsafe fn from_raw(bytes: *const u8) -> Self {
         Self::from_slice(std::slice::from_raw_parts(bytes, 32))

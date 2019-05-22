@@ -79,7 +79,9 @@ impl<'bc> Block<'bc> {
     }
 }
 
-impl<'bc> KVStore<Address> for Block<'bc> {
+impl<'bc> KVStore for Block<'bc> {
+    type Address = Address;
+
     fn contains(&self, addr: &Address, key: &[u8]) -> bool {
         self.current_state()
             .get(addr)
@@ -121,7 +123,7 @@ impl<'bc> KVStore<Address> for Block<'bc> {
     }
 }
 
-impl<'bc> Blockchain<Address> for Block<'bc> {
+impl<'bc> Blockchain for Block<'bc> {
     fn transact(
         &mut self,
         mut caller: Address,
@@ -221,7 +223,7 @@ impl<'bc> Blockchain<Address> for Block<'bc> {
         }
 
         if let Some(main) = main_fn {
-            let bci: &mut dyn Blockchain<Address> = self;
+            let bci: &mut dyn Blockchain<Address = Address> = self;
             let errno = main(unsafe { std::mem::transmute::<_, &'static mut _>(bci) });
             if errno == 0 {
                 // success

@@ -14,7 +14,7 @@ pub struct CAccount {
     /// Seconds since unix epoch. A value of 0 represents no expiry.
     expiry: u64,
     /// Pointer to callable main function. Set to nullptr if account has no code.
-    main: extern "C" fn(*mut dyn Blockchain<Address>) -> u16,
+    main: extern "C" fn(*mut dyn Blockchain<Address = Address>) -> u16,
     storage: CSlice<CStorageItem>,
 }
 
@@ -174,7 +174,7 @@ pub unsafe extern "C" fn memchain_transact(
 mod tests {
     use super::*;
 
-    extern "C" fn nop_main(_: *mut dyn Blockchain<Address>) -> u16 {
+    extern "C" fn nop_main(_: *mut dyn Blockchain<Address = Address>) -> u16 {
         0
     }
 

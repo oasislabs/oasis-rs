@@ -60,7 +60,9 @@ impl<'bc> Memchain<'bc> {
     }
 }
 
-impl<'bc> KVStore<Address> for Memchain<'bc> {
+impl<'bc> KVStore for Memchain<'bc> {
+    type Address = Address;
+
     fn contains(&self, addr: &Address, key: &[u8]) -> bool {
         self.last_block().contains(addr, key)
     }
@@ -78,7 +80,7 @@ impl<'bc> KVStore<Address> for Memchain<'bc> {
     }
 }
 
-impl<'bc> Blockchain<Address> for Memchain<'bc> {
+impl<'bc> Blockchain for Memchain<'bc> {
     fn transact(
         &mut self,
         caller: Address,
@@ -163,7 +165,7 @@ pub struct Account {
     /// Callable account entrypoint. `main` takes an pointer to a
     /// `Blockchain` trait object which can be used via FFI bindings
     /// to interact with the memchain. Returns nonzero to revert transaction.
-    pub main: Option<extern "C" fn(*mut dyn Blockchain<Address>) -> u16>,
+    pub main: Option<extern "C" fn(*mut dyn Blockchain<Address = Address>) -> u16>,
 }
 
 pub struct Transaction {

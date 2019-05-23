@@ -8,7 +8,7 @@ type Result<T> = std::result::Result<T, wasi_types::ErrNo>;
 mod bcfs;
 mod file;
 
-pub use bcfs::BCFS;
+pub use crate::bcfs::BCFS;
 
 pub enum MultiAddress<A: blockchain_traits::Address> {
     Native(A),

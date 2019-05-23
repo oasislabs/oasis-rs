@@ -30,7 +30,7 @@ impl<A: Address> BCFS<A> {
     pub fn new(blockchain: Rc<RefCell<dyn Blockchain<Address = A>>>, context_addr: A) -> Self {
         let mut home_dir = PathBuf::from("/opt");
         home_dir.push(blockchain.borrow().name());
-        home_dir.push(context_addr.to_string());
+        home_dir.push(context_addr.path_repr());
 
         Self {
             blockchain,
@@ -325,6 +325,11 @@ impl<A: Address> BCFS<A> {
 
         match comps.next() {
             Some(Component::RootDir) => (),
+            _ => return None,
+        }
+
+        match comps.next() {
+            Some(Component::Normal(c)) if c == "opt" => (),
             _ => return None,
         }
 

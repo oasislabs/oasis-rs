@@ -1,6 +1,5 @@
-pub trait Address:
-    Eq + Copy + Default + AsRef<[u8]> + std::str::FromStr + std::string::ToString
-{
+pub trait Address: Eq + Copy + Default + AsRef<[u8]> + std::str::FromStr {
+    fn path_repr(&self) -> String;
 }
 
 /// Interface for a Blockchain-flavored key-value store.

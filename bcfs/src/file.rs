@@ -32,9 +32,9 @@ pub enum FileKind<A: Address> {
 
 #[derive(Clone, Copy)]
 pub enum FileOffset {
-    Stream, // sockets, for instance
     FromStart(u64),
     FromEnd(i64), // posix allows seeking past end of file
+    Stream,       // sockets, for instance
 }
 
 macro_rules! special_file_ctor {

@@ -36,7 +36,11 @@ impl Address {
     }
 }
 
-impl blockchain_traits::Address for Address {}
+impl blockchain_traits::Address for Address {
+    fn path_repr(&self) -> String {
+        format!("{:x}", self)
+    }
+}
 
 impl std::str::FromStr for Address {
     type Err = hex::FromHexError;

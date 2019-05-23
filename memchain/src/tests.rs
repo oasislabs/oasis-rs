@@ -45,7 +45,8 @@ extern "C" fn subtx_main(bc: *mut dyn Blockchain<Address = Address>) -> u16 {
         &Address::default(),
         b"common_key".to_vec(),
         b"uncommon_value".to_vec(),
-    );
+    )
+    .unwrap();
 
     let mut rv = bc.fetch_ret();
     rv.push(5);
@@ -138,17 +139,23 @@ fn static_account() {
     let common_key = b"common_key".as_ref();
     assert_eq!(
         bc.borrow().get(&addr1, common_key),
-        Some(b"common_value".as_ref())
+        Ok(Some(b"common_value".as_ref()))
     );
     assert_eq!(
         bc.borrow().get(&addr2, common_key),
-        Some(b"common_value".as_ref())
+        Ok(Some(b"common_value".as_ref()))
     );
 
-    assert_eq!(bc.borrow().get(&addr1, b"key_1"), Some(b"value_1".as_ref()));
+    assert_eq!(
+        bc.borrow().get(&addr1, b"key_1"),
+        Ok(Some(b"value_1".as_ref()))
+    );
 
-    assert!(bc.borrow().get(&Address::zero(), common_key).is_none());
-    assert!(bc.borrow().get(&addr1, &Vec::new()).is_none());
+    assert_eq!(
+        bc.borrow().get(&Address::zero(), common_key),
+        Err(KVError::NoAccount)
+    );
+    assert!(bc.borrow().get(&addr1, &Vec::new()).unwrap().is_none());
 }
 
 #[test]
@@ -208,7 +215,7 @@ fn subtx_ok() {
 
     assert_eq!(
         bc_ref.get(&Address::from(2), b"common_key"),
-        Some(b"uncommon_value".as_ref())
+        Ok(Some(b"uncommon_value".as_ref()))
     );
 }
 
@@ -228,6 +235,6 @@ fn subtx_revert() {
     assert!(bc_ref.last_block().logs().is_empty());
     assert_eq!(
         bc_ref.get(&Address::from(2), b"common_key"),
-        Some(b"common_value".as_ref())
+        Ok(Some(b"common_value".as_ref()))
     );
 }

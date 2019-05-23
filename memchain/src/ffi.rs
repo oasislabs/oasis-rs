@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     cell::RefCell,
-    ffi::{c_void, CStr, CString},
+    ffi::{c_void, CStr},
     rc::Rc,
     slice,
 };
@@ -183,6 +183,8 @@ pub unsafe extern "C" fn memchain_transact(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::ffi::CString;
 
     extern "C" fn nop_main(_: *mut dyn Blockchain<Address = Address>) -> u16 {
         0

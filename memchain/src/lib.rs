@@ -8,7 +8,7 @@ const BASE_GAS: u64 = 2100;
 
 use std::{borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
 
-use blockchain_traits::{AccountMetadata, Blockchain, KVStore};
+use blockchain_traits::{AccountMetadata, Blockchain, KVError, KVStore};
 use oasis_types::Address;
 
 use block::Block;
@@ -67,19 +67,19 @@ impl<'bc> Memchain<'bc> {
 impl<'bc> KVStore for Memchain<'bc> {
     type Address = Address;
 
-    fn contains(&self, addr: &Address, key: &[u8]) -> bool {
+    fn contains(&self, addr: &Address, key: &[u8]) -> Result<bool, KVError> {
         self.last_block().contains(addr, key)
     }
 
-    fn size(&self, addr: &Address, key: &[u8]) -> u64 {
-        self.get(addr, key).map(|v| v.len() as u64).unwrap_or(0)
+    fn size(&self, addr: &Address, key: &[u8]) -> Result<u64, KVError> {
+        self.last_block().size(addr, key)
     }
 
-    fn get(&self, addr: &Address, key: &[u8]) -> Option<&[u8]> {
+    fn get(&self, addr: &Address, key: &[u8]) -> Result<Option<&[u8]>, KVError> {
         self.last_block().get(addr, key)
     }
 
-    fn set(&mut self, addr: &Address, key: Vec<u8>, value: Vec<u8>) {
+    fn set(&mut self, addr: &Address, key: Vec<u8>, value: Vec<u8>) -> Result<(), KVError> {
         self.last_block_mut().set(addr, key, value)
     }
 }

@@ -8,17 +8,18 @@ pub trait Address: Eq + Copy + Default + AsRef<[u8]> + std::str::FromStr {
 pub trait KVStore {
     type Address: Address;
     /// Returns whether the key is present in account storage.
-    fn contains(&self, address: &Self::Address, key: &[u8]) -> bool;
+    fn contains(&self, address: &Self::Address, key: &[u8]) -> Result<bool, KVError>;
 
     /// Returns the size of the data stored in the account at `addr` under the given `key`.
-    fn size(&self, address: &Self::Address, key: &[u8]) -> u64;
+    fn size(&self, address: &Self::Address, key: &[u8]) -> Result<u64, KVError>;
 
     /// Returns the data stored in the account at `addr` under the given `key`.
-    fn get(&self, address: &Self::Address, key: &[u8]) -> Option<&[u8]>;
+    fn get(&self, address: &Self::Address, key: &[u8]) -> Result<Option<&[u8]>, KVError>;
 
     /// Sets the data stored in the account at `addr` under the given  `key`.
     /// Overwrites any existing data.
-    fn set(&mut self, address: &Self::Address, key: Vec<u8>, value: Vec<u8>);
+    fn set(&mut self, address: &Self::Address, key: Vec<u8>, value: Vec<u8>)
+        -> Result<(), KVError>;
 }
 
 pub trait Blockchain: KVStore {
@@ -84,4 +85,11 @@ pub trait Blockchain: KVStore {
 pub struct AccountMetadata {
     pub balance: u64,
     pub expiry: Option<std::time::Duration>,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum KVError {
+    InvalidState,
+    NoAccount,
+    NoPermission,
 }

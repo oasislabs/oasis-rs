@@ -1,6 +1,6 @@
 use std::{borrow::Cow, collections::hash_map::Entry};
 
-use blockchain_traits::{AccountMetadata, Blockchain, KVStore};
+use blockchain_traits::{AccountMetadata, Blockchain, KVError, KVStore};
 use oasis_types::Address;
 
 use crate::{Account, Log, Receipt, State, Transaction, TransactionOutcome, BASE_GAS};
@@ -82,44 +82,48 @@ impl<'bc> Block<'bc> {
 impl<'bc> KVStore for Block<'bc> {
     type Address = Address;
 
-    fn contains(&self, addr: &Address, key: &[u8]) -> bool {
-        self.current_state()
-            .get(addr)
-            .map(|acct| acct.storage.contains_key(key))
-            .unwrap_or(false)
+    fn contains(&self, addr: &Address, key: &[u8]) -> Result<bool, KVError> {
+        match self.current_state().get(addr) {
+            Some(acct) => Ok(acct.storage.contains_key(key)),
+            None => Err(KVError::NoAccount),
+        }
     }
 
-    fn size(&self, address: &Address, key: &[u8]) -> u64 {
-        self.get(address, key).map(|v| v.len() as u64).unwrap_or(0)
+    fn size(&self, address: &Address, key: &[u8]) -> Result<u64, KVError> {
+        Ok(self.get(address, key)?.map(|v| v.len() as u64).unwrap_or(0))
     }
 
-    fn get(&self, addr: &Address, key: &[u8]) -> Option<&[u8]> {
-        self.current_state()
-            .get(addr)
-            .and_then(|acct| acct.storage.get(key))
-            .map(Vec::as_slice)
+    fn get(&self, addr: &Address, key: &[u8]) -> Result<Option<&[u8]>, KVError> {
+        match self.current_state().get(addr) {
+            Some(acct) => Ok(acct.storage.get(key).map(Vec::as_slice)),
+            None => Err(KVError::NoAccount),
+        }
     }
 
-    fn set(&mut self, addr: &Address, key: Vec<u8>, value: Vec<u8>) {
-        self.pending_transaction_mut()
-            .and_then(|tx| {
-                let callee = &tx.call_stack.last().unwrap().callee;
-                let mut addr = addr;
-                if addr == &Address::default() {
-                    addr = callee;
-                }
-                if addr == callee {
-                    tx.state.get_mut(&addr)
-                } else {
-                    // capabilities to other services' storage are unimplemented
-                    // would panic if there were a way to catch it?
-                    if !tx.outcome.reverted() {
-                        tx.outcome = TransactionOutcome::InvalidOperation;
-                    }
-                    None
-                }
-            })
-            .map(|acct| acct.to_mut().storage.insert(key, value));
+    fn set(&mut self, addr: &Address, key: Vec<u8>, value: Vec<u8>) -> Result<(), KVError> {
+        let mut ptx = match self.pending_transaction_mut() {
+            Some(ptx) => ptx,
+            None => return Err(KVError::InvalidState),
+        };
+        let callee = &ptx.call_stack.last().unwrap().callee;
+        let mut addr = addr;
+        if addr == &Address::default() {
+            addr = callee;
+        }
+        if addr != callee {
+            if !ptx.outcome.reverted() {
+                ptx.outcome = TransactionOutcome::InvalidOperation;
+            }
+            // capabilities to other services' storage are unimplemented
+            // would panic if there were a way to catch it?
+            return Err(KVError::NoPermission);
+        }
+        let acct = match ptx.state.get_mut(&addr) {
+            Some(acct) => acct,
+            None => return Err(KVError::NoAccount),
+        };
+        acct.to_mut().storage.insert(key, value);
+        Ok(())
     }
 }
 

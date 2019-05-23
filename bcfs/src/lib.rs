@@ -3,25 +3,17 @@
 #[cfg(feature = "ffi")]
 pub mod ffi;
 
-use std::{
-    cell::{Cell, RefCell},
-    convert::TryFrom,
-    io::{IoSlice, IoSliceMut, Read, Write},
-    path::{Path, PathBuf},
-    rc::Rc,
-};
+type Result<T> = std::result::Result<T, wasi_types::ErrNo>;
 
-use blockchain_traits::Blockchain;
-use oasis_types::Address;
-use wasi_types::{
-    ErrNo, Fd, FdFlags, FdStat, FileDelta, FileSize, FileStat, FileType, Inode, OpenFlags, Rights,
-    Whence,
-};
+mod bcfs;
+mod file;
 
-type Result<T> = std::result::Result<T, ErrNo>;
+pub use bcfs::BCFS;
 
-include!("bcfs.rs");
-include!("file.rs");
+pub enum MultiAddress<A: blockchain_traits::Address> {
+    Native(A),
+    Foreign(String),
+}
 
 #[cfg(test)]
 mod tests;

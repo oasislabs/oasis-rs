@@ -1,13 +1,37 @@
-pub struct BCFS {
-    blockchain: Rc<RefCell<dyn Blockchain>>,
-    files: Vec<Option<Filelike>>,
+use std::{
+    cell::{Cell, RefCell},
+    convert::TryFrom,
+    io::{IoSlice, IoSliceMut, Read, Write},
+    path::{Path, PathBuf},
+    rc::Rc,
+};
+
+use blockchain_traits::{Address, Blockchain};
+use wasi_types::{
+    ErrNo, Fd, FdFlags, FdStat, FileDelta, FileSize, FileStat, FileType, Inode, OpenFlags, Rights,
+    Whence,
+};
+
+use crate::{
+    file::{File, FileKind, FileOffset, Filelike},
+    MultiAddress, Result,
+};
+
+pub struct BCFS<A: Address> {
+    blockchain: Rc<RefCell<dyn Blockchain<Address = A>>>,
+    files: Vec<Option<Filelike<A>>>,
+    context_addr: A,
     home_dir: PathBuf,
 }
 
-impl BCFS {
+impl<A: Address> BCFS<A> {
     /// Creates a new Blockchain FS with a backing `Blockchain` and hex stringified
     /// owner address.
-    pub fn new(blockchain: Rc<RefCell<dyn Blockchain>>, owner_addr: Address) -> Self {
+    pub fn new(blockchain: Rc<RefCell<dyn Blockchain<Address = A>>>, context_addr: A) -> Self {
+        let mut home_dir = PathBuf::from("/opt");
+        home_dir.push(blockchain.borrow().name());
+        home_dir.push(context_addr.to_string());
+
         Self {
             blockchain,
             files: vec![
@@ -16,7 +40,8 @@ impl BCFS {
                 Some(Filelike::File(File::stderr())),
                 Some(Filelike::File(File::log())),
             ],
-            home_dir: Path::new("/").join(hex::encode(&owner_addr)),
+            home_dir,
+            context_addr,
         }
     }
 
@@ -41,12 +66,12 @@ impl BCFS {
             {
                 return Err(ErrNo::Inval);
             }
-            return Ok(File::LOG_DESCRIPTOR.into());
+            return Ok(File::<A>::LOG_DESCRIPTOR.into());
         }
 
         let rel_path = path.strip_prefix(&self.home_dir).unwrap_or(path);
 
-        if let Some(addr) = self.is_code_path(rel_path) {
+        if let Some(svc_file_kind) = self.is_service_path(rel_path) {
             if open_flags.intersects(OpenFlags::CREATE | OpenFlags::EXCL) {
                 return Err(ErrNo::Exist);
             }
@@ -57,7 +82,7 @@ impl BCFS {
             }
             let fd = self.alloc_fd()?;
             self.files.push(Some(Filelike::File(File {
-                kind: FileKind::Bytecode { addr },
+                kind: svc_file_kind,
                 offset: FileOffset::FromStart(0),
                 flags: fd_flags,
                 metadata: Cell::new(None),
@@ -75,7 +100,7 @@ impl BCFS {
         let file_exists = self
             .blockchain
             .borrow()
-            .contains(&Address::default(), Self::key_for_path(rel_path)?);
+            .contains(&Default::default(), Self::key_for_path(rel_path)?);
 
         if file_exists && open_flags.contains(OpenFlags::EXCL) {
             return Err(ErrNo::Exist);
@@ -128,6 +153,9 @@ impl BCFS {
 
     pub fn seek(&mut self, fd: Fd, offset: FileDelta, whence: Whence) -> Result<FileSize> {
         let cur_offset = self.file_mut(fd)?.offset;
+        if let FileOffset::Stream = cur_offset {
+            return Err(ErrNo::SPipe);
+        }
         match whence {
             Whence::Current => match cur_offset {
                 FileOffset::FromStart(start_offset) => {
@@ -148,6 +176,7 @@ impl BCFS {
                     file.offset = FileOffset::FromStart(abs_offset);
                     Ok(abs_offset)
                 }
+                _ => unreachable!("Checked above"),
             },
             Whence::Start => {
                 if offset < 0 {
@@ -188,14 +217,26 @@ impl BCFS {
         let (file_size, inode) = match &file.kind {
             FileKind::Stdin => (self.blockchain.borrow().input_len(), u32::from(fd).into()),
             FileKind::Stdout | FileKind::Stderr | FileKind::Log => return Err(ErrNo::Inval),
-            FileKind::Bytecode { addr } => (
+            FileKind::Bytecode {
+                addr: MultiAddress::Native(addr),
+            } => (
                 self.blockchain.borrow().code_len(addr),
-                Self::hash_inode(addr.as_ref()),
+                Self::hash_inode(addr.as_ref(), "bytecode"),
             ),
+            FileKind::Balance {
+                addr: MultiAddress::Native(addr),
+            } => (
+                std::mem::size_of::<u64>() as u64,
+                Self::hash_inode(addr.as_ref(), "balance"),
+            ),
+            FileKind::ServiceSock {
+                addr: MultiAddress::Native(addr),
+            } => (0, Self::hash_inode(addr.as_ref(), "sock")),
             FileKind::Regular { key } => (
-                self.blockchain.borrow().size(&Address::default(), key),
-                Self::hash_inode(key),
+                self.blockchain.borrow().size(&Default::default(), key),
+                Self::hash_inode(key, ""),
             ),
+            _ => return Err(ErrNo::Fault),
         };
         let meta = FileStat {
             device: 0u64.into(),
@@ -241,8 +282,8 @@ impl BCFS {
     }
 }
 
-impl BCFS {
-    fn file(&self, fd: Fd) -> Result<&File> {
+impl<A: Address> BCFS<A> {
+    fn file(&self, fd: Fd) -> Result<&File<A>> {
         match self
             .files
             .get(usize::try_from(u64::from(fd)).map_err(|_| ErrNo::BadF)?)
@@ -252,7 +293,7 @@ impl BCFS {
         }
     }
 
-    fn file_mut(&mut self, fd: Fd) -> Result<&mut File> {
+    fn file_mut(&mut self, fd: Fd) -> Result<&mut File<A>> {
         match self
             .files
             .get_mut(usize::try_from(u64::from(fd)).map_err(|_| ErrNo::BadF)?)
@@ -262,21 +303,22 @@ impl BCFS {
         }
     }
 
-    /// Returns S
-    fn is_code_path(&self, path: &Path) -> Option<Address> {
+    fn is_service_path(&self, path: &Path) -> Option<FileKind<A>> {
         use std::path::Component;
 
         if path == Path::new("code") {
-            return Some(Address::from_slice(
-                &hex::decode(
-                    self.home_dir
-                        .file_name()
-                        .expect("`home_dir` is constructed from `owner_addr`")
-                        .to_str()
-                        .expect("Runtime should have passed in a hex string for `owner_addr`"),
-                )
-                .expect("`home_dir` was constructed from `hex::encode`"),
-            ));
+            return Some(FileKind::Bytecode {
+                addr: MultiAddress::Native(self.context_addr),
+            });
+        } else if path == Path::new("balance") {
+            return Some(FileKind::Balance {
+                addr: MultiAddress::Native(self.context_addr),
+            });
+        } else if path == Path::new("sock") {
+            // why would a service call itself?
+            return Some(FileKind::ServiceSock {
+                addr: MultiAddress::Native(self.context_addr),
+            });
         }
 
         let mut comps = path.components();
@@ -286,16 +328,29 @@ impl BCFS {
             _ => return None,
         }
 
-        let addr = match hex::decode(match comps.next().map(|c| c.as_os_str().to_str()) {
-            Some(Some(maybe_addr)) => maybe_addr,
+        match comps.next() {
+            Some(Component::Normal(c)) if c == self.blockchain.borrow().name() => (),
             _ => return None,
-        }) {
-            Ok(addr) if addr.len() == Address::len_bytes() => Address::from_slice(&addr),
+        }
+
+        let addr = match comps
+            .next()
+            .and_then(|c| c.as_os_str().to_str())
+            .map(A::from_str)
+        {
+            Some(Ok(addr)) => MultiAddress::Native(addr),
+            _ => return None,
+        };
+
+        let svc_file_kind = match comps.next() {
+            Some(Component::Normal(c)) if c == "code" => FileKind::Bytecode { addr },
+            Some(Component::Normal(c)) if c == "balance" => FileKind::Balance { addr },
+            Some(Component::Normal(c)) if c == "sock" => FileKind::ServiceSock { addr },
             _ => return None,
         };
 
         match comps.next() {
-            None => Some(addr),
+            None => Some(svc_file_kind),
             _ => None,
         }
     }
@@ -319,13 +374,15 @@ impl BCFS {
         path.to_str().ok_or(ErrNo::Inval).map(str::as_bytes)
     }
 
-    fn hash_inode(bytes: &[u8]) -> Inode {
+    fn hash_inode(bytes: &[u8], disambiguator: &str) -> Inode {
         use std::hash::Hasher;
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         hasher.write(bytes);
+        hasher.write(disambiguator.as_bytes());
         hasher.finish().into()
     }
 
+    /// Returns (bytes_read, new_offset).
     fn do_pread_vectored(
         &self,
         fd: Fd,
@@ -333,6 +390,14 @@ impl BCFS {
         offset: Option<FileOffset>,
     ) -> Result<(usize, FileOffset)> {
         let file = self.file(fd)?;
+
+        if let FileOffset::Stream = file.offset {
+            match offset {
+                Some(FileOffset::FromStart(0)) | None => (),
+                _ => return Err(ErrNo::SPipe),
+            }
+        }
+
         let read_offset = offset.unwrap_or_else(|| file.offset);
         match read_offset {
             FileOffset::FromEnd(0) => return Ok((0, file.offset)),
@@ -341,7 +406,7 @@ impl BCFS {
             _ => (),
         }
 
-        match &file.kind {
+        let (nbytes, mut new_offset) = match &file.kind {
             FileKind::Stdout | FileKind::Stderr | FileKind::Log => Err(ErrNo::Inval),
             FileKind::Stdin => {
                 let nbytes = self
@@ -352,24 +417,43 @@ impl BCFS {
                     .read_vectored(bufs)?;
                 Ok((nbytes, FileOffset::FromStart(nbytes as u64)))
             }
-            FileKind::Bytecode { addr } => match self.blockchain.borrow().code_at(addr) {
+            FileKind::Bytecode {
+                addr: crate::MultiAddress::Native(addr),
+            } => match self.blockchain.borrow().code_at(addr) {
                 Some(code) => {
                     let nbytes = code.to_vec().as_slice().read_vectored(bufs)?;
                     Ok((nbytes, FileOffset::FromStart(nbytes as u64)))
                 }
                 None => Err(ErrNo::NoEnt),
             },
+            FileKind::Balance {
+                addr: crate::MultiAddress::Native(addr),
+            } => match self.blockchain.borrow().metadata_at(addr) {
+                Some(meta) => {
+                    let nbytes = meta.balance.to_le_bytes().as_ref().read_vectored(bufs)?;
+                    Ok((nbytes, FileOffset::FromStart(nbytes as u64)))
+                }
+                None => Err(ErrNo::NoEnt),
+            },
             FileKind::Regular { key } => {
                 let bc = self.blockchain.borrow();
-                let mut bytes = match bc.get(&Address::default(), key) {
+                let mut bytes = match bc.get(&Default::default(), key) {
                     Some(bytes) => bytes,
                     None => return Err(ErrNo::NoEnt),
                 };
                 Ok((bytes.read_vectored(bufs)?, FileOffset::FromEnd(0)))
             }
+            _ => return Err(ErrNo::Fault),
+        }?;
+
+        if let FileOffset::Stream = file.offset {
+            new_offset = file.offset;
         }
+
+        Ok((nbytes, new_offset))
     }
 
+    /// Returns (bytes_written, new_offset).
     fn do_pwrite_vectored(
         &self,
         fd: Fd,
@@ -379,7 +463,12 @@ impl BCFS {
         let file = self.file(fd)?;
         let write_offset = offset.unwrap_or_else(|| file.offset);
         match file.kind {
-            FileKind::Stdin | FileKind::Bytecode { .. } => return Err(ErrNo::Inval),
+            FileKind::ServiceSock {
+                addr: MultiAddress::Foreign(_),
+            } => return Err(ErrNo::NotSup),
+            FileKind::Stdin | FileKind::Bytecode { .. } | FileKind::Balance { .. } => {
+                return Err(ErrNo::Inval)
+            }
             _ => (),
         };
 
@@ -419,13 +508,28 @@ impl BCFS {
                 }
                 self.blockchain
                     .borrow_mut()
-                    .set(&Address::default(), key.to_vec(), cat_buf);
+                    .set(&Default::default(), key.to_vec(), cat_buf);
                 match write_offset {
                     FileOffset::FromStart(o) => FileOffset::FromStart(o + nbytes as u64),
                     FileOffset::FromEnd(_) => FileOffset::FromEnd(0),
+                    FileOffset::Stream => FileOffset::Stream,
                 }
             }
-            FileKind::Stdin | FileKind::Bytecode { .. } => unreachable!("checked above"),
+            FileKind::ServiceSock {
+                addr: MultiAddress::Native(callee),
+            } => {
+                // TODO: how will wasi even expose value/gas/gas_price args to new process?
+                self.blockchain.borrow_mut().transact(
+                    self.context_addr,
+                    *callee,
+                    0,       /* value */
+                    cat_buf, /* input */
+                    0,       /* gas */
+                    0,       /* gas_price */
+                );
+                FileOffset::Stream
+            }
+            _ => unreachable!("checked above"),
         };
         Ok((nbytes, new_offset))
     }

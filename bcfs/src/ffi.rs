@@ -15,21 +15,21 @@ use crate::BCFS;
 
 #[no_mangle]
 pub unsafe extern "C" fn create_bcfs(
-    blockchain: *mut Rc<RefCell<dyn Blockchain>>,
+    blockchain: *mut Rc<RefCell<dyn Blockchain<Address = Address>>>,
     owner_addr: Address,
-) -> *mut BCFS {
+) -> *mut BCFS<Address> {
     let bc = &*blockchain;
     Box::into_raw(Box::new(BCFS::new(Rc::clone(bc), owner_addr)))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn destroy_bcfs(bcfs: *mut BCFS) {
+pub unsafe extern "C" fn destroy_bcfs(bcfs: *mut BCFS<Address>) {
     std::mem::drop(Box::from_raw(bcfs))
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn open(
-    bcfs: *mut BCFS,
+    bcfs: *mut BCFS<Address>,
     path: &CStr,
     open_flags: OpenFlags,
     fd_flags: FdFlags,
@@ -50,7 +50,7 @@ pub unsafe extern "C" fn open(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn close(bcfs: *mut BCFS, fd: Fd) -> ErrNo {
+pub unsafe extern "C" fn close(bcfs: *mut BCFS<Address>, fd: Fd) -> ErrNo {
     let bcfs = Box::leak(Box::from_raw(bcfs));
     match bcfs.close(fd) {
         Ok(_) => ErrNo::Success,
@@ -60,7 +60,7 @@ pub unsafe extern "C" fn close(bcfs: *mut BCFS, fd: Fd) -> ErrNo {
 
 #[no_mangle]
 pub unsafe extern "C" fn seek(
-    bcfs: *mut BCFS,
+    bcfs: *mut BCFS<Address>,
     fd: Fd,
     offset: FileDelta,
     whence: Whence,
@@ -77,7 +77,7 @@ pub unsafe extern "C" fn seek(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn fdstat(bcfs: *mut BCFS, fd: Fd, p_fdstat: *mut FdStat) -> ErrNo {
+pub unsafe extern "C" fn fdstat(bcfs: *mut BCFS<Address>, fd: Fd, p_fdstat: *mut FdStat) -> ErrNo {
     let bcfs = Box::leak(Box::from_raw(bcfs));
     match bcfs.fdstat(fd) {
         Ok(fdstat) => {
@@ -89,7 +89,11 @@ pub unsafe extern "C" fn fdstat(bcfs: *mut BCFS, fd: Fd, p_fdstat: *mut FdStat) 
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn filestat(bcfs: *mut BCFS, fd: Fd, p_filestat: *mut FileStat) -> ErrNo {
+pub unsafe extern "C" fn filestat(
+    bcfs: *mut BCFS<Address>,
+    fd: Fd,
+    p_filestat: *mut FileStat,
+) -> ErrNo {
     let bcfs = Box::leak(Box::from_raw(bcfs));
     match bcfs.filestat(fd) {
         Ok(filestat) => {
@@ -112,8 +116,8 @@ pub struct IoVecMut {
     pub len: usize,
 }
 
-unsafe fn do_read<F: FnOnce(&mut BCFS, &mut [IoSliceMut]) -> crate::Result<usize>>(
-    bcfs: *mut BCFS,
+unsafe fn do_read<F: FnOnce(&mut BCFS<Address>, &mut [IoSliceMut]) -> crate::Result<usize>>(
+    bcfs: *mut BCFS<Address>,
     iovs: *mut IoVecMut,
     num_iovs: usize,
     p_nbytes: *mut FileSize,
@@ -135,7 +139,7 @@ unsafe fn do_read<F: FnOnce(&mut BCFS, &mut [IoSliceMut]) -> crate::Result<usize
 
 #[no_mangle]
 pub unsafe extern "C" fn read_vectored(
-    bcfs: *mut BCFS,
+    bcfs: *mut BCFS<Address>,
     fd: Fd,
     iovs: *mut IoVecMut,
     num_iovs: usize,
@@ -148,7 +152,7 @@ pub unsafe extern "C" fn read_vectored(
 
 #[no_mangle]
 pub unsafe extern "C" fn pread_vectored(
-    bcfs: *mut BCFS,
+    bcfs: *mut BCFS<Address>,
     fd: Fd,
     iovs: *mut IoVecMut,
     num_iovs: usize,
@@ -160,8 +164,8 @@ pub unsafe extern "C" fn pread_vectored(
     })
 }
 
-unsafe fn do_write<F: FnOnce(&mut BCFS, &[IoSlice]) -> crate::Result<usize>>(
-    bcfs: *mut BCFS,
+unsafe fn do_write<F: FnOnce(&mut BCFS<Address>, &[IoSlice]) -> crate::Result<usize>>(
+    bcfs: *mut BCFS<Address>,
     iovs: *const IoVec,
     num_iovs: usize,
     p_nbytes: *mut FileSize,
@@ -183,7 +187,7 @@ unsafe fn do_write<F: FnOnce(&mut BCFS, &[IoSlice]) -> crate::Result<usize>>(
 
 #[no_mangle]
 pub unsafe extern "C" fn write_vectored(
-    bcfs: *mut BCFS,
+    bcfs: *mut BCFS<Address>,
     fd: Fd,
     iovs: *const IoVec,
     num_iovs: usize,
@@ -196,7 +200,7 @@ pub unsafe extern "C" fn write_vectored(
 
 #[no_mangle]
 pub unsafe extern "C" fn pwrite_vectored(
-    bcfs: *mut BCFS,
+    bcfs: *mut BCFS<Address>,
     fd: Fd,
     iovs: *const IoVec,
     num_iovs: usize,

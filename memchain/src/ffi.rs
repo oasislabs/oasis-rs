@@ -1,4 +1,10 @@
-use std::{borrow::Cow, cell::RefCell, rc::Rc, slice};
+use std::{
+    borrow::Cow,
+    cell::RefCell,
+    ffi::{c_void, CStr, CString},
+    rc::Rc,
+    slice,
+};
 
 use blockchain_traits::Blockchain;
 use oasis_types::Address;
@@ -62,7 +68,7 @@ impl From<CAccount> for Account {
             } else {
                 Some(std::time::Duration::from_secs(ca.expiry))
             },
-            main: if (ca.main as *const std::ffi::c_void).is_null() {
+            main: if (ca.main as *const c_void).is_null() {
                 None
             } else {
                 Some(ca.main)
@@ -83,6 +89,7 @@ pub enum ErrNo {
 
 #[no_mangle]
 pub unsafe extern "C" fn memchain_create(
+    name: *const CStr,
     genesis_accounts: CSlice<CAccount>,
 ) -> *const RefCell<Memchain<'static>> {
     let genesis_state = genesis_accounts
@@ -90,7 +97,10 @@ pub unsafe extern "C" fn memchain_create(
         .iter()
         .map(|ca| (ca.address, Cow::Owned(Account::from(*ca))))
         .collect();
-    Rc::into_raw(Memchain::new(genesis_state))
+    Rc::into_raw(Memchain::new(
+        (*name).to_str().unwrap().to_string(),
+        genesis_state,
+    ))
 }
 
 #[no_mangle]
@@ -198,7 +208,10 @@ mod tests {
                 storage: account_1_storage.as_slice().into(),
             }];
 
-            let handle = memchain_create(genesis_accounts.as_slice().into());
+            let handle = memchain_create(
+                CString::new("memchain").unwrap().as_c_str(),
+                genesis_accounts.as_slice().into(),
+            );
 
             let account_2_storage = vec![CStorageItem {
                 key: key.into(),

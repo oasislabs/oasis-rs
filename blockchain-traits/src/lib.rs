@@ -1,4 +1,7 @@
-pub trait Address: Eq + Copy + Default + AsRef<[u8]> + core::str::FromStr {}
+pub trait Address:
+    Eq + Copy + Default + AsRef<[u8]> + std::str::FromStr + std::string::ToString
+{
+}
 
 /// Interface for a Blockchain-flavored key-value store.
 /// The semantics of `address = Address::default()` are context-dependent but
@@ -20,6 +23,9 @@ pub trait KVStore {
 }
 
 pub trait Blockchain: KVStore {
+    /// Returns the name of this blockchain.
+    fn name(&self) -> &str;
+
     /// Executes a RPC to `callee` with provided `input` and `gas` computational resources.
     /// `value` tokens will be transferred from the `caller` to the `callee`.
     /// The `caller` is charged `gas * gas_price` for the computation.

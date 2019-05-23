@@ -124,6 +124,10 @@ impl<'bc> KVStore for Block<'bc> {
 }
 
 impl<'bc> Blockchain for Block<'bc> {
+    fn name(&self) -> &str {
+        "memchain"
+    }
+
     fn transact(
         &mut self,
         mut caller: Address,

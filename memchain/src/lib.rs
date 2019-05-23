@@ -16,6 +16,7 @@ use block::Block;
 type State<'bc> = HashMap<Address, Cow<'bc, Account>>;
 
 pub struct Memchain<'bc> {
+    name: String,
     blocks: Vec<Block<'bc>>, // A cleaner implementation is as an intrusive linked list.
 }
 
@@ -24,8 +25,11 @@ impl<'bc> Memchain<'bc> {
     // `Memchain` from being moved post-construction when wrapped in
     // these structs anyway. This allows blocks to refer to each other by
     // storing a(n unmoving) pointer to their owning `Memchain`.
-    pub fn new(genesis_state: State<'bc>) -> Rc<RefCell<Self>> {
-        let rc_bc = Rc::new(RefCell::new(Self { blocks: Vec::new() }));
+    pub fn new(name: String, genesis_state: State<'bc>) -> Rc<RefCell<Self>> {
+        let rc_bc = Rc::new(RefCell::new(Self {
+            name,
+            blocks: Vec::new(),
+        }));
         rc_bc.borrow_mut().create_block_with_state(genesis_state);
         rc_bc
     }
@@ -81,6 +85,10 @@ impl<'bc> KVStore for Memchain<'bc> {
 }
 
 impl<'bc> Blockchain for Memchain<'bc> {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
     fn transact(
         &mut self,
         caller: Address,

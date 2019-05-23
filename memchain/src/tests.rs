@@ -85,7 +85,7 @@ fn create_bc<'bc>(
         })
         .collect();
 
-    Memchain::new(genesis_state)
+    Memchain::new("memchain".to_string(), genesis_state)
 }
 
 #[test]

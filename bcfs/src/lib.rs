@@ -10,7 +10,7 @@ mod file;
 
 pub use crate::bcfs::BCFS;
 
-pub enum MultiAddress<A: blockchain_traits::Address> {
+pub enum AnyAddress<A: blockchain_traits::Address> {
     Native(A),
     Foreign(String),
 }

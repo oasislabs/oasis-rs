@@ -3,7 +3,7 @@ use std::cell::Cell;
 use blockchain_traits::Address;
 use wasi_types::{FdFlags, FileStat};
 
-use crate::MultiAddress;
+use crate::AnyAddress;
 
 pub struct File<A: Address> {
     pub kind: FileKind<A>,
@@ -25,9 +25,9 @@ pub enum FileKind<A: Address> {
     Stderr,
     Log,
     Regular { key: Vec<u8> },
-    ServiceSock { addr: MultiAddress<A> },
-    Bytecode { addr: MultiAddress<A> },
-    Balance { addr: MultiAddress<A> },
+    ServiceSock { addr: AnyAddress<A> },
+    Bytecode { addr: AnyAddress<A> },
+    Balance { addr: AnyAddress<A> },
 }
 
 #[derive(Clone, Copy, Debug)]

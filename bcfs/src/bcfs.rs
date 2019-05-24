@@ -13,7 +13,7 @@ use wasi_types::{
 
 use crate::{
     file::{File, FileKind, FileOffset, Filelike},
-    MultiAddress, Result,
+    AnyAddress, Result,
 };
 
 pub struct BCFS<A: Address> {
@@ -220,19 +220,19 @@ impl<A: Address> BCFS<A> {
             FileKind::Stdin => (blockchain.input_len(), u32::from(fd).into()),
             FileKind::Stdout | FileKind::Stderr | FileKind::Log => return Err(ErrNo::Inval),
             FileKind::Bytecode {
-                addr: MultiAddress::Native(addr),
+                addr: AnyAddress::Native(addr),
             } => (
                 blockchain.code_len(addr),
                 Self::hash_inode(addr.as_ref(), "bytecode"),
             ),
             FileKind::Balance {
-                addr: MultiAddress::Native(addr),
+                addr: AnyAddress::Native(addr),
             } => (
                 std::mem::size_of::<u64>() as u64,
                 Self::hash_inode(addr.as_ref(), "balance"),
             ),
             FileKind::ServiceSock {
-                addr: MultiAddress::Native(addr),
+                addr: AnyAddress::Native(addr),
             } => (0, Self::hash_inode(addr.as_ref(), "sock")),
             FileKind::Regular { key } => (
                 blockchain
@@ -345,16 +345,16 @@ impl<A: Address> BCFS<A> {
 
         if path == Path::new("code") {
             return Some(FileKind::Bytecode {
-                addr: MultiAddress::Native(self.context_addr),
+                addr: AnyAddress::Native(self.context_addr),
             });
         } else if path == Path::new("balance") {
             return Some(FileKind::Balance {
-                addr: MultiAddress::Native(self.context_addr),
+                addr: AnyAddress::Native(self.context_addr),
             });
         } else if path == Path::new("sock") {
             // why would a service call itself?
             return Some(FileKind::ServiceSock {
-                addr: MultiAddress::Native(self.context_addr),
+                addr: AnyAddress::Native(self.context_addr),
             });
         }
 
@@ -380,7 +380,7 @@ impl<A: Address> BCFS<A> {
             .and_then(|c| c.as_os_str().to_str())
             .map(A::from_str)
         {
-            Some(Ok(addr)) => MultiAddress::Native(addr),
+            Some(Ok(addr)) => AnyAddress::Native(addr),
             _ => return None,
         };
 
@@ -455,13 +455,13 @@ impl<A: Address> BCFS<A> {
             FileKind::Stdout | FileKind::Stderr | FileKind::Log => return Err(ErrNo::Inval),
             FileKind::Stdin => blockchain.fetch_input().as_slice().read_vectored(bufs)?,
             FileKind::Bytecode {
-                addr: crate::MultiAddress::Native(addr),
+                addr: crate::AnyAddress::Native(addr),
             } => match blockchain.code_at(addr) {
                 Some(code) => code.to_vec().as_slice().read_vectored(bufs)?,
                 None => return Err(ErrNo::NoEnt),
             },
             FileKind::Balance {
-                addr: crate::MultiAddress::Native(addr),
+                addr: crate::AnyAddress::Native(addr),
             } => match blockchain.metadata_at(addr) {
                 Some(meta) => meta.balance.to_le_bytes().as_ref().read_vectored(bufs)?,
                 None => return Err(ErrNo::NoEnt),
@@ -499,7 +499,7 @@ impl<A: Address> BCFS<A> {
         let write_offset = offset.unwrap_or(file.offset);
         match file.kind {
             FileKind::ServiceSock {
-                addr: MultiAddress::Foreign(_),
+                addr: AnyAddress::Foreign(_),
             } => return Err(ErrNo::NotSup),
             FileKind::Stdin | FileKind::Bytecode { .. } | FileKind::Balance { .. } => {
                 return Err(ErrNo::Inval)
@@ -562,7 +562,7 @@ impl<A: Address> BCFS<A> {
                 }
             }
             FileKind::ServiceSock {
-                addr: MultiAddress::Native(callee),
+                addr: AnyAddress::Native(callee),
             } => {
                 // TODO(#83)
                 blockchain.transact(

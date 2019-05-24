@@ -4,9 +4,9 @@
 mod block;
 pub mod ffi;
 
-const BASE_GAS: u64 = 2100;
+pub const BASE_GAS: u64 = 2100;
 
-use std::{borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
+use std::{borrow::Cow, collections::HashMap};
 
 use blockchain_traits::{AccountMetadata, Blockchain, KVError, KVStore};
 use oasis_types::Address;
@@ -21,17 +21,13 @@ pub struct Memchain<'bc> {
 }
 
 impl<'bc> Memchain<'bc> {
-    // This function returns `Rc<RefCell<_>>` because it keeps the inner
-    // `Memchain` from being moved post-construction when wrapped in
-    // these structs anyway. This allows blocks to refer to each other by
-    // storing a(n unmoving) pointer to their owning `Memchain`.
-    pub fn new(name: String, genesis_state: State<'bc>) -> Rc<RefCell<Self>> {
-        let rc_bc = Rc::new(RefCell::new(Self {
+    pub fn new(name: String, genesis_state: State<'bc>) -> Self {
+        let mut bc = Self {
             name,
             blocks: Vec::new(),
-        }));
-        rc_bc.borrow_mut().create_block_with_state(genesis_state);
-        rc_bc
+        };
+        bc.create_block_with_state(genesis_state);
+        bc
     }
 
     pub fn create_block(&mut self) -> &mut Block<'bc> {

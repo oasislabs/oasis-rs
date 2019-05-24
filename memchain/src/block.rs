@@ -77,13 +77,25 @@ impl<'bc> Block<'bc> {
     pub fn has_pending_transaction(&self) -> bool {
         self.pending_transaction.is_some()
     }
+
+    fn parse_addr<'a>(
+        &'a self,
+        addr: &'a <Self as KVStore>::Address,
+    ) -> &'a <Self as KVStore>::Address {
+        match self.pending_transaction() {
+            Some(ptx) if addr == &<Self as KVStore>::Address::default() => {
+                &ptx.call_stack.last().unwrap().callee
+            }
+            _ => addr,
+        }
+    }
 }
 
 impl<'bc> KVStore for Block<'bc> {
     type Address = Address;
 
     fn contains(&self, addr: &Address, key: &[u8]) -> Result<bool, KVError> {
-        match self.current_state().get(addr) {
+        match self.current_state().get(self.parse_addr(addr)) {
             Some(acct) => Ok(acct.storage.contains_key(key)),
             None => Err(KVError::NoAccount),
         }
@@ -94,36 +106,21 @@ impl<'bc> KVStore for Block<'bc> {
     }
 
     fn get(&self, addr: &Address, key: &[u8]) -> Result<Option<&[u8]>, KVError> {
-        match self.current_state().get(addr) {
+        match self.current_state().get(self.parse_addr(addr)) {
             Some(acct) => Ok(acct.storage.get(key).map(Vec::as_slice)),
             None => Err(KVError::NoAccount),
         }
     }
 
     fn set(&mut self, addr: &Address, key: Vec<u8>, value: Vec<u8>) -> Result<(), KVError> {
-        let mut ptx = match self.pending_transaction_mut() {
-            Some(ptx) => ptx,
-            None => return Err(KVError::InvalidState),
-        };
-        let callee = &ptx.call_stack.last().unwrap().callee;
-        let mut addr = addr;
-        if addr == &Address::default() {
-            addr = callee;
-        }
-        if addr != callee {
-            if !ptx.outcome.reverted() {
-                ptx.outcome = TransactionOutcome::InvalidOperation;
+        let addr = *self.parse_addr(addr);
+        match self.current_state_mut().get_mut(&addr) {
+            Some(acct) => {
+                acct.to_mut().storage.insert(key, value);
+                Ok(())
             }
-            // capabilities to other services' storage are unimplemented
-            // would panic if there were a way to catch it?
-            return Err(KVError::NoPermission);
+            None => Err(KVError::NoAccount),
         }
-        let acct = match ptx.state.get_mut(&addr) {
-            Some(acct) => acct,
-            None => return Err(KVError::NoAccount),
-        };
-        acct.to_mut().storage.insert(key, value);
-        Ok(())
     }
 }
 

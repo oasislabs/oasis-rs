@@ -2,18 +2,16 @@
 
 use std::{
     borrow::Cow,
-    cell::RefCell,
     collections::HashMap,
     path::{Path, PathBuf},
-    rc::Rc,
 };
 
 use blockchain_traits::Blockchain;
-use memchain::{Account, Memchain};
+use memchain::{Account, Memchain, BASE_GAS};
 use oasis_types::Address;
 use proptest::prelude::*;
 use wasi_types::{
-    ErrNo, FdFlags, FdStat, FileDelta, FileSize, FileStat, FileType, Inode, OpenFlags, Rights,
+    ErrNo, Fd, FdFlags, FdStat, FileDelta, FileSize, FileStat, FileType, Inode, OpenFlags, Rights,
     Whence,
 };
 
@@ -25,7 +23,7 @@ fn giga(val: u64) -> u64 {
 
 fn create_memchain<'bc>(
     mains: Vec<Option<extern "C" fn(*mut dyn Blockchain<Address = Address>) -> u16>>,
-) -> Rc<RefCell<Memchain<'bc>>> {
+) -> impl Blockchain<Address = Address> {
     let genesis_state = mains
         .into_iter()
         .enumerate()
@@ -58,16 +56,74 @@ fn create_memchain<'bc>(
     Memchain::new("bcfs".to_string(), genesis_state)
 }
 
-fn create_bcfs() -> BCFS<Address> {
-    let bc = create_memchain(vec![None]);
-    BCFS::new(bc, Address::from(1))
-}
-
-/// Returns a known-good path.
-fn good_path() -> PathBuf {
+/// Returns a known-good home directory.
+fn good_home() -> PathBuf {
     let mut p = PathBuf::from("/opt/bcfs");
     p.push(hex::encode(&Address::from(1)));
     p
+}
+
+#[test]
+fn close_fd() {
+    let mut bc = create_memchain(vec![None]);
+    let mut bcfs = BCFS::new(&mut bc, Address::from(1));
+    for fd in 0u32..=3 {
+        let fd = Fd::from(fd);
+        assert!(bcfs.close(&mut bc, fd).is_ok());
+        assert_eq!(bcfs.close(&mut bc, fd), Err(ErrNo::BadF)); // double close
+    }
+    for fd in 4u32..10 {
+        assert_eq!(bcfs.close(&mut bc, Fd::from(fd)), Err(ErrNo::BadF));
+    }
+}
+
+// thread_local!(static CUR_BCFS: RefCell<Option<BCFS<Address>>> = RefCell::new(None));
+
+extern "C" fn open_close_main(_bc: *mut dyn Blockchain<Address = Address>) -> u16 {
+    // CUR_BCFS.with(|bcfs| {
+    //     let mut bcfs = bcfs.borrow_mut().take().unwrap();
+    //     let mut abspath = good_home();
+    //     abspath.push("somefile");
+    //     let relpath = PathBuf::from("somefile");
+    //
+    //     let abs_fd = bcfs
+    //         .open(None, &abspath, OpenFlags::CREATE, FdFlags::empty())
+    //         .expect("Could not open");
+    //
+    //     // double create
+    //     assert_eq!(
+    //         bcfs.open(None, &abspath, OpenFlags::CREATE, FdFlags::empty()),
+    //         Err(ErrNo::Exist)
+    //     );
+    //
+    //     let abs_fd2 = bcfs
+    //         .open(None, &abspath, OpenFlags::empty(), FdFlags::empty())
+    //         .unwrap();
+    //     let rel_fd = bcfs
+    //         .open(None, &relpath, OpenFlags::empty(), FdFlags::APPEND)
+    //         .unwrap();
+    //
+    //     assert!(bcfs.close(abs_fd).is_ok());
+    //     assert!(bcfs.close(abs_fd2).is_ok());
+    //     assert!(bcfs.close(rel_fd).is_ok());
+    // });
+    0
+}
+
+#[test]
+fn open_close() {
+    let mut bc = create_memchain(vec![Some(open_close_main), None]);
+    let bcfs = BCFS::new(&mut bc, Address::from(1));
+    // CUR_BCFS.with(|cbcfs| cbcfs.replace(Some(bcfs)));
+    // start transaction so that account state can be modified
+    bc.transact(
+        Address::from(2),
+        Address::from(1),
+        0,
+        Vec::new(),
+        BASE_GAS, /* gas */
+        0,
+    );
 }
 
 proptest! {
@@ -82,8 +138,11 @@ proptest! {
         p.push(chain);
         p.push(addr);
         p.push(ext);
+
+        let mut bc = create_memchain(vec![None]);
+        let mut bcfs = BCFS::new(&mut bc, Address::from(1));
         prop_assert_eq!(
-            create_bcfs().open(None, &p, OpenFlags::CREATE, FdFlags::empty()),
+            bcfs.open(&mut bc, None, &p, OpenFlags::CREATE, FdFlags::empty()),
             Err(ErrNo::NoEnt)
         );
     }
@@ -94,46 +153,50 @@ proptest! {
             .prop_map(|b| OpenFlags::from_bits(b << 2).unwrap()), // no create, no dir
         ff in (0u16..(1 << 5)).prop_map(|b| FdFlags::from_bits(b).unwrap()),
     ) {
-        let mut p = good_path();
+        let mut p = good_home();
         p.push("somefile");
-        prop_assert_eq!(create_bcfs().open(None, &p, of, ff,), Err(ErrNo::NoEnt));
+
+        let mut bc = create_memchain(vec![None]);
+        let mut bcfs = BCFS::new(&mut bc, Address::from(1));
+        prop_assert_eq!(bcfs.open(&mut bc, None, &p, of, ff,), Err(ErrNo::NoEnt));
     }
 
     #[test]
-    fn open_storage_create_success(
-        mut path in prop::bool::ANY.prop_map(|abs| if abs { good_path() } else { PathBuf::new() }),
+    fn open_storage_create_ok(
+        mut path in prop::bool::ANY.prop_map(|abs| if abs { good_home() } else { PathBuf::new() }),
         ff in (0u16..(1 << 5)).prop_map(|b| FdFlags::from_bits(b).unwrap()),
         ext in "\\w+"
     ) {
         path.push(ext);
-        prop_assert!(create_bcfs().open(None, &path, OpenFlags::CREATE, ff).is_ok());
+        let mut bc = create_memchain(vec![None]);
+        let mut bcfs = BCFS::new(&mut bc, Address::from(1));
+        let fd = bcfs.open(&mut bc, None, &path, OpenFlags::CREATE, ff).unwrap();
+        prop_assert!(bcfs.close(&mut bc, fd).is_ok());
     }
 
     #[test]
     fn open_svc_ok(
-        mut path in prop::bool::ANY.prop_map(|abs| if abs { good_path() } else { PathBuf::new() }),
+        mut path in prop::bool::ANY.prop_map(|abs| if abs { good_home() } else { PathBuf::new() }),
         ext in "(code|balance|sock)",
         ff in (0u16..(1 << 4)).prop_map(|b| FdFlags::from_bits(b << 1).unwrap()), // no append
     ) {
         path.push(ext);
-        prop_assert!(
-            create_bcfs().open(
-                None,
-                &path,
-                OpenFlags::empty(),
-                ff,
-            ).is_ok()
-        );
+        let mut bc = create_memchain(vec![None]);
+        let mut bcfs = BCFS::new(&mut bc, Address::from(1));
+        let fd = bcfs.open(&mut bc, None, &path, OpenFlags::empty(), ff).unwrap();
+        prop_assert!(bcfs.close(&mut bc, fd).is_ok());
     }
 
     #[test]
     fn open_svc_fail(
-        mut path in prop::bool::ANY.prop_map(|abs| if abs { good_path() } else { PathBuf::new() }),
+        mut path in prop::bool::ANY.prop_map(|abs| if abs { good_home() } else { PathBuf::new() }),
         ext in "(code|balance|sock)",
         of in (0u16..(1 << 4)).prop_map(|b| OpenFlags::from_bits(b | 1).unwrap()),
         ff in (0u16..(1 << 5)).prop_map(|b| FdFlags::from_bits(b | 1).unwrap()),
     ) {
         path.push(ext);
-        prop_assert!(create_bcfs().open(None, &path, of, ff,).is_err());
+        let mut bc = create_memchain(vec![None]);
+        let mut bcfs = BCFS::new(&mut bc, Address::from(1));
+        prop_assert!(bcfs.open(&mut bc, None, &path, of, ff,).is_err());
     }
 }

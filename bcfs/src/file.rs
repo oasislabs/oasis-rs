@@ -56,11 +56,4 @@ impl<A: Address> File<A> {
     pub const LOG_DESCRIPTOR: u32 = 3;
 
     special_file_ctor!(stdin: Stdin, stdout: Stdout, stderr: Stderr, log: Log);
-
-    pub fn is_special(&self) -> bool {
-        match self.kind {
-            FileKind::Stdin | FileKind::Stdout | FileKind::Stderr | FileKind::Log => true,
-            _ => false,
-        }
-    }
 }

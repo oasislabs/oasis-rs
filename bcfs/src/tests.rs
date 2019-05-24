@@ -1,10 +1,6 @@
 #![cfg(test)]
 
-use std::{
-    borrow::Cow,
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::{borrow::Cow, collections::HashMap, path::PathBuf};
 
 use blockchain_traits::Blockchain;
 use memchain::{Account, Memchain, BASE_GAS};
@@ -22,7 +18,7 @@ fn giga(val: u64) -> u64 {
 }
 
 fn create_memchain<'bc>(
-    mains: Vec<Option<extern "C" fn(*mut dyn Blockchain<Address = Address>) -> u16>>,
+    mains: Vec<Option<extern "C" fn(*const *mut dyn Blockchain<Address = Address>) -> u16>>,
 ) -> impl Blockchain<Address = Address> {
     let genesis_state = mains
         .into_iter()
@@ -77,45 +73,39 @@ fn close_fd() {
     }
 }
 
-// thread_local!(static CUR_BCFS: RefCell<Option<BCFS<Address>>> = RefCell::new(None));
-
-extern "C" fn open_close_main(_bc: *mut dyn Blockchain<Address = Address>) -> u16 {
-    // CUR_BCFS.with(|bcfs| {
-    //     let mut bcfs = bcfs.borrow_mut().take().unwrap();
-    //     let mut abspath = good_home();
-    //     abspath.push("somefile");
-    //     let relpath = PathBuf::from("somefile");
-    //
-    //     let abs_fd = bcfs
-    //         .open(None, &abspath, OpenFlags::CREATE, FdFlags::empty())
-    //         .expect("Could not open");
-    //
-    //     // double create
-    //     assert_eq!(
-    //         bcfs.open(None, &abspath, OpenFlags::CREATE, FdFlags::empty()),
-    //         Err(ErrNo::Exist)
-    //     );
-    //
-    //     let abs_fd2 = bcfs
-    //         .open(None, &abspath, OpenFlags::empty(), FdFlags::empty())
-    //         .unwrap();
-    //     let rel_fd = bcfs
-    //         .open(None, &relpath, OpenFlags::empty(), FdFlags::APPEND)
-    //         .unwrap();
-    //
-    //     assert!(bcfs.close(abs_fd).is_ok());
-    //     assert!(bcfs.close(abs_fd2).is_ok());
-    //     assert!(bcfs.close(rel_fd).is_ok());
-    // });
-    0
-}
-
 #[test]
 fn open_close() {
+    extern "C" fn open_close_main(bc: *const *mut dyn Blockchain<Address = Address>) -> u16 {
+        let bc = unsafe { &mut **bc };
+        let mut bcfs = BCFS::new(bc, Address::from(1));
+        let mut abspath = good_home();
+        abspath.push("somefile");
+        let relpath = PathBuf::from("somefile");
+
+        let abs_fd = bcfs
+            .open(bc, None, &abspath, OpenFlags::CREATE, FdFlags::empty())
+            .expect("Could not open");
+
+        // double create
+        assert_eq!(
+            bcfs.open(bc, None, &abspath, OpenFlags::EXCL, FdFlags::empty()),
+            Err(ErrNo::Exist)
+        );
+
+        let abs_fd2 = bcfs
+            .open(bc, None, &abspath, OpenFlags::empty(), FdFlags::empty())
+            .unwrap();
+        let rel_fd = bcfs
+            .open(bc, None, &relpath, OpenFlags::empty(), FdFlags::APPEND)
+            .unwrap();
+
+        assert!(bcfs.close(bc, abs_fd).is_ok());
+        assert!(bcfs.close(bc, abs_fd2).is_ok());
+        assert!(bcfs.close(bc, rel_fd).is_ok());
+        0
+    }
+
     let mut bc = create_memchain(vec![Some(open_close_main), None]);
-    let bcfs = BCFS::new(&mut bc, Address::from(1));
-    // CUR_BCFS.with(|cbcfs| cbcfs.replace(Some(bcfs)));
-    // start transaction so that account state can be modified
     bc.transact(
         Address::from(2),
         Address::from(1),

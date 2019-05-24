@@ -1,9 +1,8 @@
 use std::{
-    cell::{Cell, RefCell},
+    cell::Cell,
     convert::TryFrom,
     io::{IoSlice, IoSliceMut, Read, Write},
     path::{Path, PathBuf},
-    rc::Rc,
 };
 
 use blockchain_traits::{Address, Blockchain};

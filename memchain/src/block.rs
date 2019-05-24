@@ -229,7 +229,9 @@ impl<'bc> Blockchain for Block<'bc> {
 
         if let Some(main) = main_fn {
             let bci: &mut dyn Blockchain<Address = Address> = self;
-            let errno = main(unsafe { std::mem::transmute::<_, &'static mut _>(bci) });
+            let errno = main(unsafe {
+                &(std::mem::transmute::<_, &'static mut _>(bci) as *mut _) as *const _
+            });
             if errno == 0 {
                 // success
                 let ptx = self.pending_transaction_mut().unwrap();

@@ -17,8 +17,9 @@ pub struct CAccount {
     code: CSlice<u8>,
     /// Seconds since unix epoch. A value of 0 represents no expiry.
     expiry: u64,
-    /// Pointer to callable main function. Set to nullptr if account has no code.
-    main: extern "C" fn(*mut dyn Blockchain<Address = Address>) -> u16,
+    /// Pointer to fat pointer to callable main function.
+    /// Set to nullptr if account has no code.
+    main: extern "C" fn(*const *mut dyn Blockchain<Address = Address>) -> u16,
     storage: CSlice<CStorageItem>,
 }
 
@@ -181,7 +182,7 @@ mod tests {
 
     use std::ffi::CString;
 
-    extern "C" fn nop_main(_: *mut dyn Blockchain<Address = Address>) -> u16 {
+    extern "C" fn nop_main(_: *const *mut dyn Blockchain<Address = Address>) -> u16 {
         0
     }
 

@@ -169,7 +169,7 @@ pub struct Account {
     /// Callable account entrypoint. `main` takes an pointer to a
     /// `Blockchain` trait object which can be used via FFI bindings
     /// to interact with the memchain. Returns nonzero to revert transaction.
-    pub main: Option<extern "C" fn(*mut dyn Blockchain<Address = Address>) -> u16>,
+    pub main: Option<extern "C" fn(*const *mut dyn Blockchain<Address = Address>) -> u16>,
 }
 
 pub struct Transaction {

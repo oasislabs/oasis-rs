@@ -252,7 +252,7 @@ fn read_write_aliased() {
     assert_eq!(
         bcfs.write_vectored(
             &mut bc,
-            abs_fd, // !
+            abs_fd, // NB: absolute path fd
             &write_bufs
                 .iter()
                 .map(|b| IoSlice::new(b.as_bytes()))
@@ -263,7 +263,7 @@ fn read_write_aliased() {
     assert_eq!(
         bcfs.read_vectored(
             &mut bc,
-            rel_fd, // !
+            rel_fd, // NB: relative path fd
             &mut read_bufs
                 .iter_mut()
                 .map(|b| IoSliceMut::new(b))

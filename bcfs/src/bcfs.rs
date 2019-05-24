@@ -244,11 +244,11 @@ impl<A: Address> BCFS<A> {
         };
         let meta = FileStat {
             device: 0u64.into(),
-            inode, // TODO: directories and inodes
+            inode, // TODO(#80)
             file_type: FileType::RegularFile,
             num_links: 0,
             file_size,
-            atime: 0u64.into(), // TODO: timestamps
+            atime: 0u64.into(), // TODO(#81)
             mtime: 0u64.into(),
             ctime: 0u64.into(),
         };
@@ -399,7 +399,7 @@ impl<A: Address> BCFS<A> {
 
     fn alloc_fd(&self) -> Result<Fd> {
         if self.files.len() >= u32::max_value() as usize {
-            return Err(ErrNo::NFile); // TODO: handle closed FDs
+            return Err(ErrNo::NFile); // TODO(#82)
         }
         Ok((self.files.len() as u32).into())
     }
@@ -564,7 +564,7 @@ impl<A: Address> BCFS<A> {
             FileKind::ServiceSock {
                 addr: MultiAddress::Native(callee),
             } => {
-                // TODO: how will wasi even expose value/gas/gas_price args to new process?
+                // TODO(#83)
                 blockchain.transact(
                     self.context_addr,
                     *callee,

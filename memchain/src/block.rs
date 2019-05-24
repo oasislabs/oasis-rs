@@ -232,7 +232,10 @@ impl<'bc> Blockchain for Block<'bc> {
         if let Some(main) = main_fn {
             let bci: &mut dyn Blockchain<Address = Address> = self;
             let errno = main(unsafe {
-                &(std::mem::transmute::<_, &'static mut _>(bci) as *mut _) as *const _
+                // Extend the lifetime, as required by the FFI type.
+                // This is only unsafe if the `main` fn stores the pointer,
+                // but this is disallowed by the precondition on `main`.
+                &(std::mem::transmute::<&mut _, &'static mut _>(bci) as *mut _) as *const _
             });
             if errno == 0 {
                 // success

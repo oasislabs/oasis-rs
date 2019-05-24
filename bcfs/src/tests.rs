@@ -1,6 +1,11 @@
 #![cfg(test)]
 
-use std::{borrow::Cow, collections::HashMap, path::PathBuf};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    io::{IoSlice, IoSliceMut},
+    path::PathBuf,
+};
 
 use blockchain_traits::Blockchain;
 use memchain::{Account, Memchain, BASE_GAS};
@@ -84,7 +89,7 @@ fn open_close() {
 
         let abs_fd = bcfs
             .open(bc, None, &abspath, OpenFlags::CREATE, FdFlags::empty())
-            .expect("Could not open");
+            .unwrap();
 
         // double create
         assert_eq!(
@@ -114,6 +119,69 @@ fn open_close() {
         BASE_GAS, /* gas */
         0,
     );
+}
+
+#[test]
+fn read_write_basic() {
+    let mut bc = create_memchain(vec![None]);
+    let mut bcfs = BCFS::new(&mut bc, Address::from(1));
+
+    let path = PathBuf::from("somefile");
+
+    let fd = bcfs
+        .open(&mut bc, None, &path, OpenFlags::CREATE, FdFlags::empty())
+        .unwrap();
+
+    let write_bufs = ["hello", "world"];
+    let mut read_bufs = write_bufs
+        .iter()
+        .map(|b| vec![0u8; b.len()])
+        .collect::<Vec<_>>();
+    let nbytes = write_bufs.iter().map(|b| b.len()).sum();
+
+    macro_rules! assert_read {
+        ($nbytes:expr) => {
+            assert_eq!(
+                bcfs.read_vectored(
+                    &mut bc,
+                    fd,
+                    &mut read_bufs
+                        .iter_mut()
+                        .map(|b| IoSliceMut::new(b))
+                        .collect::<Vec<_>>()
+                ),
+                Ok($nbytes)
+            );
+        };
+    }
+    assert_read!(0);
+
+    assert_eq!(
+        bcfs.write_vectored(
+            &mut bc,
+            fd,
+            &write_bufs
+                .iter()
+                .map(|b| IoSlice::new(b.as_bytes()))
+                .collect::<Vec<_>>()
+        ),
+        Ok(nbytes)
+    );
+    assert_read!(0); // EOF
+
+    assert_eq!(bcfs.seek(&mut bc, fd, 0, Whence::Start), Ok(0));
+    assert_read!(nbytes);
+    assert_read!(0);
+
+    assert_eq!(bcfs.seek(&mut bc, fd, -(nbytes as i64), Whence::End), Ok(0));
+    assert_read!(nbytes);
+    assert_read!(0);
+
+    assert_eq!(
+        bcfs.seek(&mut bc, fd, -(nbytes as i64 - 2), Whence::Current),
+        Ok(2)
+    );
+    assert_eq!(bcfs.seek(&mut bc, fd, -2, Whence::Current), Ok(0));
 }
 
 proptest! {

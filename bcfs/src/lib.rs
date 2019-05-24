@@ -1,4 +1,4 @@
-#![feature(bind_by_move_pattern_guards)]
+#![feature(cell_update, bind_by_move_pattern_guards)]
 
 #[cfg(feature = "ffi")]
 pub mod ffi;

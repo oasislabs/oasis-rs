@@ -30,7 +30,7 @@ pub enum FileKind<A: Address> {
     Balance { addr: MultiAddress<A> },
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum FileOffset {
     FromStart(u64),
     FromEnd(i64), // posix allows seeking past end of file

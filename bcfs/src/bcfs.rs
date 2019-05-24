@@ -144,9 +144,9 @@ impl<A: Address> BCFS<A> {
         match self.files.get_mut(u32::from(fd) as usize) {
             Some(f) if f.is_some() => {
                 *f = None;
-                return Ok(());
+                Ok(())
             }
-            _ => return Err(ErrNo::BadF),
+            _ => Err(ErrNo::BadF),
         }
     }
 
@@ -194,9 +194,6 @@ impl<A: Address> BCFS<A> {
             Whence::End => {
                 let filesize = self.filestat(blockchain, fd)?.file_size;
                 let new_offset = Self::checked_offset(filesize, offset).ok_or(ErrNo::Inval)?;
-                if offset < 0 {
-                    return Err(ErrNo::Inval);
-                }
                 let mut file = self.file_mut(fd)?;
                 file.offset = FileOffset::FromStart(new_offset as u64);
                 Ok(new_offset as u64)
@@ -399,7 +396,7 @@ impl<A: Address> BCFS<A> {
         if offset >= 0 {
             base.checked_add(offset as u64)
         } else {
-            base.checked_sub(offset as u64)
+            base.checked_sub(-offset as u64)
         }
     }
 
@@ -432,37 +429,30 @@ impl<A: Address> BCFS<A> {
             }
         }
 
-        let read_offset = offset.unwrap_or_else(|| file.offset);
+        let read_offset = offset.unwrap_or(file.offset);
+        let filesize = self.filestat(blockchain, fd)?.file_size;
         match read_offset {
-            FileOffset::FromEnd(0) => return Ok((0, file.offset)),
-            FileOffset::FromStart(o) if o != 0 => return Err(ErrNo::NotSup),
-            FileOffset::FromEnd(o) if o != 0 => return Err(ErrNo::NotSup),
-            _ => (),
+            FileOffset::FromStart(o) if o == 0 => (),
+            FileOffset::FromEnd(o) if o == -(filesize as i64) => (),
+            FileOffset::FromStart(o) if o == filesize => return Ok((0, file.offset)),
+            FileOffset::FromEnd(o) if o == 0 => return Ok((0, file.offset)),
+            _ => return Err(ErrNo::NotSup),
         }
 
-        let (nbytes, mut new_offset) = match &file.kind {
-            FileKind::Stdout | FileKind::Stderr | FileKind::Log => Err(ErrNo::Inval),
-            FileKind::Stdin => {
-                let nbytes = blockchain.fetch_input().as_slice().read_vectored(bufs)?;
-                Ok((nbytes, FileOffset::FromStart(nbytes as u64)))
-            }
+        let nbytes = match &file.kind {
+            FileKind::Stdout | FileKind::Stderr | FileKind::Log => return Err(ErrNo::Inval),
+            FileKind::Stdin => blockchain.fetch_input().as_slice().read_vectored(bufs)?,
             FileKind::Bytecode {
                 addr: crate::MultiAddress::Native(addr),
             } => match blockchain.code_at(addr) {
-                Some(code) => {
-                    let nbytes = code.to_vec().as_slice().read_vectored(bufs)?;
-                    Ok((nbytes, FileOffset::FromStart(nbytes as u64)))
-                }
-                None => Err(ErrNo::NoEnt),
+                Some(code) => code.to_vec().as_slice().read_vectored(bufs)?,
+                None => return Err(ErrNo::NoEnt),
             },
             FileKind::Balance {
                 addr: crate::MultiAddress::Native(addr),
             } => match blockchain.metadata_at(addr) {
-                Some(meta) => {
-                    let nbytes = meta.balance.to_le_bytes().as_ref().read_vectored(bufs)?;
-                    Ok((nbytes, FileOffset::FromStart(nbytes as u64)))
-                }
-                None => Err(ErrNo::NoEnt),
+                Some(meta) => meta.balance.to_le_bytes().as_ref().read_vectored(bufs)?,
+                None => return Err(ErrNo::NoEnt),
             },
             FileKind::Regular { key } => {
                 let mut bytes = match blockchain
@@ -472,14 +462,15 @@ impl<A: Address> BCFS<A> {
                     Some(bytes) => bytes,
                     None => return Err(ErrNo::NoEnt),
                 };
-                Ok((bytes.read_vectored(bufs)?, FileOffset::FromEnd(0)))
+                bytes.read_vectored(bufs)?
             }
             _ => return Err(ErrNo::Fault),
-        }?;
+        };
 
-        if let FileOffset::Stream = file.offset {
-            new_offset = file.offset;
-        }
+        let new_offset = match file.offset {
+            FileOffset::Stream => FileOffset::Stream,
+            _ => FileOffset::FromStart(nbytes as u64),
+        };
 
         Ok((nbytes, new_offset))
     }
@@ -493,7 +484,7 @@ impl<A: Address> BCFS<A> {
         offset: Option<FileOffset>,
     ) -> Result<(usize, FileOffset)> {
         let file = self.file(fd)?;
-        let write_offset = offset.unwrap_or_else(|| file.offset);
+        let write_offset = offset.unwrap_or(file.offset);
         match file.kind {
             FileKind::ServiceSock {
                 addr: MultiAddress::Foreign(_),
@@ -534,16 +525,27 @@ impl<A: Address> BCFS<A> {
                 FileOffset::FromEnd(0)
             }
             FileKind::Regular { key } => {
+                let filesize = self.filestat(blockchain, fd)?.file_size;
                 match write_offset {
                     FileOffset::FromStart(0) => (),
+                    FileOffset::FromEnd(o) if o == -(filesize as i64) => (),
                     _ => return Err(ErrNo::NotSup),
                 }
+                let nbytes = cat_buf.len();
                 blockchain
                     .set(&self.context_addr, key.to_vec(), cat_buf)
                     .map_err(kverror_to_errno)?;
+                file.metadata.update(|mm| {
+                    mm.map(|mut m| {
+                        m.file_size = nbytes as u64;
+                        m
+                    })
+                });
                 match write_offset {
                     FileOffset::FromStart(o) => FileOffset::FromStart(o + nbytes as u64),
-                    FileOffset::FromEnd(_) => FileOffset::FromEnd(0),
+                    FileOffset::FromEnd(o) => {
+                        FileOffset::FromEnd(filesize as i64 + o + nbytes as i64)
+                    }
                     FileOffset::Stream => FileOffset::Stream,
                 }
             }
@@ -563,6 +565,7 @@ impl<A: Address> BCFS<A> {
             }
             _ => unreachable!("checked above"),
         };
+
         Ok((nbytes, new_offset))
     }
 }

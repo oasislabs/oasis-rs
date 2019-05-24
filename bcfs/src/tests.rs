@@ -140,21 +140,26 @@ fn read_write_basic() {
     let nbytes = write_bufs.iter().map(|b| b.len()).sum();
 
     macro_rules! assert_read {
-        ($nbytes:expr) => {
+        ($read_bufs:ident, $write_bufs:ident, $nbytes:expr) => {
             assert_eq!(
                 bcfs.read_vectored(
                     &mut bc,
                     fd,
-                    &mut read_bufs
+                    &mut $read_bufs
                         .iter_mut()
                         .map(|b| IoSliceMut::new(b))
                         .collect::<Vec<_>>()
                 ),
                 Ok($nbytes)
             );
+            assert!(
+                $nbytes == 0
+                    || std::str::from_utf8(&$read_bufs[0]).unwrap() == $write_bufs[0]
+                        && std::str::from_utf8(&$read_bufs[1]).unwrap() == $write_bufs[1]
+            );
         };
     }
-    assert_read!(0);
+    assert_read!(read_bufs, write_bufs, 0);
 
     assert_eq!(
         bcfs.write_vectored(
@@ -167,21 +172,98 @@ fn read_write_basic() {
         ),
         Ok(nbytes)
     );
-    assert_read!(0); // EOF
+    assert_read!(read_bufs, write_bufs, 0);
 
     assert_eq!(bcfs.seek(&mut bc, fd, 0, Whence::Start), Ok(0));
-    assert_read!(nbytes);
-    assert_read!(0);
+    assert_read!(read_bufs, write_bufs, nbytes);
+    assert_read!(read_bufs, write_bufs, 0);
 
     assert_eq!(bcfs.seek(&mut bc, fd, -(nbytes as i64), Whence::End), Ok(0));
-    assert_read!(nbytes);
-    assert_read!(0);
+    assert_read!(read_bufs, write_bufs, nbytes);
+    assert_read!(read_bufs, write_bufs, 0);
 
     assert_eq!(
         bcfs.seek(&mut bc, fd, -(nbytes as i64 - 2), Whence::Current),
         Ok(2)
     );
     assert_eq!(bcfs.seek(&mut bc, fd, -2, Whence::Current), Ok(0));
+
+    let write_bufs = ["hello", "blockchain"];
+    let mut read_bufs = write_bufs
+        .iter()
+        .map(|b| vec![0u8; b.len()])
+        .collect::<Vec<_>>();
+    let nbytes = write_bufs.iter().map(|b| b.len()).sum();
+    assert_eq!(
+        bcfs.write_vectored(
+            &mut bc,
+            fd,
+            &write_bufs
+                .iter()
+                .map(|b| IoSlice::new(b.as_bytes()))
+                .collect::<Vec<_>>()
+        ),
+        Ok(nbytes)
+    );
+    assert_eq!(bcfs.seek(&mut bc, fd, 0, Whence::Start), Ok(0));
+    assert_read!(read_bufs, write_bufs, nbytes);
+}
+
+#[test]
+fn read_write_aliased() {
+    let mut bc = create_memchain(vec![None]);
+    let mut bcfs = BCFS::new(&mut bc, Address::from(1));
+
+    let path = PathBuf::from("somefile");
+    let abspath = good_home().join(&path);
+
+    let abs_fd = bcfs
+        .open(&mut bc, None, &path, OpenFlags::CREATE, FdFlags::empty())
+        .unwrap();
+    let rel_fd = bcfs
+        .open(
+            &mut bc,
+            None,
+            &abspath,
+            OpenFlags::empty(),
+            FdFlags::empty(),
+        )
+        .unwrap();
+
+    let write_bufs = ["hello", "world"];
+    let mut read_bufs = write_bufs
+        .iter()
+        .map(|b| vec![0u8; b.len()])
+        .collect::<Vec<_>>();
+    let nbytes = write_bufs.iter().map(|b| b.len()).sum();
+
+    macro_rules! assert_read {
+        ($read_bufs:ident, $write_bufs:ident, $nbytes:expr) => {};
+    }
+    assert_eq!(
+        bcfs.write_vectored(
+            &mut bc,
+            abs_fd, // !
+            &write_bufs
+                .iter()
+                .map(|b| IoSlice::new(b.as_bytes()))
+                .collect::<Vec<_>>()
+        ),
+        Ok(nbytes)
+    );
+    assert_eq!(
+        bcfs.read_vectored(
+            &mut bc,
+            rel_fd, // !
+            &mut read_bufs
+                .iter_mut()
+                .map(|b| IoSliceMut::new(b))
+                .collect::<Vec<_>>()
+        ),
+        Ok(nbytes)
+    );
+    assert_eq!(std::str::from_utf8(&read_bufs[0]).unwrap(), write_bufs[0]);
+    assert_eq!(std::str::from_utf8(&read_bufs[1]).unwrap(), write_bufs[1]);
 }
 
 proptest! {

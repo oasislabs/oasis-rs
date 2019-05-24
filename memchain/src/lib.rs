@@ -39,7 +39,7 @@ impl<'bc> Memchain<'bc> {
     }
 
     fn create_block_with_state(&mut self, state: State<'bc>) -> &mut Block<'bc> {
-        self.blocks.push(Block::new(state));
+        self.blocks.push(Block::new(self.name.to_string(), state));
         self.last_block_mut()
     }
 

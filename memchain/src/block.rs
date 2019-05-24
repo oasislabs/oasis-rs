@@ -6,6 +6,7 @@ use oasis_types::Address;
 use crate::{Account, Log, Receipt, State, Transaction, TransactionOutcome, BASE_GAS};
 
 pub struct Block<'bc> {
+    chain_name: String,
     state: State<'bc>,
     pending_transaction: Option<PendingTransaction<'bc>>,
     completed_transactions: Vec<Receipt>,
@@ -27,8 +28,9 @@ impl<'bc> PendingTransaction<'bc> {
 }
 
 impl<'bc> Block<'bc> {
-    pub fn new(state: State<'bc>) -> Self {
+    pub fn new(chain_name: String, state: State<'bc>) -> Self {
         Self {
+            chain_name,
             state,
             pending_transaction: None,
             completed_transactions: Vec::new(),
@@ -126,7 +128,7 @@ impl<'bc> KVStore for Block<'bc> {
 
 impl<'bc> Blockchain for Block<'bc> {
     fn name(&self) -> &str {
-        "memchain"
+        &self.chain_name
     }
 
     fn transact(

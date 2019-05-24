@@ -11,10 +11,7 @@ use blockchain_traits::Blockchain;
 use memchain::{Account, Memchain, BASE_GAS};
 use oasis_types::Address;
 use proptest::prelude::*;
-use wasi_types::{
-    ErrNo, Fd, FdFlags, FdStat, FileDelta, FileSize, FileStat, FileType, Inode, OpenFlags, Rights,
-    Whence,
-};
+use wasi_types::{ErrNo, Fd, FdFlags, OpenFlags, Whence};
 
 use crate::BCFS;
 
@@ -188,25 +185,40 @@ fn read_write_basic() {
     );
     assert_eq!(bcfs.seek(&mut bc, fd, -2, Whence::Current), Ok(0));
 
+    assert_eq!(bcfs.seek(&mut bc, fd, 0, Whence::End), Ok(nbytes as u64));
     let write_bufs = ["hello", "blockchain"];
     let mut read_bufs = write_bufs
         .iter()
         .map(|b| vec![0u8; b.len()])
         .collect::<Vec<_>>();
-    let nbytes = write_bufs.iter().map(|b| b.len()).sum();
+    let new_nbytes = write_bufs.iter().map(|b| b.len()).sum();
     assert_eq!(
-        bcfs.write_vectored(
+        bcfs.pwrite_vectored(
             &mut bc,
             fd,
             &write_bufs
                 .iter()
                 .map(|b| IoSlice::new(b.as_bytes()))
-                .collect::<Vec<_>>()
+                .collect::<Vec<_>>(),
+            0
         ),
-        Ok(nbytes)
+        Ok(new_nbytes)
     );
-    assert_eq!(bcfs.seek(&mut bc, fd, 0, Whence::Start), Ok(0));
-    assert_read!(read_bufs, write_bufs, nbytes);
+    assert_eq!(bcfs.tell(&mut bc, fd), Ok(nbytes as u64));
+    assert_eq!(
+        bcfs.pread_vectored(
+            &mut bc,
+            fd,
+            &mut read_bufs
+                .iter_mut()
+                .map(|b| IoSliceMut::new(b))
+                .collect::<Vec<_>>(),
+            0
+        ),
+        Ok(new_nbytes)
+    );
+    assert_eq!(std::str::from_utf8(&read_bufs[0]).unwrap(), write_bufs[0]);
+    assert_eq!(std::str::from_utf8(&read_bufs[1]).unwrap(), write_bufs[1]);
 }
 
 #[test]
@@ -237,9 +249,6 @@ fn read_write_aliased() {
         .collect::<Vec<_>>();
     let nbytes = write_bufs.iter().map(|b| b.len()).sum();
 
-    macro_rules! assert_read {
-        ($read_bufs:ident, $write_bufs:ident, $nbytes:expr) => {};
-    }
     assert_eq!(
         bcfs.write_vectored(
             &mut bc,

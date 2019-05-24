@@ -256,6 +256,18 @@ impl<A: Address> BCFS<A> {
         Ok(meta)
     }
 
+    pub fn tell(&self, blockchain: &mut dyn Blockchain<Address = A>, fd: Fd) -> Result<FileSize> {
+        let file = self.file(fd)?;
+        match file.offset {
+            FileOffset::FromStart(o) => Ok(o),
+            FileOffset::FromEnd(o) => {
+                let filesize = self.filestat(blockchain, fd)?.file_size;
+                Ok(Self::checked_offset(filesize, o).ok_or(ErrNo::Inval)?)
+            }
+            FileOffset::Stream => Err(ErrNo::SPipe),
+        }
+    }
+
     pub fn read_vectored(
         &mut self,
         blockchain: &mut dyn Blockchain<Address = A>,

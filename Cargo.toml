@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "bcfs",
     "blockchain-traits",
     "idl-gen",
     "memchain",
@@ -9,7 +10,6 @@ members = [
     "oasis-types",
 ]
 exclude = ["tests"]
-
 
 [profile.release]
 incremental = false

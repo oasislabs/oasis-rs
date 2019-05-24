@@ -1,20 +1,25 @@
-use std::{borrow::Cow, cell::RefCell, collections::hash_map::Entry, rc::Rc, slice};
+use std::{
+    borrow::Cow,
+    ffi::{c_void, CStr},
+    slice,
+};
 
-use blockchain_traits::BlockchainIntrinsics;
-use oasis_types::{Address, U256};
+use blockchain_traits::Blockchain;
+use oasis_types::Address;
 
-use crate::{Account, Blockchain};
+use crate::{Account, Memchain};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct CAccount {
     address: Address,
-    balance: U256,
+    balance: u64,
     code: CSlice<u8>,
     /// Seconds since unix epoch. A value of 0 represents no expiry.
     expiry: u64,
-    /// Pointer to callable main function. Set to nullptr if account has no code.
-    main: extern "C" fn(*mut dyn BlockchainIntrinsics) -> u16,
+    /// Pointer to fat pointer to callable main function.
+    /// Set to nullptr if account has no code.
+    main: extern "C" fn(*const *mut dyn Blockchain<Address = Address>) -> u16,
     storage: CSlice<CStorageItem>,
 }
 
@@ -48,8 +53,6 @@ impl<T, S: AsRef<[T]>> From<S> for CSlice<T> {
     }
 }
 
-type Memchain = RefCell<Blockchain<'static>>;
-
 impl From<CAccount> for Account {
     fn from(ca: CAccount) -> Self {
         Self {
@@ -64,7 +67,7 @@ impl From<CAccount> for Account {
             } else {
                 Some(std::time::Duration::from_secs(ca.expiry))
             },
-            main: if (ca.main as *const std::ffi::c_void).is_null() {
+            main: if (ca.main as *const c_void).is_null() {
                 None
             } else {
                 Some(ca.main)
@@ -84,47 +87,52 @@ pub enum ErrNo {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn memchain_create(genesis_accounts: CSlice<CAccount>) -> *const Memchain {
+pub unsafe extern "C" fn memchain_create(
+    name: *const CStr,
+    genesis_accounts: CSlice<CAccount>,
+) -> *mut Memchain<'static> {
     let genesis_state = genesis_accounts
         .as_slice()
         .iter()
         .map(|ca| (ca.address, Cow::Owned(Account::from(*ca))))
         .collect();
-    Rc::into_raw(Blockchain::new(genesis_state))
+    Box::into_raw(Box::new(Memchain::new(
+        (*name).to_str().unwrap().to_string(),
+        genesis_state,
+    )))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn memchain_destroy(memchain: *const Memchain) {
-    std::mem::drop(Rc::from_raw(memchain))
+pub unsafe extern "C" fn memchain_destroy(memchain: *mut Memchain) {
+    std::mem::drop(Box::from_raw(memchain))
 }
 
 /// Adds a new account to the blockchain at the current block.
 #[no_mangle]
 pub unsafe extern "C" fn memchain_create_account(
-    memchain: *const Memchain,
+    memchain: *mut Memchain,
     new_account: *const CAccount,
 ) -> ErrNo {
-    let memchain = &*memchain;
-    let mut bc = memchain.borrow_mut();
-    match bc.current_state_mut().entry((*new_account).address) {
-        Entry::Occupied(_) => ErrNo::AccountExists,
-        Entry::Vacant(v) => {
-            v.insert(Cow::Owned(Account::from(*new_account)));
-            ErrNo::Success
-        }
+    let bc = &mut *memchain;
+    if bc
+        .last_block_mut()
+        .create_account((*new_account).address, Account::from(*new_account))
+    {
+        ErrNo::Success
+    } else {
+        ErrNo::AccountExists
     }
 }
 
 /// Retrieves a value from storage at the current block through the current transaction.
 #[no_mangle]
 pub unsafe extern "C" fn memchain_storage_at(
-    memchain: *const Memchain,
+    memchain: *mut Memchain,
     address: Address,
     key: CSlice<u8>,
     value: *mut CSlice<u8>,
 ) -> ErrNo {
-    let memchain = &*memchain;
-    let bc = memchain.borrow();
+    let bc = &*memchain;
     let account = match bc.current_state().get(&address) {
         Some(account) => account,
         None => return ErrNo::NoAccount,
@@ -140,27 +148,26 @@ pub unsafe extern "C" fn memchain_storage_at(
 
 /// Creates a new block.
 #[no_mangle]
-pub unsafe extern "C" fn memchain_create_block(memchain: *const Memchain) -> ErrNo {
-    let memchain = &*memchain;
-    memchain.borrow_mut().create_block();
+pub unsafe extern "C" fn memchain_create_block(memchain: *mut Memchain) -> ErrNo {
+    (&mut *memchain).create_block();
     ErrNo::Success
 }
 
 /// Executes a transaction.
 #[no_mangle]
 pub unsafe extern "C" fn memchain_transact(
-    memchain: *const Memchain,
-    caller: Address,
-    callee: Address,
-    value: U256,
+    memchain: *mut Memchain,
+    caller: *const Address,
+    callee: *const Address,
+    value: u64,
     input: CSlice<u8>,
-    gas: U256,
-    gas_price: U256,
+    gas: u64,
+    gas_price: u64,
 ) -> ErrNo {
-    let memchain = &*memchain;
-    memchain.borrow_mut().last_block_mut().transact(
-        caller,
-        callee,
+    let bc = &mut *memchain;
+    bc.last_block_mut().transact(
+        *caller,
+        *callee,
         value,
         input.as_slice().to_vec(),
         gas,
@@ -173,7 +180,9 @@ pub unsafe extern "C" fn memchain_transact(
 mod tests {
     use super::*;
 
-    extern "C" fn nop_main(_: *mut dyn BlockchainIntrinsics) -> u16 {
+    use std::ffi::CString;
+
+    extern "C" fn nop_main(_: *const *mut dyn Blockchain<Address = Address>) -> u16 {
         0
     }
 
@@ -190,14 +199,17 @@ mod tests {
             }];
             let genesis_accounts = vec![CAccount {
                 address: Address::from(1),
-                balance: U256::from(1),
+                balance: 1,
                 code: vec![].as_slice().into(),
                 expiry: 0,
                 main: nop_main,
                 storage: account_1_storage.as_slice().into(),
             }];
 
-            let handle = memchain_create(genesis_accounts.as_slice().into());
+            let handle = memchain_create(
+                CString::new("memchain").unwrap().as_c_str(),
+                genesis_accounts.as_slice().into(),
+            );
 
             let account_2_storage = vec![CStorageItem {
                 key: key.into(),
@@ -205,7 +217,7 @@ mod tests {
             }];
             let account_2 = CAccount {
                 address: Address::from(2),
-                balance: U256::from(2),
+                balance: 2,
                 code: "\0asm this is not wasm".as_bytes().into(),
                 expiry: 0,
                 main: nop_main,

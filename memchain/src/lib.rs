@@ -1,56 +1,45 @@
+//! An in-memory blockchain with Ethereum-like semantics.
 #![feature(maybe_uninit)]
 
+mod block;
 pub mod ffi;
 
-use std::{borrow::Cow, cell::RefCell, collections::HashMap, rc::Rc};
+pub const BASE_GAS: u64 = 2100;
 
-use blockchain_traits::{AccountMetadata, BlockchainIntrinsics, KVStore};
-use oasis_types::{Address, U256};
+use std::{borrow::Cow, collections::HashMap};
 
-include!("block.rs");
+use blockchain_traits::{AccountMetadata, Blockchain, KVError, KVStore};
+use oasis_types::Address;
 
-const BASE_GAS: u64 = 2100;
+use block::Block;
 
 type State<'bc> = HashMap<Address, Cow<'bc, Account>>;
 
-pub struct Blockchain<'bc> {
+pub struct Memchain<'bc> {
+    name: String,
     blocks: Vec<Block<'bc>>, // A cleaner implementation is as an intrusive linked list.
 }
 
-impl<'bc> Blockchain<'bc> {
-    // This function returns `Rc<RefCell<_>>` because it keeps the inner
-    // `Blockchain` from being moved post-construction when wrapped in
-    // these structs anyway. This allows blocks to refer to each other by
-    // storing a(n unmoving) pointer to their owning `Blockchain`.
-    pub fn new(genesis_state: State<'bc>) -> Rc<RefCell<Self>> {
-        let rc_bc = Rc::new(RefCell::new(Self { blocks: Vec::new() }));
-
-        {
-            let mut bc = rc_bc.borrow_mut();
-
-            let genesis = bc.create_block();
-            genesis.state = genesis_state;
-
-            bc.create_block(); // Create the first user block.
-        }
-
-        rc_bc
+impl<'bc> Memchain<'bc> {
+    pub fn new(name: String, genesis_state: State<'bc>) -> Self {
+        let mut bc = Self {
+            name,
+            blocks: Vec::new(),
+        };
+        bc.create_block_with_state(genesis_state);
+        bc
     }
 
     pub fn create_block(&mut self) -> &mut Block<'bc> {
         assert!(
-            self.blocks.is_empty() || self.last_block().pending_transaction.is_none(),
+            !self.last_block().has_pending_transaction(),
             "Cannot create new block while there is a pending transaction"
         );
-        self.blocks.push(Block {
-            state: if self.blocks.is_empty() {
-                State::default()
-            } else {
-                self.last_block().state.clone()
-            },
-            pending_transaction: None,
-            completed_transactions: Vec::new(),
-        });
+        self.create_block_with_state(self.last_block().current_state().clone())
+    }
+
+    fn create_block_with_state(&mut self, state: State<'bc>) -> &mut Block<'bc> {
+        self.blocks.push(Block::new(self.name.to_string(), state));
         self.last_block_mut()
     }
 
@@ -67,49 +56,43 @@ impl<'bc> Blockchain<'bc> {
     }
 
     fn current_state(&self) -> &State<'bc> {
-        let last_block = self.last_block();
-        match last_block.pending_transaction {
-            Some(ref ptx) => &ptx.state,
-            None => &last_block.state,
-        }
-    }
-
-    fn current_state_mut(&mut self) -> &mut State<'bc> {
-        let last_block = self.last_block_mut();
-        match last_block.pending_transaction {
-            Some(ref mut ptx) => &mut ptx.state,
-            None => &mut last_block.state,
-        }
+        self.last_block().current_state()
     }
 }
 
-impl<'bc> KVStore for Blockchain<'bc> {
-    fn contains(&self, addr: &Address, key: &[u8]) -> bool {
+impl<'bc> KVStore for Memchain<'bc> {
+    type Address = Address;
+
+    fn contains(&self, addr: &Address, key: &[u8]) -> Result<bool, KVError> {
         self.last_block().contains(addr, key)
     }
 
-    fn size(&self, addr: &Address, key: &[u8]) -> u64 {
-        self.get(addr, key).map(|v| v.len() as u64).unwrap_or(0)
+    fn size(&self, addr: &Address, key: &[u8]) -> Result<u64, KVError> {
+        self.last_block().size(addr, key)
     }
 
-    fn get(&self, addr: &Address, key: &[u8]) -> Option<&[u8]> {
+    fn get(&self, addr: &Address, key: &[u8]) -> Result<Option<&[u8]>, KVError> {
         self.last_block().get(addr, key)
     }
 
-    fn set(&mut self, addr: &Address, key: Vec<u8>, value: Vec<u8>) {
+    fn set(&mut self, addr: &Address, key: Vec<u8>, value: Vec<u8>) -> Result<(), KVError> {
         self.last_block_mut().set(addr, key, value)
     }
 }
 
-impl<'bc> BlockchainIntrinsics for Blockchain<'bc> {
+impl<'bc> Blockchain for Memchain<'bc> {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
     fn transact(
         &mut self,
         caller: Address,
         callee: Address,
-        value: U256,
+        value: u64,
         input: Vec<u8>,
-        gas: U256,
-        gas_price: U256,
+        gas: u64,
+        gas_price: u64,
     ) {
         self.last_block_mut()
             .transact(caller, callee, value, input, gas, gas_price);
@@ -163,38 +146,39 @@ impl<'bc> BlockchainIntrinsics for Blockchain<'bc> {
         self.last_block().metadata_at(addr)
     }
 
-    fn value(&self) -> U256 {
+    fn value(&self) -> u64 {
         self.last_block().value()
     }
 
-    fn gas(&self) -> U256 {
+    fn gas(&self) -> u64 {
         self.last_block().gas()
     }
 
-    fn sender(&self) -> Address {
+    fn sender(&self) -> &Address {
         self.last_block().sender()
     }
 }
 
 #[derive(Clone, Default)]
 pub struct Account {
-    pub balance: U256,
+    pub balance: u64,
     pub code: Vec<u8>,
     pub storage: HashMap<Vec<u8>, Vec<u8>>,
     pub expiry: Option<std::time::Duration>,
 
     /// Callable account entrypoint. `main` takes an pointer to a
-    /// `BlockchainIntrinsics` trait object which can be used via FFI bindings
+    /// `Blockchain` trait object which can be used via FFI bindings
     /// to interact with the memchain. Returns nonzero to revert transaction.
-    pub main: Option<extern "C" fn(*mut dyn BlockchainIntrinsics) -> u16>,
+    /// This pointer is not valid after the call to `main` has returned.
+    pub main: Option<extern "C" fn(*const *mut dyn Blockchain<Address = Address>) -> u16>,
 }
 
 pub struct Transaction {
     caller: Address,
     callee: Address,
-    value: U256,
+    value: u64,
     input: Vec<u8>,
-    gas: U256,
+    gas: u64,
 }
 
 pub struct Log {
@@ -206,8 +190,8 @@ pub struct Receipt {
     pub outcome: TransactionOutcome,
     pub caller: Address,
     pub callee: Address,
-    pub value: U256,
-    pub gas_used: U256,
+    pub value: u64,
+    pub gas_used: u64,
     pub logs: Vec<Log>,
     pub ret_buf: Vec<u8>,
     pub err_buf: Vec<u8>,

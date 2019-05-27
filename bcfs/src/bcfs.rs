@@ -313,14 +313,37 @@ impl<A: Address> BCFS<A> {
         self.do_pwrite_vectored(blockchain, fd, bufs, Some(FileOffset::FromStart(offset)))
             .map(|(nbytes, _offset)| nbytes)
     }
+
+    pub fn renumber(
+        &mut self,
+        _blockchain: &mut dyn Blockchain<Address = A>,
+        fd: Fd,
+        new_fd: Fd,
+    ) -> Result<()> {
+        if self.has_fd(fd) && self.has_fd(new_fd) {
+            self.files.swap(fd_usize(fd), fd_usize(new_fd));
+            self.files[fd_usize(fd)] = None;
+            Ok(())
+        } else {
+            Err(ErrNo::BadF)
+        }
+    }
+}
+
+fn fd_usize(fd: Fd) -> usize {
+    usize::try_from(u32::from(fd)).unwrap() // can't fail because usize is at least 32 bits
 }
 
 impl<A: Address> BCFS<A> {
+    fn has_fd(&self, fd: Fd) -> bool {
+        match self.files.get(fd_usize(fd)) {
+            Some(Some(_)) => true,
+            _ => false,
+        }
+    }
+
     fn file(&self, fd: Fd) -> Result<&File<A>> {
-        match self
-            .files
-            .get(usize::try_from(u64::from(fd)).map_err(|_| ErrNo::BadF)?)
-        {
+        match self.files.get(fd_usize(fd)) {
             Some(Some(Filelike::File(file))) => Ok(file),
             _ => Err(ErrNo::BadF),
         }

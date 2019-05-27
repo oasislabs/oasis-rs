@@ -19,7 +19,7 @@ fn giga(val: u64) -> u64 {
     val * 1_000_000_000
 }
 
-fn create_memchain<'bc>(
+fn create_memchain(
     mains: Vec<Option<extern "C" fn(*const *mut dyn Blockchain<Address = Address>) -> u16>>,
 ) -> impl Blockchain<Address = Address> {
     let genesis_state = mains
@@ -273,6 +273,104 @@ fn read_write_aliased() {
     );
     assert_eq!(std::str::from_utf8(&read_bufs[0]).unwrap(), write_bufs[0]);
     assert_eq!(std::str::from_utf8(&read_bufs[1]).unwrap(), write_bufs[1]);
+}
+
+#[test]
+fn badf() {
+    let mut bc = create_memchain(vec![None]);
+    let mut bcfs = BCFS::new(&mut bc, Address::from(1));
+
+    let badf = Fd::from(99u32);
+
+    assert_eq!(
+        bcfs.read_vectored(&mut bc, badf, &mut Vec::new()),
+        Err(ErrNo::BadF)
+    );
+
+    assert_eq!(
+        bcfs.write_vectored(&mut bc, badf, &Vec::new()),
+        Err(ErrNo::BadF)
+    );
+
+    assert_eq!(
+        bcfs.pread_vectored(&mut bc, badf, &mut Vec::new(), 0),
+        Err(ErrNo::BadF)
+    );
+
+    assert_eq!(
+        bcfs.pwrite_vectored(&mut bc, badf, &Vec::new(), 0),
+        Err(ErrNo::BadF)
+    );
+
+    assert_eq!(bcfs.seek(&mut bc, badf, 0, Whence::Start), Err(ErrNo::BadF));
+
+    assert_eq!(bcfs.fdstat(&mut bc, badf).unwrap_err(), ErrNo::BadF);
+    assert_eq!(bcfs.filestat(&bc, badf).unwrap_err(), ErrNo::BadF);
+    assert_eq!(bcfs.tell(&mut bc, badf).unwrap_err(), ErrNo::BadF);
+    assert_eq!(bcfs.renumber(&mut bc, badf, badf).unwrap_err(), ErrNo::BadF);
+
+    assert_eq!(bcfs.close(&mut bc, badf), Err(ErrNo::BadF));
+}
+
+#[test]
+fn renumber() {
+    let mut bc = create_memchain(vec![None]);
+    let mut bcfs = BCFS::new(&mut bc, Address::from(1));
+
+    let somefile = PathBuf::from("somefile");
+    let anotherfile = PathBuf::from("anotherfile");
+
+    let somefile_fd = bcfs
+        .open(
+            &mut bc,
+            None,
+            &somefile,
+            OpenFlags::CREATE,
+            FdFlags::empty(),
+        )
+        .unwrap();
+    let anotherfile_fd = bcfs
+        .open(
+            &mut bc,
+            None,
+            &anotherfile,
+            OpenFlags::CREATE,
+            FdFlags::empty(),
+        )
+        .unwrap();
+
+    let write_bufs = ["destination", "somefile"];
+    bcfs.write_vectored(
+        &mut bc,
+        somefile_fd,
+        &write_bufs
+            .iter()
+            .map(|b| IoSlice::new(b.as_bytes()))
+            .collect::<Vec<_>>(),
+    )
+    .unwrap();
+
+    bcfs.renumber(&mut bc, somefile_fd, anotherfile_fd).unwrap();
+
+    assert_eq!(
+        bcfs.read_vectored(&mut bc, somefile_fd, &mut Vec::new()),
+        Err(ErrNo::BadF)
+    );
+
+    let mut read_buf = vec![0u8; 1];
+    assert_eq!(
+        bcfs.pread_vectored(
+            &mut bc,
+            anotherfile_fd,
+            &mut [IoSliceMut::new(&mut read_buf)],
+            0,
+        ),
+        Ok(read_buf.len())
+    );
+    assert_eq!(
+        bcfs.tell(&mut bc, anotherfile_fd),
+        Ok(write_bufs.iter().map(|b| b.len() as u64).sum())
+    );
 }
 
 proptest! {

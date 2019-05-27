@@ -1,0 +1,21 @@
+[package]
+name = "bcfs"
+version = "0.1.0"
+authors = ["Oasis Labs <info@oasislabs.com>"]
+edition = "2018"
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+blockchain-traits = { version = "0.1", path = "../blockchain-traits" }
+oasis-types = { version = "0.1", path = "../oasis-types" }
+wasi-types = "0.1"
+
+[dev-dependencies]
+hex = "0.3"
+memchain = { version = "0.1", path = "../memchain" }
+proptest = "0.9"
+
+[features]
+ffi = []

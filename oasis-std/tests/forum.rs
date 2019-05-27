@@ -1,7 +1,7 @@
 #![feature(proc_macro_hygiene)]
-#[oasis_std::contract]
-mod contract {
-    #[derive(Contract, Debug)]
+#[oasis_std::service]
+mod service {
+    #[derive(Service, Debug)]
     pub struct Forum {
         name: (String),
         users: Vec<User>,
@@ -13,7 +13,7 @@ mod contract {
     type UserId = Address;
 
     // in an ideal world, the macro would:
-    // 1. collect all structs defined inside of `contract!`,
+    // 1. collect all structs defined inside of `service!`,
     // 2. recursively find all types used in the state
     // 3. add the #[derive(Serialize, Deserialize)] if it doesn't exist
     #[derive(Clone, Serialize, Deserialize, Debug, Default)]
@@ -182,8 +182,8 @@ mod tests {
         let admin = oasis_test::create_account(42);
         let boarhunter = oasis_test::create_account(1);
 
-        let admin_ctx = Context::default().with_sender(admin);
-        let boarhunter_ctx = Context::default().with_sender(boarhunter);
+        let admin_ctx = Context::default().with_sender(admin).with_gas(100_000);
+        let boarhunter_ctx = Context::default().with_sender(boarhunter).with_gas(100_000);
 
         let mut bb = Forum::new(
             &admin_ctx,

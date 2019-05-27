@@ -188,7 +188,7 @@ pub fn test_host(_input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                     unsafe { std::slice::from_raw_parts(#bytes_arg, #bytes_len_arg) }.to_vec()
                 }
             } else {
-                quote! { #owned_ty::from_raw(#bytes_arg) }
+                quote! { unsafe { #owned_ty::from_raw(#bytes_arg) } }
             };
             let ext_push_fn_sig = def.ext_push_fn_sig();
             quote! {

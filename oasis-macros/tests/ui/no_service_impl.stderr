@@ -1,5 +1,5 @@
 error: Missing implementation for `Counter::new`.
- --> $DIR/no_contract_impl.rs:5:16
+ --> $DIR/no_service_impl.rs:5:16
   |
 5 |     pub struct Counter(u32);
   |                ^^^^^^^

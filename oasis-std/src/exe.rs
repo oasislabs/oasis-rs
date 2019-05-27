@@ -8,12 +8,36 @@ use crate::{
 /// A type that can be stored in Oasis Storage.
 pub trait Storage = serde::Serialize + serde::de::DeserializeOwned;
 
-pub trait Contract {
-    /// Builds a contract struct from items in Storage.
+pub trait Service {
+    /// Builds a service struct from items in Storage.
     fn coalesce() -> Self;
 
-    /// Stores a contract struct to Storage.
+    /// Stores a service struct to Storage.
     fn sunder(c: Self);
+}
+
+pub trait Event {
+    /// A struct implementing the builder pattern for setting topics.
+    ///
+    /// For example,
+    /// ```
+    /// #[derive(Event)]
+    /// struct MyEvent {
+    ///    #[indexed]
+    ///    my_topic: U256
+    ///    #[indexed]
+    ///    my_other_topic: U256,
+    /// }
+    ///
+    /// let topics: Vec<H256> = MyTopics::Topics::default()
+    ///    .set_my_other_topic(&U256::from(42))
+    ///    .hash();
+    /// // topics = vec![0, keccak256(abi_encode(my_other_topic))]
+    /// ```
+    type Topics;
+
+    /// Emits an event tagged with the (keccak) hashed function name and topics.
+    fn emit(&self);
 }
 
 /// The context of the current RPC.
@@ -25,6 +49,9 @@ pub struct Context {
 
     #[doc(hidden)]
     pub value: Option<U256>,
+
+    #[doc(hidden)]
+    pub gas: Option<U256>,
 
     #[doc(hidden)]
     pub call_type: CallType,
@@ -51,16 +78,23 @@ impl Context {
         }
     }
 
-    /// Sets the sender of this `Context`. Has no effect when called inside of a contract.
+    /// Sets the sender of the RPC receiving this `Context` as an argument.
+    /// Has no effect when called inside of a service.
     pub fn with_sender(mut self, sender: Address) -> Self {
         self.sender = Some(sender);
         self
     }
 
-    /// Creates a new Context, based on the current environment, that specifies
-    /// a transfer of `value` to the callee.
+    /// Amends a Context with the value that should be transferred to the callee.
     pub fn with_value<V: Into<U256>>(mut self, value: V) -> Self {
         self.value = Some(value.into());
+        self
+    }
+
+    /// Sets the amount of computation resources available to the callee.
+    /// Payed for by the `payer` of the `Context`.
+    pub fn with_gas<V: Into<U256>>(mut self, gas: V) -> Self {
+        self.gas = Some(gas.into());
         self
     }
 
@@ -69,8 +103,8 @@ impl Context {
         self.sender.unwrap_or_else(ext::sender)
     }
 
-    /// Returns the `Address` of the currently executing contract.
-    /// Panics if not currently in a contract.
+    /// Returns the `Address` of the currently executing service.
+    /// Panics if not currently in a service.
     pub fn address(&self) -> Address {
         ext::address()
     }
@@ -86,15 +120,15 @@ impl Context {
     }
 }
 
-/// Container for contract state that is lazily loaded from storage.
+/// Container for service state that is lazily loaded from storage.
 /// Currently can only be used as a top-level type (e.g., `Lazy<Vec<T>>`, not `Vec<Lazy<T>>`).
 /// where the entire Vec will be lazily instantiated (as opposed to each individual element).
 ///
 /// ## Example
 ///
 /// ```
-/// oasis_std::contract! {
-/// #[derive(Contract)]
+/// oasis_std::service! {
+/// #[derive(Service)]
 /// pub struct SinglePlayerRPG {
 ///     player_name: String,
 ///     inventory: Vec<InventoryItem>,

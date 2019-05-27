@@ -5,47 +5,65 @@ use std::{boxed::Box, collections::BTreeSet};
 use rustc::{
     hir::{self, def_id::DefId, FnDecl},
     ty::{self, AdtDef, TyCtxt, TyS},
+    util::nodemap::FxHashMap,
 };
+use syntax_pos::symbol::Symbol;
 
 use crate::error::UnsupportedTypeError;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
-pub struct RpcInterface {
-    name: RpcIdent,
-    namespace: RpcIdent, // the current crate name
+pub struct Interface {
+    name: Ident,
+    namespace: Ident, // the current crate name
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    imports: Vec<RpcImport>,
+    imports: Vec<Import>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    type_defs: Vec<RpcTypeDef>,
+    type_defs: Vec<TypeDef>,
     constructor: StateConstructor,
-    functions: Vec<RpcFunction>,
+    functions: Vec<Function>,
     idl_gen_version: String,
 }
 
-impl RpcInterface {
+impl Interface {
     // faq: why return a vec of errors? so that the user can see and correct them all at once.
     pub fn convert(
         tcx: TyCtxt,
-        name: syntax_pos::symbol::Ident,
+        name: Symbol,
         // the following use BTreeSets to ensure idl is deterministic
-        imports: BTreeSet<(syntax_pos::symbol::Symbol, String)>, // (name, version)
-        adt_defs: BTreeSet<&AdtDef>,
-        fns: &[(syntax_pos::symbol::Ident, &FnDecl)],
+        imports: BTreeSet<(Symbol, String)>, // (name, version)
+        adt_defs: BTreeSet<(&AdtDef, bool)>, // (adt_def, is_event)
+        event_indices: &FxHashMap<Symbol, Vec<Symbol>>,
+        fns: &[(Symbol, &FnDecl)],
     ) -> Result<Self, Vec<UnsupportedTypeError>> {
         let mut errs = Vec::new();
 
         let imports = imports
             .into_iter()
-            .map(|(name, version)| RpcImport {
+            .map(|(name, version)| Import {
                 name: name.to_string(),
                 version,
             })
             .collect();
 
         let mut type_defs = Vec::with_capacity(adt_defs.len());
-        for adt_def in adt_defs.iter() {
-            match RpcTypeDef::convert(tcx, adt_def) {
-                Ok(type_def) => type_defs.push(type_def),
+        for (adt_def, is_event) in adt_defs.iter() {
+            match TypeDef::convert(tcx, adt_def, *is_event) {
+                Ok(mut event_def) => {
+                    if let TypeDef::Event {
+                        name,
+                        ref mut fields,
+                    } = &mut event_def
+                    {
+                        if let Some(indexed_fields) = event_indices.get(&Symbol::intern(name)) {
+                            for field in fields.iter_mut() {
+                                field.indexed = indexed_fields
+                                    .iter()
+                                    .any(|f| *f == Symbol::intern(field.name.as_str()));
+                            }
+                        }
+                    }
+                    type_defs.push(event_def);
+                }
                 Err(err) => errs.push(err),
             }
         }
@@ -59,7 +77,7 @@ impl RpcInterface {
                     Err(mut errz) => errs.append(&mut errz),
                 }
             } else {
-                match RpcFunction::convert(tcx, *name, decl) {
+                match Function::convert(tcx, *name, decl) {
                     Ok(rpc_fn) => functions.push(rpc_fn),
                     Err(mut errz) => errs.append(&mut errz),
                 }
@@ -86,18 +104,18 @@ impl RpcInterface {
     }
 }
 
-pub type RpcIdent = String;
+pub type Ident = String;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
-pub struct RpcImport {
-    name: RpcIdent,
+pub struct Import {
+    name: Ident,
     version: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
 pub struct StateConstructor {
-    inputs: Vec<RpcType>,
-    // throws: Option<RpcType>,
+    inputs: Vec<Type>,
+    // throws: Option<Type>,
 }
 
 impl StateConstructor {
@@ -106,7 +124,7 @@ impl StateConstructor {
 
         let mut inputs = Vec::with_capacity(decl.inputs.len());
         for inp in decl.inputs.iter().skip(1 /* skip ctx */) {
-            match RpcType::convert_ty(tcx, inp) {
+            match Type::convert_ty(tcx, inp) {
                 Ok(ty) => inputs.push(ty),
                 Err(err) => errs.push(err),
             }
@@ -121,19 +139,19 @@ impl StateConstructor {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
-pub struct RpcFunction {
-    name: RpcIdent,
+pub struct Function {
+    name: Ident,
     mutability: StateMutability,
-    inputs: Vec<RpcType>,
+    inputs: Vec<Type>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    output: Option<RpcType>,
-    // throws: Option<RpcType>,
+    output: Option<Type>,
+    // throws: Option<Type>,
 }
 
-impl RpcFunction {
+impl Function {
     fn convert(
         tcx: TyCtxt,
-        name: syntax_pos::symbol::Ident,
+        name: Symbol,
         decl: &FnDecl,
     ) -> Result<Self, Vec<UnsupportedTypeError>> {
         let mut errs = Vec::new();
@@ -141,12 +159,12 @@ impl RpcFunction {
         let mutability = match decl.implicit_self {
             hir::ImplicitSelfKind::ImmRef => StateMutability::Immutable,
             hir::ImplicitSelfKind::MutRef => StateMutability::Mutable,
-            _ => unreachable!("`#[contract]` should have checked RPCs for `self`."),
+            _ => unreachable!("`#[service]` should have checked RPCs for `self`."),
         };
 
         let mut inputs = Vec::with_capacity(decl.inputs.len());
         for inp in decl.inputs.iter().skip(2 /* skip self and ctx */) {
-            match RpcType::convert_ty(tcx, inp) {
+            match Type::convert_ty(tcx, inp) {
                 Ok(ty) => inputs.push(ty),
                 Err(err) => errs.push(err),
             }
@@ -157,9 +175,9 @@ impl RpcFunction {
             hir::FunctionRetTy::Return(ty) => match &ty.node {
                 hir::TyKind::Path(hir::QPath::Resolved(_, path)) => {
                     let result_ty = crate::utils::get_type_args(&path)[0];
-                    match RpcType::convert_ty(tcx, &result_ty) {
+                    match Type::convert_ty(tcx, &result_ty) {
                         Ok(ret_ty) => match &ret_ty {
-                            RpcType::Tuple(tys) if tys.is_empty() => None,
+                            Type::Tuple(tys) if tys.is_empty() => None,
                             _ => Some(ret_ty),
                         },
                         Err(err) => {
@@ -193,8 +211,8 @@ pub enum StateMutability {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
-#[serde(rename_all = "lowercase")]
-pub enum RpcType {
+#[serde(rename_all = "lowercase", tag = "type", content = "params")]
+pub enum Type {
     Bool,
     U8,
     I8,
@@ -213,16 +231,16 @@ pub enum RpcType {
     H256,
     Defined {
         #[serde(skip_serializing_if = "Option::is_none")]
-        namespace: Option<RpcIdent>,
+        namespace: Option<Ident>,
         #[serde(rename = "type")]
-        ty: RpcIdent,
+        ty: Ident,
     },
-    Tuple(Vec<RpcType>),
-    Array(Box<RpcType>, u64),
-    List(Box<RpcType>),
-    Set(Box<RpcType>),
-    Map(Box<RpcType>, Box<RpcType>),
-    Optional(Box<RpcType>),
+    Tuple(Vec<Type>),
+    Array(Box<Type>, u64),
+    List(Box<Type>),
+    Set(Box<Type>),
+    Map(Box<Type>, Box<Type>),
+    Optional(Box<Type>),
 }
 
 // this is a macro because it's difficult to convince rustc that `T` \in {`Ty`, `TyS`}`
@@ -233,29 +251,29 @@ macro_rules! convert_def {
 
         Ok(if crate::utils::is_std(crate_name) {
             if ty_str == "String" {
-                RpcType::String
+                Type::String
             } else if ty_str == "Vec" {
                 let vec_ty = $arg_at(0);
                 if $vec_is_bytes(vec_ty) {
-                    RpcType::Bytes
+                    Type::Bytes
                 } else {
-                    RpcType::List(box $converter($tcx, $did, &vec_ty)?)
+                    Type::List(box $converter($tcx, $did, &vec_ty)?)
                 }
             } else if ty_str == "Option" {
-                RpcType::Optional(box $converter($tcx, $did, $arg_at(0))?)
+                Type::Optional(box $converter($tcx, $did, $arg_at(0))?)
             } else if ty_str == "HashMap" || ty_str == "BTreeMap" {
-                RpcType::Map(
+                Type::Map(
                     box $converter($tcx, $did, $arg_at(0))?,
                     box $converter($tcx, $did, $arg_at(1))?,
                 )
             } else if ty_str == "HashSet" || ty_str == "BTreeSet" {
-                RpcType::Set(box $converter($tcx, $did, $arg_at(0))?)
+                Type::Set(box $converter($tcx, $did, $arg_at(0))?)
             } else if ty_str == "Address" || ty_str == "H160" {
-                RpcType::Address
+                Type::Address
             } else if ty_str == "U256" {
-                RpcType::U256
+                Type::U256
             } else if ty_str == "H256" {
-                RpcType::H256
+                Type::H256
             } else {
                 // this branch includes `sync`, among other things
                 return Err(UnsupportedTypeError::NotReprC(
@@ -264,7 +282,7 @@ macro_rules! convert_def {
                 ));
             }
         } else {
-            RpcType::Defined {
+            Type::Defined {
                 namespace: if crate_name == $tcx.crate_name {
                     None
                 } else {
@@ -276,63 +294,74 @@ macro_rules! convert_def {
     }};
 }
 
-impl RpcType {
+impl Type {
     fn convert_ty(tcx: TyCtxt, ty: &hir::Ty) -> Result<Self, UnsupportedTypeError> {
         use hir::TyKind;
         Ok(match &ty.node {
-            TyKind::Slice(ty) => RpcType::List(box RpcType::convert_ty(tcx, &ty)?),
+            TyKind::Slice(ty) => Type::List(box Type::convert_ty(tcx, &ty)?),
             TyKind::Array(ty, len) => {
-                let arr_ty = box RpcType::convert_ty(tcx, &ty)?;
+                let arr_ty = box Type::convert_ty(tcx, &ty)?;
                 match tcx.hir().body(len.body).value.node {
                     hir::ExprKind::Lit(syntax::source_map::Spanned {
                         node: syntax::ast::LitKind::Int(len, _),
                         ..
-                    }) => RpcType::Array(arr_ty, len as u64),
-                    _ => RpcType::List(arr_ty),
+                    }) => Type::Array(arr_ty, len as u64),
+                    _ => Type::List(arr_ty),
                 }
             }
-            TyKind::Rptr(_, hir::MutTy { ty, .. }) => RpcType::convert_ty(tcx, ty)?,
-            TyKind::Tup(tys) => RpcType::Tuple(
+            TyKind::Rptr(_, hir::MutTy { ty, .. }) => Type::convert_ty(tcx, ty)?,
+            TyKind::Tup(tys) => Type::Tuple(
                 tys.iter()
-                    .map(|ty| RpcType::convert_ty(tcx, ty))
+                    .map(|ty| Type::convert_ty(tcx, ty))
                     .collect::<Result<Vec<_>, UnsupportedTypeError>>()?,
             ),
             TyKind::Path(hir::QPath::Resolved(_, path)) => {
-                use hir::def::Def;
-                match path.def {
-                    Def::Struct(did)
-                    | Def::Union(did)
-                    | Def::Enum(did)
-                    | Def::Variant(did)
-                    | Def::TyAlias(did)
-                    | Def::Const(did) => {
-                        let type_args = crate::utils::get_type_args(&path);
-                        let is_vec_u8 = |vec_ty: &hir::Ty| match vec_ty.node {
-                            hir::TyKind::Path(hir::QPath::Resolved(_, ref path))
-                                if path.to_string() == "u8" =>
-                            {
-                                true
-                            }
-                            _ => false,
-                        };
-                        convert_def!(
-                            tcx,
-                            did,
-                            |tcx, _, ty| RpcType::convert_ty(tcx, ty),
-                            |i| { type_args[i] },
-                            is_vec_u8
-                        )?
-                    }
-                    Def::PrimTy(ty) => match ty {
-                        hir::PrimTy::Int(ty) => RpcType::convert_int(ty, path.span)?,
-                        hir::PrimTy::Uint(ty) => RpcType::convert_uint(ty, path.span)?,
-                        hir::PrimTy::Float(ty) => RpcType::convert_float(ty, path.span)?,
-                        hir::PrimTy::Str => RpcType::String,
-                        hir::PrimTy::Bool => RpcType::Bool,
-                        hir::PrimTy::Char => RpcType::I8,
+                use hir::def::{DefKind, Res};
+                match path.res {
+                    Res::Def(kind, id) => match kind {
+                        DefKind::Struct
+                        | DefKind::Union
+                        | DefKind::Enum
+                        | DefKind::Variant
+                        | DefKind::TyAlias
+                        | DefKind::Const => {
+                            let type_args = crate::utils::get_type_args(&path);
+                            let is_vec_u8 = |vec_ty: &hir::Ty| match vec_ty.node {
+                                hir::TyKind::Path(hir::QPath::Resolved(_, ref path))
+                                    if path.to_string() == "u8" =>
+                                {
+                                    true
+                                }
+                                _ => false,
+                            };
+                            convert_def!(
+                                tcx,
+                                id,
+                                |tcx, _, ty| Type::convert_ty(tcx, ty),
+                                |i| { type_args[i] },
+                                is_vec_u8
+                            )?
+                        }
+                        _ => {
+                            return Err(UnsupportedTypeError::NotReprC(
+                                format!("{:?}", path),
+                                path.span,
+                            ))
+                        }
+                    },
+                    Res::PrimTy(ty) => match ty {
+                        hir::PrimTy::Int(ty) => Type::convert_int(ty, path.span)?,
+                        hir::PrimTy::Uint(ty) => Type::convert_uint(ty, path.span)?,
+                        hir::PrimTy::Float(ty) => Type::convert_float(ty, path.span)?,
+                        hir::PrimTy::Str => Type::String,
+                        hir::PrimTy::Bool => Type::Bool,
+                        hir::PrimTy::Char => Type::I8,
                     },
                     _ => {
-                        return Err(UnsupportedTypeError::NotReprC(path.to_string(), path.span));
+                        return Err(UnsupportedTypeError::NotReprC(
+                            format!("{:?}", path),
+                            path.span,
+                        ))
                     }
                 }
             }
@@ -343,11 +372,11 @@ impl RpcType {
     fn convert_sty(tcx: TyCtxt, did: DefId, ty: &TyS) -> Result<Self, UnsupportedTypeError> {
         use ty::TyKind::*;
         Ok(match ty.sty {
-            Bool => RpcType::Bool,
-            Char => RpcType::I8,
-            Int(ty) => RpcType::convert_int(ty, tcx.def_span(did))?,
-            Uint(ty) => RpcType::convert_uint(ty, tcx.def_span(did))?,
-            Float(ty) => RpcType::convert_float(ty, tcx.def_span(did))?,
+            Bool => Type::Bool,
+            Char => Type::I8,
+            Int(ty) => Type::convert_int(ty, tcx.def_span(did))?,
+            Uint(ty) => Type::convert_uint(ty, tcx.def_span(did))?,
+            Float(ty) => Type::convert_float(ty, tcx.def_span(did))?,
             Adt(AdtDef { did, .. }, substs) => {
                 let is_vec_u8 = |vec_ty: &TyS| {
                     if let Uint(syntax::ast::UintTy::U8) = vec_ty.sty {
@@ -359,21 +388,21 @@ impl RpcType {
                 convert_def!(
                     tcx,
                     *did,
-                    &RpcType::convert_sty,
+                    &Type::convert_sty,
                     |i| substs.type_at(i),
                     is_vec_u8
                 )?
             }
-            Str => RpcType::String,
-            Array(ty, len) => RpcType::Array(
-                box RpcType::convert_sty(tcx, did, ty)?,
-                len.unwrap_usize(tcx),
-            ),
-            Slice(ty) => RpcType::List(box RpcType::convert_sty(tcx, did, ty)?),
-            Ref(_, ty, _) => return RpcType::convert_sty(tcx, did, ty),
-            Tuple(tys) => RpcType::Tuple(
-                tys.iter()
-                    .map(|ty| RpcType::convert_sty(tcx, did, ty))
+            Str => Type::String,
+            Array(ty, len) => {
+                Type::Array(box Type::convert_sty(tcx, did, ty)?, len.unwrap_usize(tcx))
+            }
+            Slice(ty) => Type::List(box Type::convert_sty(tcx, did, ty)?),
+            Ref(_, ty, _) => return Type::convert_sty(tcx, did, ty),
+            Tuple(substs) => Type::Tuple(
+                substs
+                    .types()
+                    .map(|ty| Type::convert_sty(tcx, did, ty))
                     .collect::<Result<Vec<_>, UnsupportedTypeError>>()?,
             ),
             _ => {
@@ -388,13 +417,13 @@ impl RpcType {
     fn convert_int(
         ty: syntax::ast::IntTy,
         span: syntax_pos::Span,
-    ) -> Result<RpcType, UnsupportedTypeError> {
+    ) -> Result<Type, UnsupportedTypeError> {
         use syntax::ast::IntTy;
         Ok(match ty {
-            IntTy::I8 => RpcType::I8,
-            IntTy::I16 => RpcType::I16,
-            IntTy::I32 => RpcType::I32,
-            IntTy::I64 => RpcType::I64,
+            IntTy::I8 => Type::I8,
+            IntTy::I16 => Type::I16,
+            IntTy::I32 => Type::I32,
+            IntTy::I64 => Type::I64,
             IntTy::I128 | IntTy::Isize => {
                 return Err(UnsupportedTypeError::NotReprC(ty.to_string(), span))
             }
@@ -404,13 +433,13 @@ impl RpcType {
     fn convert_uint(
         ty: syntax::ast::UintTy,
         span: syntax_pos::Span,
-    ) -> Result<RpcType, UnsupportedTypeError> {
+    ) -> Result<Type, UnsupportedTypeError> {
         use syntax::ast::UintTy;
         Ok(match ty {
-            UintTy::U8 => RpcType::U8,
-            UintTy::U16 => RpcType::U16,
-            UintTy::U32 => RpcType::U32,
-            UintTy::U64 => RpcType::U64,
+            UintTy::U8 => Type::U8,
+            UintTy::U16 => Type::U16,
+            UintTy::U32 => Type::U32,
+            UintTy::U64 => Type::U64,
             UintTy::U128 | UintTy::Usize => {
                 return Err(UnsupportedTypeError::NotReprC(ty.to_string(), span))
             }
@@ -420,31 +449,26 @@ impl RpcType {
     fn convert_float(
         ty: syntax::ast::FloatTy,
         _span: syntax_pos::Span,
-    ) -> Result<RpcType, UnsupportedTypeError> {
+    ) -> Result<Type, UnsupportedTypeError> {
         use syntax::ast::FloatTy;
         Ok(match ty {
-            FloatTy::F32 => RpcType::F32,
-            FloatTy::F64 => RpcType::F64,
+            FloatTy::F32 => Type::F32,
+            FloatTy::F64 => Type::F64,
         })
     }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
 #[serde(rename_all = "lowercase", tag = "type")]
-pub enum RpcTypeDef {
-    Struct {
-        name: RpcIdent,
-        fields: Vec<RpcField>,
-    },
-    Enum {
-        name: RpcIdent,
-        variants: Vec<RpcIdent>,
-    },
+pub enum TypeDef {
+    Struct { name: Ident, fields: Vec<Field> },
+    Enum { name: Ident, variants: Vec<Ident> },
+    Event { name: Ident, fields: Vec<Field> },
     // TODO: unions and exceptions
 }
 
-impl RpcTypeDef {
-    fn convert(tcx: TyCtxt, def: &AdtDef) -> Result<Self, UnsupportedTypeError> {
+impl TypeDef {
+    fn convert(tcx: TyCtxt, def: &AdtDef, is_event: bool) -> Result<Self, UnsupportedTypeError> {
         let ty_name = tcx
             .def_path(def.did)
             .data
@@ -458,7 +482,7 @@ impl RpcTypeDef {
                 // TODO: convert Rust struct enum to tagged union
                 return Err(UnsupportedTypeError::ComplexEnum(tcx.def_span(def.did)));
             }
-            Ok(RpcTypeDef::Enum {
+            Ok(TypeDef::Enum {
                 name: ty_name,
                 variants: def.variants.iter().map(|v| v.ident.to_string()).collect(),
             })
@@ -466,15 +490,23 @@ impl RpcTypeDef {
             let fields = def
                 .all_fields()
                 .map(|f| {
-                    Ok(RpcField {
+                    Ok(Field {
                         name: f.ident.to_string(),
-                        ty: RpcType::convert_sty(tcx, f.did, tcx.type_of(f.did))?,
+                        ty: Type::convert_sty(tcx, f.did, tcx.type_of(f.did))?,
+                        indexed: false,
                     })
                 })
-                .collect::<Result<Vec<RpcField>, UnsupportedTypeError>>()?;
-            Ok(RpcTypeDef::Struct {
-                name: ty_name,
-                fields,
+                .collect::<Result<Vec<Field>, UnsupportedTypeError>>()?;
+            Ok(if is_event {
+                TypeDef::Event {
+                    name: ty_name,
+                    fields,
+                }
+            } else {
+                TypeDef::Struct {
+                    name: ty_name,
+                    fields,
+                }
             })
         } else if def.is_union() {
             // TODO? serde doesn't derive unions. not sure if un-tagged unions are actually useful.
@@ -489,8 +521,10 @@ impl RpcTypeDef {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
-pub struct RpcField {
-    name: RpcIdent,
+pub struct Field {
+    name: Ident,
     #[serde(rename = "type")]
-    ty: RpcType,
+    ty: Type,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    indexed: bool, // can only be set when a field of an event
 }

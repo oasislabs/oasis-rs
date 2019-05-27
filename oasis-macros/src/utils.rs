@@ -14,7 +14,7 @@ fn has_derive(s: &syn::ItemStruct, derive: &str) -> bool {
         Ok(syn::Meta::List(l)) => {
             l.ident == "derive"
                 && l.nested.iter().any(|nest| match nest {
-                    syn::NestedMeta::Meta(m) => &m.name() == derive,
+                    syn::NestedMeta::Meta(m) => m.name() == derive,
                     _ => false,
                 })
         }
@@ -37,7 +37,7 @@ fn keccak_key(ident: &syn::Ident) -> proc_macro2::TokenStream {
         tiny_keccak::keccak256(ident.to_string().as_bytes())
     ))
     .unwrap();
-    quote! { H256::from(&#key) }
+    quote! { oasis_std::types::H256::from(&#key) }
 }
 
 /// Recursively removes borrows from a type.  E.g., `&Vec<&str>` becomes `Vec<String>`.

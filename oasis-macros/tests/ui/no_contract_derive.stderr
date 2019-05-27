@@ -1,8 +1,0 @@
-error: Contract definition must contain a #[derive(Contract)] struct.
- --> $DIR/no_contract_derive.rs:2:1
-  |
-2 | #[oasis_std::contract]
-  | ^^^^^^^^^^^^^^^^^^^^^^
-
-error: aborting due to previous error
-

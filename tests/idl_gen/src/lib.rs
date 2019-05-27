@@ -11,12 +11,19 @@ pub enum InnerTy {
 
 pub type Tuple = (H256, U256, Address);
 
-#[oasis_std::contract]
-mod contract {
-    #[derive(Contract, Debug)]
-    pub struct TestContract {}
+#[derive(Serialize, Deserialize, Event, Default)]
+pub struct TestEvent {
+    #[indexed]
+    indexed: DefTy,
+    non_indexed: (u32, u32),
+}
 
-    #[derive(Serialize, Deserialize, Debug, Clone)]
+#[oasis_std::service]
+mod service {
+    #[derive(Service)]
+    pub struct TestService {}
+
+    #[derive(Serialize, Deserialize, Clone, Default)]
     pub struct DefTy {
         f1: Option<i64>,
         f2: Vec<Option<DefTy>>,
@@ -24,7 +31,15 @@ mod contract {
         f4: Tuple,
     }
 
-    impl TestContract {
+    #[derive(Serialize, Deserialize, Event, Default)]
+    pub struct TestEvent2 {
+        #[indexed]
+        indexed1: u32,
+        #[indexed]
+        indexed2: u32,
+    }
+
+    impl TestService {
         pub fn new(ctx: &Context, name: String) -> Result<Self> {
             unimplemented!()
         }
@@ -43,10 +58,14 @@ mod contract {
         }
 
         fn private(&self, ctx: &Context, arg: String) -> Result<U256> {
+            TestEvent::default().emit();
             unimplemented!()
         }
 
         pub fn void(&self, ctx: &Context) -> Result<()> {
+            let event = TestEvent2::default();
+            let event_ref = &event;
+            Event::emit(&*event_ref);
             unimplemented!()
         }
 
@@ -55,7 +74,11 @@ mod contract {
             ctx: &Context,
             imported: testlib::RpcType,
         ) -> Result<(bool, char)> {
-            unimplemented!()
+            Event::emit(&testlib::RandomEvent {
+                the_topic: "hello".to_string(),
+                the_data: "world".to_string(),
+            });
+            unimplemented!();
         }
     }
 }
@@ -64,14 +87,14 @@ mod contract {
 fn test_idl_gen() {
     let idl_json = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/target/contract/TestContract.json"
+        "/target/service/TestService.json"
     ))
     .unwrap();
 
     let actual: serde_json::Value = serde_json::from_str(&idl_json).unwrap();
     let expected: serde_json::Value = serde_json::from_str(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/res/TestContract.json"
+        "/res/TestService.json"
     )))
     .unwrap();
 

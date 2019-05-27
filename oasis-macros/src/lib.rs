@@ -18,7 +18,8 @@ use syn::{spanned::Spanned as _, visit_mut::VisitMut as _};
 
 // per rustc: "functions tagged with `#[proc_macro]` must currently reside in the root of the crate"
 include!("utils.rs");
-include!("contract_attr.rs");
-include!("contract_derive.rs");
+include!("service_attr.rs");
+include!("service_derive.rs");
+include!("event_derive.rs");
 include!("rpc.rs");
 include!("testing.rs");

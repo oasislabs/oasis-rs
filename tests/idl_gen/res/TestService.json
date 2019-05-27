@@ -1,0 +1,226 @@
+{
+  "name": "TestService",
+  "namespace": "test_idl_gen",
+  "imports": [
+    {
+      "name": "testlib",
+      "version": "0.1.0"
+    }
+  ],
+  "type_defs": [
+    {
+      "type": "enum",
+      "name": "InnerTy",
+      "variants": [
+        "Field1",
+        "Field2"
+      ]
+    },
+    {
+      "type": "event",
+      "name": "TestEvent",
+      "fields": [
+        {
+          "name": "indexed",
+          "type": {
+            "type": "defined",
+            "params": {
+              "type": "DefTy"
+            }
+          },
+          "indexed": true
+        },
+        {
+          "name": "non_indexed",
+          "type": {
+            "type": "tuple",
+            "params": [
+              {
+                "type": "u32"
+              },
+              {
+                "type": "u32"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "struct",
+      "name": "DefTy",
+      "fields": [
+        {
+          "name": "f1",
+          "type": {
+            "type": "optional",
+            "params": {
+              "type": "i64"
+            }
+          }
+        },
+        {
+          "name": "f2",
+          "type": {
+            "type": "list",
+            "params": {
+              "type": "optional",
+              "params": {
+                "type": "defined",
+                "params": {
+                  "type": "DefTy"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "f3",
+          "type": {
+            "type": "map",
+            "params": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "defined",
+                "params": {
+                  "type": "InnerTy"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "f4",
+          "type": {
+            "type": "tuple",
+            "params": [
+              {
+                "type": "h256"
+              },
+              {
+                "type": "u256"
+              },
+              {
+                "type": "address"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "name": "TestEvent2",
+      "fields": [
+        {
+          "name": "indexed1",
+          "type": {
+            "type": "u32"
+          },
+          "indexed": true
+        },
+        {
+          "name": "indexed2",
+          "type": {
+            "type": "u32"
+          },
+          "indexed": true
+        }
+      ]
+    }
+  ],
+  "constructor": {
+    "inputs": [
+      {
+        "type": "string"
+      }
+    ]
+  },
+  "functions": [
+    {
+      "name": "the",
+      "mutability": "immutable",
+      "inputs": [
+        {
+          "type": "list",
+          "params": {
+            "type": "defined",
+            "params": {
+              "type": "DefTy"
+            }
+          }
+        },
+        {
+          "type": "bytes"
+        }
+      ],
+      "output": {
+        "type": "set",
+        "params": {
+          "type": "address"
+        }
+      }
+    },
+    {
+      "name": "it",
+      "mutability": "mutable",
+      "inputs": [
+        {
+          "type": "map",
+          "params": [
+            {
+              "type": "bool"
+            },
+            {
+              "type": "array",
+              "params": [
+                {
+                  "type": "u32"
+                },
+                12
+              ]
+            }
+          ]
+        },
+        {
+          "type": "set",
+          "params": {
+            "type": "i64"
+          }
+        }
+      ]
+    },
+    {
+      "name": "void",
+      "mutability": "immutable",
+      "inputs": []
+    },
+    {
+      "name": "import",
+      "mutability": "mutable",
+      "inputs": [
+        {
+          "type": "defined",
+          "params": {
+            "namespace": "testlib",
+            "type": "RpcType"
+          }
+        }
+      ],
+      "output": {
+        "type": "tuple",
+        "params": [
+          {
+            "type": "bool"
+          },
+          {
+            "type": "i8"
+          }
+        ]
+      }
+    }
+  ],
+  "idl_gen_version": "0.1.0"
+}

@@ -1,16 +1,16 @@
-#[proc_macro_derive(Contract)]
-pub fn contract_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+#[proc_macro_derive(Service)]
+pub fn service_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
-    let contract = &input.ident;
+    let service = &input.ident;
     proc_macro::TokenStream::from(match get_serde(&input) {
         Ok((ser, de)) => {
             quote! {
-                impl Contract for #contract {
+                impl oasis_std::exe::Service for #service {
                     fn coalesce() -> Self {
                         #de
                     }
 
-                    fn sunder(contract: Self) {
+                    fn sunder(service: Self) {
                         #ser
                     }
                 }
@@ -24,8 +24,8 @@ fn get_serde(
     input: &syn::DeriveInput,
 ) -> Result<(proc_macro2::TokenStream, proc_macro2::TokenStream), ()> {
     if input.generics.type_params().count() > 0 {
-        err!(input.generics: "Contract cannot contain generic types.");
-        // early return because `impl Contract` won't have generics which will
+        err!(input.generics: "Service cannot contain generic types.");
+        // early return because `impl Service` won't have generics which will
         // result in additional, confusing error messages.
         return Err(());
     }
@@ -39,7 +39,7 @@ fn get_serde(
             (named, s.fields.iter())
         }
         _ => {
-            err!(input: "`#[derive(Contract)]` can only be applied to structs.");
+            err!(input: "`#[derive(Service)]` can only be applied to structs.");
             return Err(());
         }
     };
@@ -106,10 +106,10 @@ fn get_type_serde(
             {
                 (
                     quote! {
-                        if contract.#struct_idx.is_initialized() {
+                        if service.#struct_idx.is_initialized() {
                             oasis::set_bytes(
                                 &#key,
-                                &serde_cbor::to_vec(contract.#struct_idx.get()).unwrap()
+                                &serde_cbor::to_vec(service.#struct_idx.get()).unwrap()
                             ).unwrap()
                         }
                     },
@@ -120,7 +120,7 @@ fn get_type_serde(
             }
         }
         ty => {
-            err!(ty: "Contract field must be a POD type.");
+            err!(ty: "Service field must be a POD type.");
             (quote!(unreachable!()), quote!(unreachable!()))
         }
     }
@@ -135,7 +135,7 @@ fn default_serde(
         quote! {
             oasis::set_bytes(
                 &#key,
-                &serde_cbor::to_vec(&contract.#struct_idx).unwrap()
+                &serde_cbor::to_vec(&service.#struct_idx).unwrap()
             ).unwrap()
         },
         quote! { serde_cbor::from_slice(&oasis::get_bytes(&#key).unwrap()).unwrap() },

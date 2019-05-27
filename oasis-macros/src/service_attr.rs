@@ -1,20 +1,20 @@
 #[proc_macro_attribute]
-pub fn contract(
+pub fn service(
     _args: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    let contract_def = parse_macro_input!(input as syn::ItemMod);
+    let service_def = parse_macro_input!(input as syn::ItemMod);
 
-    let mut contract = None;
+    let mut service = None;
     let mut impls = Vec::new();
     let mut other_items = Vec::new();
-    for item in contract_def.content.unwrap().1.into_iter() {
+    for item in service_def.content.unwrap().1.into_iter() {
         match item {
-            syn::Item::Struct(s) if has_derive(&s, "Contract") => {
-                if contract.is_none() {
-                    contract.replace(s);
+            syn::Item::Struct(s) if has_derive(&s, "Service") => {
+                if service.is_none() {
+                    service.replace(s);
                 } else {
-                    err!(s: "`contract!` must contain exactly one #[derive(Contract)] struct. Additional occurrence here:");
+                    err!(s: "`service!` must contain exactly one #[derive(Service)] struct. Additional occurrence here:");
                     other_items.push(s.into());
                 }
             }
@@ -24,9 +24,6 @@ pub fn contract(
     }
 
     let preamble = quote! {
-        #[cfg(all(feature = "deploy", not(all(target_arch = "wasm32", target_env = ""))))]
-        compile_error!("Please rerun deploy build with `--target=wasm32-unknown-unknown`.");
-
         #[macro_use]
         extern crate oasis_std;
         #[macro_use]
@@ -44,41 +41,41 @@ pub fn contract(
         };
     }
 
-    let contract = match contract {
-        Some(contract) => contract,
+    let service = match service {
+        Some(service) => service,
         None => {
             proc_macro::Span::call_site()
-                .error("Contract definition must contain a #[derive(Contract)] struct.")
+                .error("Service definition must contain a #[derive(Service)] struct.")
                 .emit();
             early_return!();
         }
     };
-    let mut test_contract = contract.clone();
-    PubCrater {}.visit_item_struct_mut(&mut test_contract);
-    let contract_ident = &contract.ident;
+    let mut test_service = service.clone();
+    PubCrater {}.visit_item_struct_mut(&mut test_service);
+    let service_ident = &service.ident;
 
-    if contract.generics.type_params().count() > 0 {
-        err!(contract.generics: "Contract cannot contain generic types.");
+    if service.generics.type_params().count() > 0 {
+        err!(service.generics: "Service cannot contain generic types.");
         early_return!();
     }
 
-    let mut contract_impls = Vec::new();
+    let mut service_impls = Vec::new();
     for imp in impls.into_iter() {
-        if is_impl_of(&imp, contract_ident) {
-            contract_impls.push(imp);
+        if is_impl_of(&imp, service_ident) {
+            service_impls.push(imp);
         } else {
             other_items.push(imp.into());
         }
     }
 
     // Transform `lazy!(val)` into `Lazy::_new(key, val)`.
-    contract_impls.iter_mut().for_each(|item| {
+    service_impls.iter_mut().for_each(|item| {
         LazyInserter {}.visit_item_impl_mut(item);
     });
 
     let mut ctor = None;
     let mut rpcs = Vec::new();
-    for imp in contract_impls.iter() {
+    for imp in service_impls.iter() {
         for item in imp.items.iter() {
             if let syn::ImplItem::Method(m) = item {
                 match m.vis {
@@ -95,7 +92,7 @@ pub fn contract(
                     }
                     _ => {
                         if m.sig.ident == "new" {
-                            err!(m: "`{}::new` should have `pub` visibility", contract_ident);
+                            err!(m: "`{}::new` should have `pub` visibility", service_ident);
                             early_return!();
                         }
                     }
@@ -107,7 +104,7 @@ pub fn contract(
     let ctor = match ctor.into_iter().nth(0) {
         Some(ctor) => ctor,
         None => {
-            err!(contract_ident: "Missing implementation for `{}::new`.", contract_ident);
+            err!(service_ident: "Missing implementation for `{}::new`.", service_ident);
             early_return!()
         }
     };
@@ -131,7 +128,7 @@ pub fn contract(
             let call_args = rpc.call_args();
             quote! {
                 RpcPayload::#ident { #(#arg_names),* } => {
-                    let result = contract.#ident(&ctx, #(#call_args),*);
+                    let result = service.#ident(&ctx, #(#call_args),*);
                     // TODO: better error handling (#15)
                     serde_cbor::to_vec(&result.map_err(|err| err.to_string()))
                 }
@@ -144,12 +141,12 @@ pub fn contract(
     } else {
         quote! {
             let ctx = Context::default(); // TODO: use delegated if called using dcall (#33)
-            let mut contract = <#contract_ident>::coalesce();
+            let mut service = <#service_ident>::coalesce();
             let payload: RpcPayload = serde_cbor::from_slice(&oasis::input()).unwrap();
             let result = match payload {
                 #(#call_tree),*
             }.unwrap();
-            #contract_ident::sunder(contract);
+            #service_ident::sunder(service);
             oasis::ret(&result);
         }
     };
@@ -191,21 +188,22 @@ pub fn contract(
             let rpc_inner = quote! {
                 let payload = RpcPayload::#ident { #(#inps),* };
                 let input = serde_cbor::to_vec(&payload).unwrap();
+                let gas_left = #ctx_ident.gas_left();
                 let result = oasis_std::testing::call_with(
                     &self._address,
                     #ctx_ident.sender.as_ref(),
                     #ctx_ident.value.as_ref(),
                     &input,
-                    &U256::zero() /* gas */, // TODO (#14)
+                    &#ctx_ident.gas.map(|gas| std::cmp::min(gas, gas_left)).unwrap_or(gas_left),
                     &|| {
                         let result = oasis::call(
-                            #ctx_ident.gas_left(),
+                            gas_left,
                             &self._address /* callee = address held by `Client` struct */,
                             #ctx_ident.value(),
                             &input
                         );
                         if cfg!(test) {
-                            unsafe { &mut *self.contract.get() }.replace(TheContract::coalesce());
+                            unsafe { &mut *self.service.get() }.replace(TheService::coalesce());
                         }
                         result
                     }
@@ -224,7 +222,7 @@ pub fn contract(
         })
         .collect();
 
-    let client_ident = format_ident!("{}Client", contract.ident);
+    let client_ident = format_ident!("{}Client", service.ident);
 
     proc_macro::TokenStream::from(quote! {
         #preamble
@@ -232,7 +230,7 @@ pub fn contract(
         #(#other_items)*
 
         #[allow(non_snake_case)]
-        mod contract {
+        mod service {
             use super::*;
 
             #[derive(serde::Serialize, serde::Deserialize)]
@@ -247,16 +245,16 @@ pub fn contract(
                 #(#rpc_defs),*
             }
 
-            mod contract {
+            mod service {
                 use super::*;
 
                 #[cfg(not(test))]
-                #contract
+                #service
 
                 #[cfg(test)]
-                #test_contract
+                #test_service
 
-                #(#contract_impls)*
+                #(#service_impls)*
 
                 pub(super) extern "C" fn call() {
                     #entry_fn_body
@@ -264,8 +262,8 @@ pub fn contract(
 
                 pub(super) extern "C" fn deploy() {
                     #deploy_payload
-                    #contract_ident::sunder(
-                        #contract_ident::new(&Context::default(), #(#ctor_args),*).unwrap()
+                    #service_ident::sunder(
+                        #service_ident::new(&Context::default(), #(#ctor_args),*).unwrap()
                     );
                 }
 
@@ -288,25 +286,25 @@ pub fn contract(
                 use std::cell::UnsafeCell;
 
                 use super::*;
-                use contract::#contract_ident as TheContract;
+                use service::#service_ident as TheService;
 
                 pub struct #client_ident {
-                    contract: UnsafeCell<Option<TheContract>>, // `Some` during testing
+                    service: UnsafeCell<Option<TheService>>, // `Some` during testing
                     _address: Address,
                 }
 
                 #[cfg(test)]
                 impl std::ops::Deref for #client_ident {
-                    type Target = TheContract;
+                    type Target = TheService;
                     fn deref(&self) -> &Self::Target {
-                        unsafe { &mut *self.contract.get() }.as_ref().unwrap()
+                        unsafe { &mut *self.service.get() }.as_ref().unwrap()
                     }
                 }
 
                 #[cfg(test)]
                 impl std::ops::DerefMut for #client_ident {
                     fn deref_mut(&mut self) -> &mut Self::Target {
-                        unsafe { &mut *self.contract.get() }.as_mut().unwrap()
+                        unsafe { &mut *self.service.get() }.as_mut().unwrap()
                     }
                 }
 
@@ -316,44 +314,44 @@ pub fn contract(
                     #[allow(unused_variables)]
                     pub #ctor_sig {
                         let is_testing = oasis_std::testing::is_testing();
-                        let empty_contract = Vec::new();
-                        let contract_addr = oasis::create(
+                        let empty_service = Vec::new();
+                        let service_addr = oasis::create(
                             #ctor_ctx_ident.value.unwrap_or_default(),
                             if is_testing {
-                                &empty_contract
+                                &empty_service
                             } else {
                                 // cfg is needed for unit testing oasis-std via single-file crates
                                 #[cfg(not(any(test, feature = "test")))]
-                                {include_bytes!(env!("CONTRACT_PATH"))}
+                                {include_bytes!(env!("SERVICE_BIN_PATH"))}
                                 #[cfg(any(test, feature = "test"))]
-                                { &empty_contract }
+                                { &empty_service }
                             }
                         )?;
                         oasis_std::testing::register_exports(
-                            contract_addr,
-                            &[("call".to_string(), super::contract::call)],
+                            service_addr,
+                            &[("call".to_string(), super::service::call)],
                         );
                         oasis_std::testing::call_with(
-                            &contract_addr,
+                            &service_addr,
                             #ctor_ctx_ident.sender.as_ref(),
                             #ctor_ctx_ident.value.as_ref(),
                             &serde_cbor::to_vec(&CtorPayload { #(#ctor_payload_inps),* }).unwrap(),
                             &U256::zero() /* gas */, // TODO (#14)
-                            || { contract::deploy() }
+                            || { service::deploy() }
                         );
                         Ok(Self {
-                            contract: UnsafeCell::new(if oasis_std::testing::is_testing() {
-                                Some(TheContract::new(#ctor_ctx_ident, #(#ctor_args),*)?)
+                            service: UnsafeCell::new(if oasis_std::testing::is_testing() {
+                                Some(TheService::new(#ctor_ctx_ident, #(#ctor_args),*)?)
                             } else {
                                 None
                             }),
-                            _address: contract_addr,
+                            _address: service_addr,
                         })
                     }
 
                     pub fn at(address: Address) -> Self {
                         Self {
-                            contract: UnsafeCell::new(None),
+                            service: UnsafeCell::new(None),
                             _address: address,
                         }
                     }
@@ -365,10 +363,10 @@ pub fn contract(
             }
 
             #[cfg(any(not(feature = "deploy"), test))]
-            pub use client::#client_ident as #contract_ident;
+            pub use client::#client_ident as #service_ident;
         }
         #[cfg(any(not(feature = "deploy"), test))]
-        pub use contract::#contract_ident;
+        pub use service::#service_ident;
     })
 }
 
@@ -392,7 +390,7 @@ impl syn::visit_mut::VisitMut for LazyInserter {
     }
 }
 
-/// Used to increase the visibility of contract struct fields to at least `pub(crate)`
+/// Used to increase the visibility of service struct fields to at least `pub(crate)`
 /// so that testing client can proxy field access via `Deref`.
 struct PubCrater {}
 impl syn::visit_mut::VisitMut for PubCrater {

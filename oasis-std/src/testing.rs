@@ -1,3 +1,5 @@
+#![allow(unused_attributes)]
+
 use crate::types::*;
 
 oasis_macros::test_client!();
@@ -65,7 +67,7 @@ pub fn call_with<T, F: FnOnce() -> T>(
 }
 
 pub fn create_account<V: Into<U256>>(balance: V) -> Address {
-    Address::from_raw(unsafe { test_ext::create_account(balance.into().as_ptr()) })
+    unsafe { Address::from_raw(test_ext::create_account(balance.into().as_ptr())) }
 }
 
 pub fn is_testing() -> bool {

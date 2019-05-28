@@ -30,6 +30,7 @@ pub fn service(
         extern crate serde;
 
         use oasis_std::prelude::*;
+        use oasis_std::reexports::*;
     };
 
     macro_rules! early_return {

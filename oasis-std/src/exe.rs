@@ -1,9 +1,6 @@
 use std::cell::UnsafeCell;
 
-use crate::{
-    ext,
-    types::{Address, H256, U256},
-};
+use crate::types::Address;
 
 /// A type that can be stored in Oasis Storage.
 pub trait Storage = serde::Serialize + serde::de::DeserializeOwned;
@@ -24,13 +21,13 @@ pub trait Event {
     /// #[derive(Event)]
     /// struct MyEvent {
     ///    #[indexed]
-    ///    my_topic: U256
+    ///    my_topic: u64,
     ///    #[indexed]
-    ///    my_other_topic: U256,
+    ///    my_other_topic: u64,
     /// }
     ///
-    /// let topics: Vec<H256> = MyTopics::Topics::default()
-    ///    .set_my_other_topic(&U256::from(42))
+    /// let topics: Vec<Vec<u8>> = MyTopics::Topics::default()
+    ///    .set_my_other_topic(42)
     ///    .hash();
     /// // topics = vec![0, keccak256(abi_encode(my_other_topic))]
     /// ```
@@ -48,10 +45,10 @@ pub struct Context {
     pub sender: Option<Address>,
 
     #[doc(hidden)]
-    pub value: Option<U256>,
+    pub value: Option<u64>,
 
     #[doc(hidden)]
-    pub gas: Option<U256>,
+    pub gas: Option<u64>,
 
     #[doc(hidden)]
     pub call_type: CallType,
@@ -86,14 +83,14 @@ impl Context {
     }
 
     /// Amends a Context with the value that should be transferred to the callee.
-    pub fn with_value<V: Into<U256>>(mut self, value: V) -> Self {
+    pub fn with_value(mut self, value: u64) -> Self {
         self.value = Some(value.into());
         self
     }
 
     /// Sets the amount of computation resources available to the callee.
     /// Payed for by the `payer` of the `Context`.
-    pub fn with_gas<V: Into<U256>>(mut self, gas: V) -> Self {
+    pub fn with_gas(mut self, gas: u64) -> Self {
         self.gas = Some(gas.into());
         self
     }
@@ -110,12 +107,12 @@ impl Context {
     }
 
     /// Returns the value with which this `Context` was created.
-    pub fn value(&self) -> U256 {
+    pub fn value(&self) -> u64 {
         self.value.unwrap_or_else(ext::value)
     }
 
     /// Returns the remaining gas allocated to this transaction.
-    pub fn gas_left(&self) -> U256 {
+    pub fn gas_left(&self) -> u64 {
         ext::gas_left()
     }
 }
@@ -165,7 +162,7 @@ impl Context {
 /// ```
 #[derive(Debug)]
 pub struct Lazy<T: Storage> {
-    key: H256,
+    key: Vec<u8>,
     val: UnsafeCell<Option<T>>,
 }
 
@@ -173,7 +170,7 @@ impl<T: Storage> Lazy<T> {
     /// Creates a Lazy value with initial contents.
     /// This function is for internal use. Clients should use the `lazy!` macro.
     #[doc(hidden)]
-    pub fn _new(key: H256, val: T) -> Self {
+    pub fn _new(key: Vec<u8>, val: T) -> Self {
         Self {
             key,
             val: UnsafeCell::new(Some(val)),
@@ -182,7 +179,7 @@ impl<T: Storage> Lazy<T> {
 
     /// Creates an empty Lazy. This function is for internal use.
     #[doc(hidden)]
-    pub fn _uninitialized(key: H256) -> Self {
+    pub fn _uninitialized(key: Vec<u8>) -> Self {
         Self {
             key,
             val: UnsafeCell::new(None),
@@ -224,7 +221,7 @@ impl<T: Storage> Lazy<T> {
 /// ```
 /// fn new(ctx: &Context) -> Self {
 ///    Self {
-///        the_field: Lazy::new(H256::from(keccak256("the_field".as_bytes())), the_val)
+///        the_field: Lazy::new(keccak256("the_field".as_bytes().to_vec()), the_val)
 ///    }
 /// }
 /// ```

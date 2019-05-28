@@ -5,15 +5,13 @@ pub extern crate oasis_macros as macros;
 pub mod build;
 pub mod errors;
 pub mod exe;
-pub mod ext;
-pub mod testing;
 pub mod types;
 
 #[cfg(feature = "platform-alloc")]
 include!("alloc.rs");
 
 pub mod prelude {
-    pub use crate::{errors::*, exe::*, ext as oasis, types::*};
+    pub use crate::{errors::*, exe::*, types::*};
     pub use macros::{service, Event, Service};
 }
 

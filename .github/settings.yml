@@ -11,3 +11,9 @@ branches:
       required_signatures: true
       restrictions:
         teams: ["oasislabs/dev"]
+
+collaborators:
+  - username: nhynes
+    permission: admin
+  - username: willscott
+    permission: admin

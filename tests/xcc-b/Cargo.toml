@@ -8,11 +8,8 @@ edition = "2018"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-failure = "0.1"
 oasis-std = { path = "../../oasis-std" }
 serde = { version = "1.0", features = ["derive"] }
-serde_cbor = "0.9"
-tiny-keccak = "1.4"
 
 [dev-dependencies]
 oasis-test = { path = "../../oasis-test" }

@@ -121,7 +121,7 @@ pub fn ret(ptr: *const u8, len: u32) {
 
 #[no_mangle]
 pub fn elog(topic_ptr: *const u8, topic_count: u32, data_ptr: *const u8, data_len: u32) {
-    unimplemented!();
+    // unimplemented!();
 }
 
 #[no_mangle]

@@ -1,0 +1,23 @@
+[package]
+name = "ballot"
+version = "0.1.0"
+authors = ["Oasis Labs <info@oasislabs.com>"]
+edition = "2018"
+publish = false
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+oasis-std = { git = "https://github.com/oasislabs/oasis-rs" }
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+oasis-test = { git = "https://github.com/oasislabs/oasis-rs" }
+
+[build-dependencies]
+oasis-std = { git = "https://github.com/oasislabs/oasis-rs" }
+
+[features]
+deploy = []
+

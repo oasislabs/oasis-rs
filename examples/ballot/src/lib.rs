@@ -4,8 +4,8 @@
 // Oasis platform for the service defined in the annotaed module.
 // The service definition automatically imports `oasis_std::prelude::*`.
 //
-// When comiling to Wasm with the `deploy` feature set, the output
-// will be a deplyable .wasm file. Otherwise, a service client will
+// When compiling to Wasm with the `deploy` feature set, the output
+// will be a deployable .wasm file. Otherwise, a service client will
 // be generated for use in a downstream crate.
 #[oasis_std::service]
 mod service {

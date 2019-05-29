@@ -7,7 +7,7 @@ mod service {
     pub type UserId = Address;
     pub type PostId = usize;
 
-    #[derive(Service, Default)]
+    #[derive(Service)]
     pub struct MessageBoard {
         /// The administrators of this message board.
         /// Administrators can add and remove users.
@@ -32,7 +32,7 @@ mod service {
     // improves deserialization performance.
     //
     // Types do not need to be defined in the same module as the service.
-    #[derive(Serialize, Deserialize, Clone)]
+    #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
     pub struct Post {
         author: UserId,
         text: String,
@@ -44,7 +44,7 @@ mod service {
         inbox: Vec<Message>,
     }
 
-    #[derive(Serialize, Deserialize, Clone)]
+    #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
     pub struct Message {
         from: UserId,
         text: String,
@@ -74,10 +74,14 @@ mod service {
             let mut admins = HashSet::new();
             admins.insert(ctx.sender());
 
+            let mut accounts = HashMap::new();
+            accounts.insert(ctx.sender(), Account::default());
+
             Ok(Self {
                 admins,
                 bcast_char_limit,
-                ..Default::default()
+                accounts,
+                posts: Vec::new(),
             })
         }
 
@@ -134,18 +138,22 @@ mod service {
             Ok(self.posts.len() - 1)
         }
 
-        /// Returns all posts (optionally: made since a given post).
-        pub fn get_posts(&self, ctx: &Context, since: Option<PostId>) -> Result<Vec<Post>> {
+        /// Returns all posts made during a given interval.
+        pub fn posts(
+            &self,
+            ctx: &Context,
+            range: (Option<PostId>, Option<PostId>),
+        ) -> Result<Vec<Post>> {
             if !self.accounts.contains_key(&ctx.sender()) {
                 return Err(failure::format_err!("Permission denied."));
             }
-
-            let since = since.unwrap_or_default();
-            if since >= self.posts.len() {
-                return Err(failure::format_err!("Invalid post ID."));
-            }
-
-            Ok(self.posts[since..].to_vec())
+            let start = range.0.unwrap_or_default();
+            let stop = std::cmp::min(range.1.unwrap_or(self.posts.len()), self.posts.len());
+            Ok(self
+                .posts
+                .get(start..stop)
+                .map(<[Post]>::to_vec)
+                .unwrap_or_default())
         }
 
         /// Add a comment to a post.
@@ -208,5 +216,122 @@ mod tests {
     }
 
     #[test]
-    fn functionality() {}
+    fn post_nolimit() {
+        let (_admin, actx) = create_account();
+        let mut mb = MessageBoard::new(&actx, None).unwrap();
+        mb.post(&actx, "👏".repeat(9999)).unwrap();
+    }
+
+    #[test]
+    fn post_limit() {
+        let (_admin, actx) = create_account();
+        let mut mb = MessageBoard::new(&actx, Some(1)).unwrap();
+        mb.post(&actx, "?!".to_string()).unwrap_err();
+        mb.post(&actx, "!".to_string()).unwrap();
+    }
+
+    #[test]
+    fn posts() {
+        let (admin, actx) = create_account();
+        let (user, uctx) = create_account();
+
+        let mut mb = MessageBoard::new(&actx, Some(140)).unwrap();
+
+        let first_post_text = "f1r5t p0st!!1!".to_string();
+        mb.post(&actx, first_post_text.clone()).unwrap();
+
+        // no permission
+        mb.post(&uctx, "Add me plz".to_string()).unwrap_err();
+        mb.posts(&uctx, (None, None)).unwrap_err();
+        mb.add_user(&uctx, user).unwrap_err();
+
+        assert_eq!(
+            mb.posts(&actx, (Some(0), Some(9))).unwrap(),
+            vec![Post {
+                author: admin,
+                text: first_post_text,
+                comments: Vec::new()
+            }]
+        );
+
+        // user can now post
+        mb.add_user(&actx, user).unwrap();
+        let second_post_text = "All your base are belong to me".to_string();
+        mb.post(&uctx, second_post_text.clone()).unwrap();
+
+        assert_eq!(
+            mb.posts(&uctx, (Some(1), None)).unwrap(),
+            vec![Post {
+                author: user,
+                text: second_post_text,
+                comments: Vec::new()
+            }]
+        );
+
+        let comment_text = "gtfo".to_string();
+        mb.comment(&actx, 0 /* post_id */, comment_text.clone())
+            .unwrap();
+
+        assert_eq!(
+            mb.posts(&actx, (Some(0), Some(1))).unwrap()[0].comments,
+            vec![Message {
+                from: admin,
+                text: comment_text
+            }]
+            .as_slice()
+        );
+
+        mb.remove_user(&uctx, user).unwrap_err();
+        mb.remove_user(&actx, user).unwrap();
+        mb.post(&uctx, "Might I ask where you keep the spoons?".to_string())
+            .unwrap_err();
+        mb.posts(&uctx, (None, None)).unwrap_err();
+    }
+
+    #[test]
+    fn dm() {
+        let (kiltavi, kctx) = create_account();
+        let (joe, jctx) = create_account();
+
+        let mut mb = MessageBoard::new(&kctx, Some(140)).unwrap();
+
+        mb.send_dm(&jctx, kiltavi, "hello".to_string()).unwrap_err();
+        mb.add_user(&kctx, joe).unwrap();
+        mb.send_dm(&jctx, kiltavi, "hello".to_string()).unwrap();
+        mb.send_dm(&jctx, kiltavi, "can I have some eth?".to_string())
+            .unwrap();
+
+        assert_eq!(
+            mb.fetch_inbox(&kctx).unwrap(),
+            vec![
+                Message {
+                    from: joe,
+                    text: "hello".to_string()
+                },
+                Message {
+                    from: joe,
+                    text: "can I have some eth?".to_string()
+                }
+            ]
+        );
+        assert_eq!(mb.fetch_inbox(&kctx).unwrap(), Vec::new());
+
+        mb.send_dm(&kctx, joe, "No.".to_string()).unwrap();
+        assert_eq!(
+            mb.fetch_inbox(&jctx).unwrap(),
+            vec![Message {
+                from: kiltavi,
+                text: "No.".to_string()
+            },]
+        );
+        mb.send_dm(&kctx, joe, "I am a non-giver of eth.".to_string())
+            .unwrap();
+        assert_eq!(
+            mb.fetch_inbox(&jctx).unwrap(),
+            vec![Message {
+                from: kiltavi,
+                text: "I am a non-giver of eth.".to_string()
+            },]
+        );
+    }
 }

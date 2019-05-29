@@ -48,6 +48,23 @@ jobs:
           working_directory: tests/xcc-a
           command: cargo test --tests
 
+  test_examples:
+    docker:
+      - image: nhdh/rust:latest
+        environment:
+          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    resource_class: xlarge
+    steps:
+      - checkout
+      - run:
+          name: Test ballot example
+          working_directory: examples/ballot
+          command: cargo test --tests
+      - run:
+          name: Test messaging example
+          working_directory: examples/messaging
+          command: cargo test --tests
+
   test_idl:
     docker:
       - image: nhdh/rust:latest
@@ -76,6 +93,9 @@ workflows:
           requires:
             - init
       - test_idl:
+          requires:
+            - init
+      - test_examples:
           requires:
             - init
       - wasm_build:

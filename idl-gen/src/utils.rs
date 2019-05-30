@@ -9,7 +9,7 @@ pub fn is_std(crate_name: Symbol) -> bool {
     crate_name == "std"
         || crate_name == "core"
         || crate_name == "alloc"
-        || crate_name.starts_with("mantle_")
+        || crate_name.starts_with("mantle")
 }
 
 /// Returns the crate name and path components of a `DefId`.

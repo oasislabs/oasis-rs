@@ -1,5 +1,5 @@
 #![feature(proc_macro_hygiene)]
-#[oasis_std::service]
+#[mantle::service]
 mod service {
     #[derive(Service, Default)]
     pub struct ServiceB {

@@ -1,3 +1,3 @@
 fn main() {
-    oasis_std::build_service().unwrap();
+    mantle::build_service().unwrap();
 }

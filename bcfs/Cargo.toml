@@ -9,7 +9,7 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 blockchain-traits = { version = "0.1", path = "../blockchain-traits" }
-oasis-types = { version = "0.1", path = "../oasis-types" }
+mantle-types = { version = "0.1", path = "../mantle-types" }
 wasi-types = "0.1"
 
 [dev-dependencies]

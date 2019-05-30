@@ -3,10 +3,15 @@ name = "memchain"
 version = "0.1.0"
 authors = ["Oasis Labs <info@oasislabs.com>"]
 edition = "2018"
+license = "Apache-2.0"
+description = "In-memory blockchain simulator."
+repository = "https://github.com/oasislabs/mantle.git"
+readme = "README.md"
+keywords = ["blockchain", "testing", "ethereum"]
 
 [lib]
 crate_type = ["rlib", "cdylib"]
 
 [dependencies]
 blockchain-traits = { version = "0.1", path = "../blockchain-traits" }
-oasis-types = { version = "0.1", path = "../oasis-types" }
+mantle-types = { version = "0.1", path = "../mantle-types" }

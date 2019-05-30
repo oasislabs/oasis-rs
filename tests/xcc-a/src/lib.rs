@@ -1,5 +1,5 @@
 #![feature(proc_macro_hygiene)]
-#[oasis_std::service]
+#[mantle::service]
 mod service {
     #[derive(Service)]
     pub struct ServiceA {
@@ -33,7 +33,7 @@ mod tests {
 
         let val = U256::from(0x0A515);
 
-        let user = oasis_test::create_account(val);
+        let user = mantle_test::create_account(val);
         let ctx = Context::default().with_sender(user);
 
         let b = xcc_b::ServiceB::new(&ctx).unwrap();

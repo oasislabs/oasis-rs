@@ -107,7 +107,7 @@ fn get_type_serde(
                 (
                     quote! {
                         if service.#struct_idx.is_initialized() {
-                            mantle::set_bytes(
+                            mantle::ext::set_bytes(
                                 &#key,
                                 &serde_cbor::to_vec(service.#struct_idx.get()).unwrap()
                             ).unwrap()
@@ -133,11 +133,11 @@ fn default_serde(
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     (
         quote! {
-            mantle::set_bytes(
+            mantle::ext::set_bytes(
                 &#key,
                 &serde_cbor::to_vec(&service.#struct_idx).unwrap()
             ).unwrap()
         },
-        quote! { serde_cbor::from_slice(&mantle::get_bytes(&#key).unwrap()).unwrap() },
+        quote! { serde_cbor::from_slice(&mantle::ext::get_bytes(&#key).unwrap()).unwrap() },
     )
 }

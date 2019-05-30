@@ -143,12 +143,12 @@ pub fn service(
         quote! {
             let ctx = Context::default(); // TODO: use delegated if called using dcall (#33)
             let mut service = <#service_ident>::coalesce();
-            let payload: RpcPayload = serde_cbor::from_slice(&mantle::input()).unwrap();
+            let payload: RpcPayload = serde_cbor::from_slice(&mantle::ext::input()).unwrap();
             let result = match payload {
                 #(#call_tree),*
             }.unwrap();
             #service_ident::sunder(service);
-            mantle::ret(&result);
+            mantle::ext::ret(&result);
         }
     };
 
@@ -163,7 +163,8 @@ pub fn service(
         quote! {}
     } else {
         quote! {
-            let CtorPayload { #(#ctor_args),* } = serde_cbor::from_slice(&mantle::input()).unwrap();
+            let CtorPayload { #(#ctor_args),* } =
+                serde_cbor::from_slice(&mantle::ext::input()).unwrap();
         }
     };
 
@@ -197,7 +198,7 @@ pub fn service(
                     &input,
                     &#ctx_ident.gas.map(|gas| std::cmp::min(gas, gas_left)).unwrap_or(gas_left),
                     &|| {
-                        let result = mantle::call(
+                        let result = mantle::ext::call(
                             gas_left,
                             &self._address /* callee = address held by `Client` struct */,
                             #ctx_ident.value(),
@@ -316,7 +317,7 @@ pub fn service(
                     pub #ctor_sig {
                         let is_testing = mantle::testing::is_testing();
                         let empty_service = Vec::new();
-                        let service_addr = mantle::create(
+                        let service_addr = mantle::ext::create(
                             #ctor_ctx_ident.value.unwrap_or_default(),
                             if is_testing {
                                 &empty_service

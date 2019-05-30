@@ -13,7 +13,7 @@ pub mod types;
 include!("alloc.rs");
 
 pub mod prelude {
-    pub use crate::{errors::*, exe::*, ext as mantle, types::*};
+    pub use crate::{errors::*, exe::*, types::*};
     pub use macros::{service, Event, Service};
 }
 

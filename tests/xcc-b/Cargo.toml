@@ -3,19 +3,20 @@ name = "xcc-b"
 version = "0.1.0"
 authors = ["Oasis Labs <info@oasislabs.com>"]
 edition = "2018"
+publish = false
 
 [lib]
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-oasis-std = { path = "../../oasis-std" }
+mantle = { path = "../../mantle" }
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
-oasis-test = { path = "../../oasis-test" }
+mantle-test = { path = "../../mantle-test" }
 
 [build-dependencies]
-oasis-std = { path = "../../oasis-std" }
+mantle = { path = "../../mantle" }
 
 [features]
 deploy = []

@@ -9,7 +9,7 @@ use std::{
 
 use blockchain_traits::Blockchain;
 use memchain::{Account, Memchain, BASE_GAS};
-use oasis_types::Address;
+use mantle_types::Address;
 use proptest::prelude::*;
 use wasi_types::{ErrNo, Fd, FdFlags, OpenFlags, Whence};
 

@@ -8,7 +8,7 @@ use std::{
 };
 
 use blockchain_traits::Blockchain;
-use oasis_types::Address;
+use mantle_types::Address;
 use wasi_types::{ErrNo, Fd, FdFlags, FdStat, FileDelta, FileSize, FileStat, OpenFlags, Whence};
 
 use crate::BCFS;

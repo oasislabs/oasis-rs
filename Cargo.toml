@@ -4,10 +4,10 @@ members = [
     "blockchain-traits",
     "idl-gen",
     "memchain",
-    "oasis-std",
-    "oasis-macros",
-    "oasis-test",
-    "oasis-types",
+    "mantle",
+    "mantle-macros",
+    "mantle-test",
+    "mantle-types",
 ]
 exclude = ["examples", "tests"]
 

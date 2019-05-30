@@ -1,4 +1,4 @@
-//! Compiles an Oasis executable and generates the RPC interface definition.
+//! Compiles a Mantle executable and generates the RPC interface definition.
 //! Usage: `GEN_IDL_FOR=<crate_name> IDL_TARGET_DIR=<dir> RUSTC_WRAPPER=idl-gen cargo build`
 
 #![feature(box_syntax, rustc_private)]

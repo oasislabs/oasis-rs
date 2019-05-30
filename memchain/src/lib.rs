@@ -9,7 +9,7 @@ pub const BASE_GAS: u64 = 2100;
 use std::{borrow::Cow, collections::HashMap};
 
 use blockchain_traits::{AccountMetadata, Blockchain, KVError, KVStore};
-use oasis_types::Address;
+use mantle_types::Address;
 
 use block::Block;
 

@@ -5,7 +5,7 @@ use std::{
 };
 
 use blockchain_traits::Blockchain;
-use oasis_types::Address;
+use mantle_types::Address;
 
 use crate::{Account, Memchain};
 

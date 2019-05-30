@@ -18,7 +18,7 @@ pub struct TestEvent {
     non_indexed: (u32, u32),
 }
 
-#[oasis_std::service]
+#[mantle::service]
 mod service {
     #[derive(Service)]
     pub struct TestService {}

@@ -3,7 +3,8 @@ name = "testlib"
 version = "0.1.0"
 authors = ["Oasis Labs <info@oasislabs.com>"]
 edition = "2018"
+publish = false
 
 [dependencies]
-oasis-std = { path = "../../oasis-std" }
+mantle = { path = "../../mantle" }
 serde = { version = "1.0", features = ["derive"] }

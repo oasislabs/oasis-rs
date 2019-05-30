@@ -1,13 +1,13 @@
 #![feature(proc_macro_hygiene)]
 
-// The `#[oasis_std::service]` attribute macro generates bindings to
-// Oasis platform for the service defined in the annotaed module.
-// The service definition automatically imports `oasis_std::prelude::*`.
+// The `#[mantle::service]` attribute macro generates bindings to
+// the blockchain platform for the service defined in the annotaed module.
+// The service definition automatically imports `mantle::prelude::*`.
 //
 // When compiling to Wasm with the `deploy` feature set, the output
 // will be a deployable .wasm file. Otherwise, a service client will
 // be generated for use in a downstream crate.
-#[oasis_std::service]
+#[mantle::service]
 mod service {
     // Each service definition contains a struct that derives `Service`.
     // This struct represents the service's persistent state.
@@ -100,7 +100,7 @@ mod tests {
 
     /// Creates a new account and a `Context` with the new account as the sender.
     fn create_account() -> (Address, Context) {
-        let addr = oasis_test::create_account(0 /* initial balance */);
+        let addr = mantle_test::create_account(0 /* initial balance */);
         let ctx = Context::default().with_sender(addr).with_gas(100_000);
         (addr, ctx)
     }

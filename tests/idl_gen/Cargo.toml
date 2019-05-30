@@ -3,22 +3,23 @@ name = "test-idl-gen"
 version = "0.1.0"
 authors = ["Oasis Labs <info@oasislabs.com>"]
 edition = "2018"
+publish = false
 
 [lib]
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-oasis-std = { path = "../../oasis-std" }
+mantle = { path = "../../mantle" }
 serde = { version = "1.0", features = ["derive"] }
 testlib = { path = "../testlib" }
 
 [dev-dependencies]
-oasis-test = { path = "../../oasis-test" }
+mantle-test = { path = "../../mantle-test" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 [build-dependencies]
-oasis-std = { path = "../../oasis-std" }
+mantle = { path = "../../mantle" }
 
 [features]
 deploy = []

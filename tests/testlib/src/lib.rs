@@ -17,7 +17,7 @@ pub struct NonPod {
     pub value: std::boxed::Box<NonPod>,
 }
 
-#[derive(Serialize, Deserialize, Clone, oasis_std::Event)]
+#[derive(Serialize, Deserialize, Clone, mantle::Event)]
 pub struct RandomEvent {
     #[indexed]
     pub the_topic: String,

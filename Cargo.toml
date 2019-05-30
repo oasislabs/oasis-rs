@@ -3,11 +3,11 @@ members = [
     "bcfs",
     "blockchain-traits",
     "idl-gen",
-    "memchain",
     "mantle",
     "mantle-macros",
     "mantle-test",
     "mantle-types",
+    "memchain",
 ]
 exclude = ["examples", "tests"]
 

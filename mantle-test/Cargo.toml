@@ -10,5 +10,5 @@ readme = "README.md"
 keywords = ["mantle", "test", "testing"]
 
 [dependencies]
-mantle-macros = { version = "0.1", path = "../mantle-macros" }
 mantle = { version = "0.1", path = "../mantle" }
+mantle-macros = { version = "0.1", path = "../mantle-macros" }

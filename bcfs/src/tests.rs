@@ -8,8 +8,8 @@ use std::{
 };
 
 use blockchain_traits::Blockchain;
-use memchain::{Account, Memchain, BASE_GAS};
 use mantle_types::Address;
+use memchain::{Account, Memchain, BASE_GAS};
 use proptest::prelude::*;
 use wasi_types::{ErrNo, Fd, FdFlags, OpenFlags, Whence};
 

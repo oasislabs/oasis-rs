@@ -9,7 +9,7 @@ members = [
     "oasis-test",
     "oasis-types",
 ]
-exclude = ["tests"]
+exclude = ["examples", "tests"]
 
 [profile.release]
 incremental = false

@@ -45,6 +45,7 @@ pub fn event_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     proc_macro::TokenStream::from(quote! {
         mod #impl_wrapper_ident {
             use super::*;
+            use oasis_std::reexports::*;
 
             #[derive(Default)]
             pub struct #topics_struct_ident {

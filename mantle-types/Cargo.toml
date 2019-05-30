@@ -5,7 +5,7 @@ authors = ["Oasis Labs <info@oasislabs.com>"]
 edition = "2018"
 license = "Apache-2.0"
 description = "Types used by the Mantle blockchain framework."
-repository = "https://github.com/oasislabs/mantle-rs.git"
+repository = "https://github.com/oasislabs/mantle.git"
 readme = "README.md"
 keywords = ["blockchain", "mantle"]
 

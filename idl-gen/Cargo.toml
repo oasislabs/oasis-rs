@@ -5,7 +5,7 @@ authors = ["Oasis Labs <info@oasislabs.com>"]
 edition = "2018"
 license = "Apache-2.0"
 description = "Automatically generate interface definitions from Rust types."
-repository = "https://github.com/oasislabs/mantle-rs.git"
+repository = "https://github.com/oasislabs/mantle.git"
 readme = "README.md"
 keywords = ["idl", "interface", "rpc"]
 

@@ -12,4 +12,4 @@ mantle = "0.1"
 mantle-test = "0.1"
 ```
 
-Fore more information, please refer to the docs for [`mantle`](https://docs.rs/mantle) and [`oasis-test`](https://docs.rs/mantle-test).
+Fore more information, please refer to the docs for [`mantle`](https://docs.rs/mantle) and [`mantle-test`](https://docs.rs/mantle-test).

@@ -17,7 +17,10 @@ mod service {
         bcast_char_limit: Option<u32>,
 
         /// All of the posts made to this message board.
-        posts: Vec<Post>,
+        // This field is made to lazy load since it is not used by all RPC methods and thus would
+        // waste computation when loading/storing if otherwise.
+        // Currently, `Lazy` must contain containers. Nested `Lazy` will be supported soon though.
+        posts: Lazy<Vec<Post>>,
 
         /// All accounts which have ever participated in this message board.
         accounts: HashMap<UserId, Account>, // Strictly speaking, a `Vec` would probably be faster
@@ -81,7 +84,8 @@ mod service {
                 admins,
                 bcast_char_limit,
                 accounts,
-                posts: Vec::new(),
+                posts: lazy!(Vec::new()), // The `lazy!` macro initializes a lazy field with its
+                                          // argument. This is the only safe way to create a `Lazy`.
             })
         }
 
@@ -124,7 +128,8 @@ mod service {
                 }
             }
 
-            self.posts.push(Post {
+            let posts = self.posts.get_mut(); // lazily load `posts` and get a mutable reference
+            posts.push(Post {
                 author: ctx.sender(),
                 text,
                 comments: Vec::new(),
@@ -135,7 +140,7 @@ mod service {
                 recipient: None,
             });
 
-            Ok(self.posts.len() - 1)
+            Ok(posts.len() - 1)
         }
 
         /// Returns all posts made during a given interval.
@@ -143,28 +148,26 @@ mod service {
             &self,
             ctx: &Context,
             range: (Option<PostId>, Option<PostId>),
-        ) -> Result<Vec<Post>> {
+        ) -> Result<&[Post]> {
+            let posts = self.posts.get(); // lazily load and get an immutable reference
             if !self.accounts.contains_key(&ctx.sender()) {
                 return Err(failure::format_err!("Permission denied."));
             }
             let start = range.0.unwrap_or_default();
-            let stop = std::cmp::min(range.1.unwrap_or(self.posts.len()), self.posts.len());
-            Ok(self
-                .posts
-                .get(start..stop)
-                .map(<[Post]>::to_vec)
-                .unwrap_or_default())
+            let stop = std::cmp::min(range.1.unwrap_or(posts.len()), posts.len());
+            Ok(posts.get(start..stop).unwrap_or_default())
         }
 
         /// Add a comment to a post.
         pub fn comment(&mut self, ctx: &Context, post_id: PostId, text: String) -> Result<()> {
+            let posts = self.posts.get_mut();
             if !self.accounts.contains_key(&ctx.sender()) {
                 return Err(failure::format_err!("Permission denied."));
             }
-            if post_id >= self.posts.len() {
+            if post_id >= posts.len() {
                 return Err(failure::format_err!("Invalid post ID."));
             }
-            self.posts[post_id].comments.push(Message {
+            posts[post_id].comments.push(Message {
                 from: ctx.sender(),
                 text,
             });

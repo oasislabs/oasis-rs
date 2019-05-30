@@ -1,0 +1,27 @@
+[package]
+name = "mantle"
+version = "0.1.0"
+license = "Apache-2.0"
+description = "A humane programming model for blockchain."
+edition = "2018"
+repository = "https://github.com/oasislabs/mantle.git"
+authors = ["Oasis Labs <info@oasislabs.com>"]
+readme = "README.md"
+keywords = ["mantle"]
+
+[dependencies]
+failure = "0.1"
+mantle-macros = { version = "0.1", path = "../mantle-macros" }
+mantle-types = { version = "0.1", path = "../mantle-types" }
+serde = { version = "1.0", features = ["derive"] }
+serde_cbor = "0.9"
+tiny-keccak = "1.4"
+
+[dev-dependencies]
+mantle-test = { path = "../mantle-test" }
+serde = { version = "1.0", features = ["derive"] }
+tiny-keccak = "1.4"
+
+[features]
+platform-alloc = []
+create2 = []

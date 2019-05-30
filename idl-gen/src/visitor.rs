@@ -199,7 +199,7 @@ impl<'a, 'gcx, 'tcx> EventCollector<'a, 'gcx, 'tcx> {
 }
 
 // This visit could be made more robust to other traits/methods named Event/emit by actually
-// checking whether the types implement `oasis_std::exe::Event`, but this should suffice for now.
+// checking whether the types implement `mantle::exe::Event`, but this should suffice for now.
 impl<'a, 'gcx, 'tcx> hir::intravisit::Visitor<'tcx> for EventCollector<'a, 'gcx, 'tcx> {
     fn visit_expr(&mut self, expr: &'tcx hir::Expr) {
         let emit_arg = match &expr.node {

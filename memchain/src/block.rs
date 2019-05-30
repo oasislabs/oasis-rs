@@ -1,7 +1,7 @@
 use std::{borrow::Cow, collections::hash_map::Entry};
 
 use blockchain_traits::{AccountMetadata, Blockchain, KVError, KVStore};
-use oasis_types::Address;
+use mantle_types::Address;
 
 use crate::{Account, Log, Receipt, State, Transaction, TransactionOutcome, BASE_GAS};
 

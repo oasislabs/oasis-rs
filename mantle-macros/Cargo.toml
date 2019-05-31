@@ -7,7 +7,7 @@ edition = "2018"
 repository = "https://github.com/oasislabs/mantle.git"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 readme = "README.md"
-keywords = ["mantle", "blockchain", "heavy magic"]
+keywords = ["mantle", "blockchain", "dsl"]
 
 [dependencies]
 proc-macro2 = "0.4"

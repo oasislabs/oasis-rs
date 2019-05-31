@@ -7,7 +7,7 @@ edition = "2018"
 repository = "https://github.com/oasislabs/mantle.git"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 readme = "README.md"
-keywords = ["mantle", "blockchain", "heavy magic"]
+keywords = ["mantle", "blockchain", "dsl"]
 
 [dependencies]
 proc-macro2 = "0.4"
@@ -16,9 +16,9 @@ syn = { version = "0.15", features = ["full", "extra-traits", "visit-mut"] }
 tiny-keccak = "1.4"
 
 [dev-dependencies]
-compiletest_rs = { git = "https://github.com/laumann/compiletest-rs", features = ["tmp"] }
-mantle = { path = "../mantle" }
-mantle-test = { path = "../mantle-test" }
+compiletest_rs = { version = "0.3", features = ["tmp"] }
+mantle = { version = "0.1", path = "../mantle" }
+mantle-test = { version = "0.1", path = "../mantle-test" }
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.9"
 

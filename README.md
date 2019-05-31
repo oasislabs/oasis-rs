@@ -1,15 +1,21 @@
 # mantle
 
 A collection of crates for interacting with a WASI/Wasm Blockchain platform.
+You can find more information in the [developer documentation](https://docs.oasiscloud.io).
 
-To get started, add the following dependencies to your `Cargo.toml`:
+## Crates for Blockchain Service Developers
 
-```rust
-[dependencies]
-mantle = "0.1"
+* **mantle** - A framework for conveniently developing blockchain services.
+* **mantle-test** - A testing framework for testing services built using Mantle.
+* **idl-gen** - A compiler plugin that generates RPC schemas from Rust types.
 
-[dev-dependencies]
-mantle-test = "0.1"
-```
+## Crates for Mantle Developers
 
-Fore more information, please refer to the docs for [`mantle`](https://docs.rs/mantle) and [`mantle-test`](https://docs.rs/mantle-test).
+* **mantle-macros** - Proc macros used by `mantle`.
+* **mantle-types** - Types common to packages in the Mantle framework.
+* **memchain** - An in-memory blockchain simulator used for testing
+
+## Crates for Blockchain Developers
+
+* **bcfs** - A blockchain filesystem for use in a Blockchain WASI runtime
+* **blockchain-traits** - Traits and types that describe a generic programmable blockchain.

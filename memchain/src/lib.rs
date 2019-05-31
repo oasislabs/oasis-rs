@@ -2,6 +2,7 @@
 #![feature(maybe_uninit)]
 
 mod block;
+#[cfg(features = "ffi")]
 pub mod ffi;
 
 pub const BASE_GAS: u64 = 2100;
@@ -53,10 +54,6 @@ impl<'bc> Memchain<'bc> {
 
     pub fn block(&self, height: usize) -> Option<&Block<'bc>> {
         self.blocks.get(height)
-    }
-
-    fn current_state(&self) -> &State<'bc> {
-        self.last_block().current_state()
     }
 }
 

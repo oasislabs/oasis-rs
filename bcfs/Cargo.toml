@@ -1,8 +1,13 @@
 [package]
 name = "bcfs"
 version = "0.1.0"
+license = "Apache-2.0"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
+description = "A virtual filesystem for Blockchain WASI"
+repository = "https://github.com/oasislabs/mantle.git"
+readme = "README.md"
+keywords = ["blockchain", "filesystem", "wasm", "wasi"]
 
 [lib]
 crate-type = ["rlib", "cdylib"]

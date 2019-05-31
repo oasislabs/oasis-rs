@@ -1,43 +1,19 @@
-labels:
-  - name: 't:question'
-    color: d876e3
-    description: 'Tag: question'
-  - name: 't:bug'
-    color: ff0000
-    description: 'Tag: bug report'
-  - name: 'p:0'
-    color: 'd73a4a'
-    description: 'Priority: address immediately'
-  - name: 'p:1'
-    color: 'fbca04'
-    description: 'Priority: core feature'
-  - name: 'p:2'
-    color: '1d76db'
-    description: 'Priority: desired feature'
-  - name: 'p:3'
-    color: '5319e7'
-    description: 'Priority: nice to have'
-  - name: 's:good first issue'
-    color: '7057ff'
-    description: 'Status: good for newcomers'
-  - name: 's:help wanted'
-    color: '008672'
-    description: 'Status: Extra attention is needed'
-  - name: 's:blocked'
-    color: 'e99695'
-    description: 'Status: blocked on other work'
-  - name: 's:in progress'
-    color: 'c5def5'
-    description: 'Status: work is happening'
-  - name: 's:needs review'
-    color: '0e8a16'
-    description: 'Status: needs review'
-  - name: 's:ready'
-    color: '0e8a17'
-    description: 'Status: ready to work/merge'
-  - name: 's:wontfix'
-    color: 'ffffff'
-    description: 'Status: this will not be worked on'
-  - name: 's:duplicate'
-    color: 'cfd3d7'
-    description: 'this issue or PR already exists'
+_extends: private-global-settings
+
+branches:
+  - name: master
+    protection:
+      required_pull_request_reviews:
+        dismissal_restrictions:
+          teams: []
+      required_status_checks:
+        contexts: ["ci/circleci: unit_test", "ci/circleci: test_xcc", "ci/circleci: test_idl"]
+      required_signatures: true
+      restrictions:
+        teams: ["oasislabs/dev"]
+
+collaborators:
+  - username: nhynes
+    permission: admin
+  - username: armaniferrante
+    permission: admin

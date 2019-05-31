@@ -1,5 +1,8 @@
 _extends: private-global-settings
 
+repository:
+  allow_merge_commit: false
+
 branches:
   - name: master
     protection:

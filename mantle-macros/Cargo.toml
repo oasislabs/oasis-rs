@@ -5,7 +5,7 @@ license = "Apache-2.0"
 description = "Macros used internally by the Mantle framework."
 edition = "2018"
 repository = "https://github.com/oasislabs/mantle.git"
-authors = ["Oasis Labs <info@oasislabs.com>"]
+authors = ["Oasis Labs <feedback@oasislabs.com>"]
 readme = "README.md"
 keywords = ["mantle", "blockchain", "heavy magic"]
 

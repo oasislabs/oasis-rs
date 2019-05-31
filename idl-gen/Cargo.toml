@@ -1,7 +1,7 @@
 [package]
 name = "idl-gen"
 version = "0.1.0"
-authors = ["Oasis Labs <info@oasislabs.com>"]
+authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
 license = "Apache-2.0"
 description = "Automatically generate interface definitions from Rust types."

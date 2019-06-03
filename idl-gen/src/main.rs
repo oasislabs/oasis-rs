@@ -8,6 +8,8 @@ extern crate rustc_driver;
 
 extern crate idl_gen;
 
+use colored::*;
+
 // This wrapper script is inspired by `clippy-driver`.
 // https://github.com/rust-lang/rust-clippy/blob/master/src/driver.rs
 
@@ -32,9 +34,9 @@ fn arg_value<'a>(
     None
 }
 
-fn main() -> Result<(), rustc::util::common::ErrorReported> {
+fn main() {
     rustc_driver::init_rustc_env_logger();
-    rustc_driver::report_ices_to_stderr_if_any(move || {
+    let outcome = rustc_driver::report_ices_to_stderr_if_any(move || {
         let mut args: Vec<String> = std::env::args().collect();
         if args.len() <= 1 {
             std::process::exit(1);
@@ -56,13 +58,15 @@ fn main() -> Result<(), rustc::util::common::ErrorReported> {
         args.push(sys_root);
 
         let idl_out_dir = std::env::var_os("IDL_TARGET_DIR");
-        let crate_name = std::env::var("GEN_IDL_FOR");
-        let do_gen = idl_out_dir.is_some()
-            && arg_value(&args, "--crate-name", |name| match &crate_name {
-                Ok(crate_name) => name == crate_name,
-                _ => false,
-            })
-            .is_some();
+        let gen_crate_names_env = std::env::var("GEN_IDL_FOR");
+        let gen_crate_names = gen_crate_names_env
+            .as_ref()
+            .map(|names| names.split(',').collect::<Vec<_>>())
+            .unwrap_or_default();
+        let crate_name = arg_value(&args, "--crate-name", |name| {
+            gen_crate_names.contains(&name)
+        });
+        let do_gen = idl_out_dir.is_some() && crate_name.is_some();
 
         let mut idl8r = idl_gen::IdlGenerator::new();
         let mut default = rustc_driver::DefaultCallbacks;
@@ -71,11 +75,26 @@ fn main() -> Result<(), rustc::util::common::ErrorReported> {
         rustc_driver::run_compiler(&args, callbacks, None, None)?;
 
         if do_gen {
-            let rpc_iface = idl8r.get();
+            let rpc_iface = match idl8r.try_get() {
+                Some(rpc_iface) => rpc_iface,
+                None => {
+                    eprintln!(
+                        "    {} No service defined in crate: `{}`",
+                        "warning:".yellow(),
+                        crate_name.unwrap()
+                    );
+                    return Err(rustc::util::common::ErrorReported);
+                }
+            };
             let mut idl_path = std::path::PathBuf::from(idl_out_dir.unwrap());
             idl_path.push(format!("{}.json", rpc_iface.service_name()));
             std::fs::write(idl_path, serde_json::to_string_pretty(rpc_iface).unwrap()).unwrap()
         }
         Ok(())
-    })?
+    });
+
+    std::process::exit(match outcome {
+        Ok(_) => 0,
+        Err(_) => 1,
+    });
 }

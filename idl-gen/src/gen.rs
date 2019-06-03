@@ -36,8 +36,8 @@ impl IdlGenerator {
 
     /// Returns the generated interface.
     /// Only valid after rustc callback has been executed. Panics if called before.
-    pub fn get(&self) -> &rpc::Interface {
-        self.iface.get()
+    pub fn try_get(&self) -> Option<&rpc::Interface> {
+        self.iface.try_get()
     }
 
     /// Returns the (name, version) of a dependency.

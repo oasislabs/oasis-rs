@@ -1,6 +1,6 @@
 {
   "name": "TestService",
-  "namespace": "test_idl_gen",
+  "namespace": "test_mantle_build",
   "imports": [
     {
       "name": "testlib",
@@ -222,5 +222,5 @@
       }
     }
   ],
-  "idl_gen_version": "0.1.0"
+  "mantle_build_version": "0.1.0"
 }

@@ -21,7 +21,7 @@ pub struct Interface {
     type_defs: Vec<TypeDef>,
     constructor: StateConstructor,
     functions: Vec<Function>,
-    idl_gen_version: String,
+    mantle_build_version: String,
 }
 
 impl Interface {
@@ -94,7 +94,7 @@ impl Interface {
                 type_defs,
                 constructor: ctor.unwrap(),
                 functions,
-                idl_gen_version: env!("CARGO_PKG_VERSION").to_string(),
+                mantle_build_version: env!("CARGO_PKG_VERSION").to_string(),
             })
         }
     }

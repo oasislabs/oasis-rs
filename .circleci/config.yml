@@ -74,11 +74,11 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Install idl-gen
-          command: cargo install --path idl-gen
+          name: Install mantle-build
+          command: cargo install --path mantle-build
       - run:
           name: Test IDL generation
-          working_directory: tests/idl_gen
+          working_directory: tests/mantle_build
           command: cargo test --tests
 
 workflows:

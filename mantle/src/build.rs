@@ -5,7 +5,7 @@ pub fn build_service() -> Result<(), failure::Error> {
     let target_dir =
         std::path::PathBuf::from(std::env::var("CARGO_TARGET_DIR").unwrap_or("target".to_string()));
 
-    println!("cargo:rustc-env=GEN_IDL_FOR={}", crate_name); // pass name to idl-gen
+    println!("cargo:rustc-env=GEN_IDL_FOR={}", crate_name); // pass name to mantle-build
 
     let mut service_path = out_dir(target_dir.clone(), "service");
     println!("cargo:rustc-env=IDL_TARGET_DIR={}", service_path.display());

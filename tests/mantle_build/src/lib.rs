@@ -84,7 +84,7 @@ mod service {
 }
 
 #[test]
-fn test_idl_gen() {
+fn test_mantle_build() {
     let idl_json = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/target/service/TestService.json"

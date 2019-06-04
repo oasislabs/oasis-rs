@@ -1,5 +1,5 @@
 //! Generates an IDL from Rust types.
-//! This library is used by registering `IdlGenerator` as a rustc callback.
+//! This library is used by registering `BuildPlugin` as a rustc callback.
 
 #![feature(box_syntax, rustc_private)]
 
@@ -13,15 +13,13 @@ extern crate syntax;
 extern crate syntax_pos;
 
 #[macro_use]
-extern crate quote;
-#[macro_use]
 extern crate serde;
 
 mod dispatcher_gen;
 mod error;
-mod gen;
+mod plugin;
 mod rpc;
 mod utils;
 mod visitor;
 
-pub use gen::IdlGenerator;
+pub use plugin::BuildPlugin;

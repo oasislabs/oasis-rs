@@ -2,7 +2,7 @@
 members = [
     "bcfs",
     "blockchain-traits",
-    "idl-gen",
+    "mantle-build",
     "mantle",
     "mantle-macros",
     "mantle-test",

@@ -19,13 +19,13 @@ struct LockfileEntry {
     version: String,
 }
 
-pub struct IdlGenerator {
+pub struct BuildPlugin {
     service_def_finder: ServiceDefFinder,
     iface: Once<rpc::Interface>,
     deps: Once<BTreeMap<String, LockfileEntry>>,
 }
 
-impl IdlGenerator {
+impl BuildPlugin {
     pub fn new() -> Self {
         Self {
             service_def_finder: ServiceDefFinder::default(),
@@ -77,16 +77,18 @@ impl IdlGenerator {
     }
 }
 
-impl rustc_driver::Callbacks for IdlGenerator {
+impl rustc_driver::Callbacks for BuildPlugin {
     fn after_parsing(&mut self, compiler: &rustc_interface::interface::Compiler) -> bool {
         let sess = compiler.session();
-        let parse = compiler
+        let mut parse = compiler
             .parse()
             .expect("`after_parsing` is only called after parsing")
-            .peek();
+            .peek_mut();
         syntax::visit::walk_crate(&mut self.service_def_finder, &parse);
+        let service_name = self.service_def_finder.service_name();
         if let Some(mut parsed_rpc_collector) = self.service_def_finder.parsed_rpc_collector() {
             syntax::visit::walk_crate(&mut parsed_rpc_collector, &parse);
+            let impl_span = parsed_rpc_collector.impl_span();
             let rpcs = match parsed_rpc_collector.into_rpcs() {
                 Ok(rpcs) => rpcs,
                 Err(errs) => {
@@ -96,7 +98,18 @@ impl rustc_driver::Callbacks for IdlGenerator {
                     return false;
                 }
             };
-            let dispatcher = crate::dispatcher_gen::generate(rpcs);
+            let (deploy_export, dispatch_tree) = crate::dispatcher_gen::generate(rpcs);
+            let deploy_export = match deploy_export {
+                Some(deploy_export) => deploy_export,
+                None => {
+                    sess.span_err(
+                        impl_span,
+                        &format!("Missing definition of `{}::new`.", service_name.unwrap()),
+                    );
+                    return false;
+                }
+            };
+            parse.module.items.push(dbg!(deploy_export));
         }
         true
     }

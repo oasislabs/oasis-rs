@@ -27,6 +27,7 @@ impl ServiceDefFinder {
             service_name,
             rpcs: Vec::new(),
             errors: Vec::new(),
+            impl_span: Default::default(),
         })
     }
 }
@@ -72,19 +73,21 @@ impl<'ast> syntax::visit::Visitor<'ast> for ServiceDefFinder {
         syntax::visit::walk_item(self, item);
     }
 
-    fn visit_mac(&mut self, _mac: &'ast syntax::ast::Mac) {
-        // The default implementation panics. They exist pre-expansion, but we don't need
-        // to look at them. Hopefully nobody generates `Event` structs in a macro.
-    }
+    fn visit_mac(&mut self, _mac: &'ast syntax::ast::Mac) {}
 }
 
 pub struct ParsedRpcCollector<'ast> {
     service_name: Symbol,
     rpcs: Vec<(Symbol, &'ast syntax::ast::MethodSig)>,
     errors: Vec<RpcError>,
+    impl_span: syntax::source_map::Span,
 }
 
 impl<'ast> ParsedRpcCollector<'ast> {
+    pub fn impl_span(&self) -> syntax::source_map::Span {
+        self.impl_span
+    }
+
     pub fn into_rpcs(self) -> Result<Vec<(Symbol, &'ast syntax::ast::MethodSig)>, Vec<RpcError>> {
         if self.errors.is_empty() {
             Ok(self.rpcs)
@@ -148,19 +151,15 @@ impl<'ast> ParsedRpcCollector<'ast> {
 impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector<'ast> {
     fn visit_item(&mut self, item: &'ast syntax::ast::Item) {
         match &item.node {
-            syntax::ast::ItemKind::Impl(
-                _,
-                _,
-                _,
-                _,
-                None, /* trait ref */
-                service_ty,
-                impl_items,
-            ) if match &service_ty.node {
-                syntax::ast::TyKind::Path(_, p) => *p == self.service_name,
-                _ => false,
-            } =>
+            syntax::ast::ItemKind::Impl(_, _, _, _, None, service_ty, impl_items)
+                if match &service_ty.node {
+                    syntax::ast::TyKind::Path(_, p) => *p == self.service_name,
+                    _ => false,
+                } =>
             {
+                if self.impl_span == Default::default() {
+                    self.impl_span = item.span;
+                }
                 for impl_item in impl_items {
                     let mut errors = Vec::new();
 
@@ -224,6 +223,12 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector<'ast> {
                         }),
                         _ => (),
                     }
+                    for arg in args {
+                        match arg.pat.node {
+                            syntax::ast::PatKind::Ident(..) => (),
+                            _ => errors.push(RpcError::BadArg(arg.pat.span)),
+                        }
+                    }
 
                     match Self::result_ty(&msig.decl.output) {
                         Some(result_ty) => {
@@ -263,6 +268,11 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector<'ast> {
             _ => (),
         }
         syntax::visit::walk_item(self, item);
+    }
+
+    fn visit_mac(&mut self, _mac: &'ast syntax::ast::Mac) {
+        // The default implementation panics. They exist pre-expansion, but we don't need
+        // to look at them. Hopefully nobody generates `Event` structs in a macro.
     }
 }
 

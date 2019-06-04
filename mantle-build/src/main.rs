@@ -1,12 +1,12 @@
 //! Compiles a Mantle executable and generates the RPC interface definition.
-//! Usage: `GEN_IDL_FOR=<crate_name> IDL_TARGET_DIR=<dir> RUSTC_WRAPPER=idl-gen cargo build`
+//! Usage: `GEN_IDL_FOR=<crate_name> IDL_TARGET_DIR=<dir> RUSTC_WRAPPER=mantle-build cargo build`
 
 #![feature(box_syntax, rustc_private)]
 
 extern crate rustc;
 extern crate rustc_driver;
 
-extern crate idl_gen;
+extern crate mantle_build;
 
 use colored::*;
 
@@ -57,18 +57,18 @@ fn main() {
         args.push("--sysroot".to_string());
         args.push(sys_root);
 
-        let idl_out_dir = std::env::var_os("IDL_TARGET_DIR");
-        let gen_crate_names_env = std::env::var("GEN_IDL_FOR");
+        let idl_out_dir = dbg!(std::env::var_os("IDL_TARGET_DIR"));
+        let gen_crate_names_env = dbg!(std::env::var("GEN_IDL_FOR"));
         let gen_crate_names = gen_crate_names_env
             .as_ref()
             .map(|names| names.split(',').collect::<Vec<_>>())
             .unwrap_or_default();
-        let crate_name = arg_value(&args, "--crate-name", |name| {
+        let crate_name = dbg!(arg_value(&args, "--crate-name", |name| {
             gen_crate_names.contains(&name)
-        });
-        let do_gen = idl_out_dir.is_some() && crate_name.is_some();
+        }));
+        let do_gen = dbg!(idl_out_dir.is_some() && crate_name.is_some());
 
-        let mut idl8r = idl_gen::IdlGenerator::new();
+        let mut idl8r = mantle_build::IdlGenerator::new();
         let mut default = rustc_driver::DefaultCallbacks;
         let callbacks: &mut (dyn rustc_driver::Callbacks + Send) =
             if do_gen { &mut idl8r } else { &mut default };

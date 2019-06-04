@@ -5,13 +5,15 @@ use rustc::{
 };
 use syntax_pos::symbol::Symbol;
 
+use crate::error::RpcError;
+
 #[derive(Default)]
-pub struct SyntaxPass {
+pub struct ServiceDefFinder {
     service_name: Option<Symbol>, // set to `Some` once pass is complete
     event_indices: FxHashMap<Symbol, Vec<Symbol>>, // event_name -> field_name
 }
 
-impl SyntaxPass {
+impl ServiceDefFinder {
     pub fn service_name(&self) -> Option<Symbol> {
         self.service_name
     }
@@ -19,9 +21,17 @@ impl SyntaxPass {
     pub fn event_indices(&self) -> &FxHashMap<Symbol, Vec<Symbol>> {
         &self.event_indices
     }
+
+    pub fn parsed_rpc_collector(&self) -> Option<ParsedRpcCollector> {
+        self.service_name.map(|service_name| ParsedRpcCollector {
+            service_name,
+            rpcs: Vec::new(),
+            errors: Vec::new(),
+        })
+    }
 }
 
-impl<'ast> syntax::visit::Visitor<'ast> for SyntaxPass {
+impl<'ast> syntax::visit::Visitor<'ast> for ServiceDefFinder {
     fn visit_item(&mut self, item: &'ast syntax::ast::Item) {
         for attr in item.attrs.iter() {
             let meta = attr.meta();
@@ -68,15 +78,203 @@ impl<'ast> syntax::visit::Visitor<'ast> for SyntaxPass {
     }
 }
 
+pub struct ParsedRpcCollector<'ast> {
+    service_name: Symbol,
+    rpcs: Vec<(Symbol, &'ast syntax::ast::MethodSig)>,
+    errors: Vec<RpcError>,
+}
+
+impl<'ast> ParsedRpcCollector<'ast> {
+    pub fn into_rpcs(self) -> Result<Vec<(Symbol, &'ast syntax::ast::MethodSig)>, Vec<RpcError>> {
+        if self.errors.is_empty() {
+            Ok(self.rpcs)
+        } else {
+            Err(self.errors)
+        }
+    }
+
+    fn is_self_ref(ty: &syntax::ast::Ty) -> bool {
+        match &ty.node {
+            syntax::ast::TyKind::Rptr(_, mut_ty) => mut_ty.ty.node.is_implicit_self(),
+            _ => false,
+        }
+    }
+
+    fn is_context_ref(ty: &syntax::ast::Ty) -> bool {
+        match &ty.node {
+            syntax::ast::TyKind::Rptr(_, mut_ty) => match &mut_ty.ty.node {
+                syntax::ast::TyKind::Path(_, path) => {
+                    let mut path_rev_iter = path.segments.iter().rev();
+                    (match path_rev_iter.next() {
+                        Some(seg) if seg.ident.name == Symbol::intern("Context") => true,
+                        _ => false,
+                    }) && (match path_rev_iter.next() {
+                        Some(seg) if seg.ident.name == Symbol::intern("mantle") => true,
+                        Some(_) => false,
+                        None => true,
+                    })
+                }
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    fn result_ty(ty: &syntax::ast::FunctionRetTy) -> Option<syntax::ast::Ty> {
+        match ty {
+            syntax::ast::FunctionRetTy::Ty(ty) => match &ty.node {
+                syntax::ast::TyKind::Path(_, path) => {
+                    let result = path.segments.last().unwrap();
+                    if result.ident.name != Symbol::intern("Result") {
+                        return None;
+                    }
+                    match result.args.as_ref().map(|args| args.clone().into_inner()) {
+                        Some(syntax::ast::GenericArgs::AngleBracketed(
+                            syntax::ast::AngleBracketedArgs { args, .. },
+                        )) => args.into_iter().nth(0).and_then(|arg| match arg {
+                            syntax::ast::GenericArg::Type(p_ty) => Some(p_ty.into_inner()),
+                            _ => None,
+                        }),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+}
+
+impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector<'ast> {
+    fn visit_item(&mut self, item: &'ast syntax::ast::Item) {
+        match &item.node {
+            syntax::ast::ItemKind::Impl(
+                _,
+                _,
+                _,
+                _,
+                None, /* trait ref */
+                service_ty,
+                impl_items,
+            ) if match &service_ty.node {
+                syntax::ast::TyKind::Path(_, p) => *p == self.service_name,
+                _ => false,
+            } =>
+            {
+                for impl_item in impl_items {
+                    let mut errors = Vec::new();
+
+                    let is_ctor = impl_item.ident.name == Symbol::intern("new");
+
+                    match impl_item.vis.node {
+                        syntax::ast::VisibilityKind::Public => (),
+                        _ => {
+                            if is_ctor {
+                                errors.push(RpcError::CtorVis(impl_item.vis.span));
+                            } else {
+                                continue;
+                            }
+                        }
+                    }
+                    let msig = match &impl_item.node {
+                        syntax::ast::ImplItemKind::Method(msig, _) => msig,
+                        _ => continue,
+                    };
+                    if !impl_item.generics.params.is_empty() {
+                        errors.push(RpcError::HasGenerics(impl_item.generics.span));
+                    }
+
+                    if let syntax::ast::IsAsync::Async { .. } = msig.header.asyncness.node {
+                        errors.push(RpcError::HasAsync(msig.header.asyncness.span));
+                    }
+
+                    match msig.header.abi {
+                        rustc_target::spec::abi::Abi::Rust => (),
+                        _ => {
+                            let err_span = impl_item.span.until(impl_item.ident.span); // from the `pub` to the fn ident
+                            let err_span = err_span.from_inner_byte_pos(
+                                4,                                                // remoe the the `pub `
+                                (err_span.hi().0 - err_span.lo().0) as usize - 4, // remove the ` fn `
+                            );
+                            self.errors.push(RpcError::HasAbi(err_span));
+                        }
+                    }
+
+                    let mut args = msig.decl.inputs.iter();
+
+                    if !is_ctor {
+                        match args.next() {
+                            Some(arg) if !Self::is_self_ref(&arg.ty) => {
+                                errors.push(RpcError::MissingSelf(arg.pat.span.to(arg.pat.span)))
+                            }
+                            None => errors.push(RpcError::MissingSelf(impl_item.ident.span)),
+                            _ => (),
+                        }
+                    }
+                    match args.next() {
+                        Some(arg) if !Self::is_context_ref(&arg.ty) => {
+                            self.errors.push(RpcError::MissingContext {
+                                from_ctor: is_ctor,
+                                span: arg.ty.span.to(arg.pat.span),
+                            })
+                        }
+                        None => errors.push(RpcError::MissingContext {
+                            from_ctor: is_ctor,
+                            span: impl_item.ident.span,
+                        }),
+                        _ => (),
+                    }
+
+                    match Self::result_ty(&msig.decl.output) {
+                        Some(result_ty) => {
+                            if is_ctor
+                                && (match &result_ty.node {
+                                    syntax::ast::TyKind::Path(_, path) => {
+                                        path.segments.last().unwrap().ident.name
+                                            != Symbol::intern("Self")
+                                    }
+                                    _ => true,
+                                } && format!("{:?}", result_ty.node) // Ty doesn't impl PartialEq <_<
+                                    != format!("{:?}", service_ty.node))
+                            {
+                                errors.push(RpcError::BadCtorReturn {
+                                    self_ty: service_ty.clone().into_inner(),
+                                    span: msig.decl.output.span(),
+                                });
+                            }
+                        }
+                        None => errors.push(if is_ctor {
+                            RpcError::BadCtorReturn {
+                                self_ty: service_ty.clone().into_inner(),
+                                span: msig.decl.output.span(),
+                            }
+                        } else {
+                            RpcError::MissingOutput(msig.decl.output.span())
+                        }),
+                    }
+
+                    if errors.is_empty() {
+                        self.rpcs.push((impl_item.ident.name, msig));
+                    } else {
+                        self.errors.append(&mut errors);
+                    }
+                }
+            }
+            _ => (),
+        }
+        syntax::visit::walk_item(self, item);
+    }
+}
+
 /// Collects public functions defined in `impl #service_name`.
-pub struct RpcCollector<'a, 'gcx, 'tcx> {
+pub struct AnalyzedRpcCollector<'a, 'gcx, 'tcx> {
     tcx: TyCtxt<'a, 'gcx, 'tcx>,
     service_name: Symbol,
     rpc_impls: HirIdSet,
     rpcs: Vec<(Symbol, &'tcx hir::FnDecl)>, // the collected RPC fns
 }
 
-impl<'a, 'gcx, 'tcx> RpcCollector<'a, 'gcx, 'tcx> {
+impl<'a, 'gcx, 'tcx> AnalyzedRpcCollector<'a, 'gcx, 'tcx> {
     pub fn new(tcx: TyCtxt<'a, 'gcx, 'tcx>, service_name: Symbol) -> Self {
         Self {
             tcx,
@@ -91,7 +289,9 @@ impl<'a, 'gcx, 'tcx> RpcCollector<'a, 'gcx, 'tcx> {
     }
 }
 
-impl<'a, 'gcx, 'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx> for RpcCollector<'a, 'gcx, 'tcx> {
+impl<'a, 'gcx, 'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx>
+    for AnalyzedRpcCollector<'a, 'gcx, 'tcx>
+{
     fn visit_item(&mut self, item: &'tcx hir::Item) {
         if let hir::ItemKind::Impl(_, _, _, _, None /* `trait_ref` */, ty, _) = &item.node {
             if let hir::TyKind::Path(hir::QPath::Resolved(_, path)) = &ty.node {

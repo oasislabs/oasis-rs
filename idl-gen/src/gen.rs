@@ -5,7 +5,7 @@ use rustc_data_structures::sync::Once;
 
 use crate::{
     rpc,
-    visitor::{DefinedTypeCollector, EventCollector, RpcCollector, SyntaxPass},
+    visitor::{AnalyzedRpcCollector, DefinedTypeCollector, EventCollector, ServiceDefFinder},
 };
 
 #[derive(Deserialize)]
@@ -20,7 +20,7 @@ struct LockfileEntry {
 }
 
 pub struct IdlGenerator {
-    syntax_pass: SyntaxPass,
+    service_def_finder: ServiceDefFinder,
     iface: Once<rpc::Interface>,
     deps: Once<BTreeMap<String, LockfileEntry>>,
 }
@@ -28,7 +28,7 @@ pub struct IdlGenerator {
 impl IdlGenerator {
     pub fn new() -> Self {
         Self {
-            syntax_pass: SyntaxPass::default(),
+            service_def_finder: ServiceDefFinder::default(),
             iface: Once::new(),
             deps: Once::new(),
         }
@@ -79,11 +79,25 @@ impl IdlGenerator {
 
 impl rustc_driver::Callbacks for IdlGenerator {
     fn after_parsing(&mut self, compiler: &rustc_interface::interface::Compiler) -> bool {
+        let sess = compiler.session();
         let parse = compiler
             .parse()
             .expect("`after_parsing` is only called after parsing")
             .peek();
-        syntax::visit::walk_crate(&mut self.syntax_pass, &parse);
+        syntax::visit::walk_crate(&mut self.service_def_finder, &parse);
+        if let Some(mut parsed_rpc_collector) = self.service_def_finder.parsed_rpc_collector() {
+            syntax::visit::walk_crate(&mut parsed_rpc_collector, &parse);
+            let rpcs = match parsed_rpc_collector.into_rpcs() {
+                Ok(rpcs) => rpcs,
+                Err(errs) => {
+                    for err in errs {
+                        sess.span_err(err.span(), &format!("{}", err));
+                    }
+                    return false;
+                }
+            };
+            let dispatcher = crate::dispatcher_gen::generate(rpcs);
+        }
         true
     }
 
@@ -91,13 +105,13 @@ impl rustc_driver::Callbacks for IdlGenerator {
         let sess = compiler.session();
         let mut global_ctxt = rustc_driver::abort_on_err(compiler.global_ctxt(), sess).peek_mut();
 
-        let service_name = match self.syntax_pass.service_name() {
+        let service_name = match self.service_def_finder.service_name() {
             Some(service_name) => service_name,
             None => return true, // `#[service]` will complain about missing `derive(Service)`.
         };
 
         global_ctxt.enter(|tcx| {
-            let mut rpc_collector = RpcCollector::new(tcx, service_name);
+            let mut rpc_collector = AnalyzedRpcCollector::new(tcx, service_name);
             tcx.hir().krate().visit_all_item_likes(&mut rpc_collector);
 
             let defined_types = rpc_collector.rpcs().iter().flat_map(|(_, decl)| {
@@ -134,14 +148,14 @@ impl rustc_driver::Callbacks for IdlGenerator {
                 service_name,
                 imports,
                 adt_defs,
-                self.syntax_pass.event_indices(),
+                self.service_def_finder.event_indices(),
                 rpc_collector.rpcs(),
             ) {
                 Ok(iface) => iface,
                 Err(errs) => {
-                    errs.into_iter().for_each(|err| {
+                    for err in errs {
                         sess.span_err(err.span(), &format!("{}", err));
-                    });
+                    }
                     return;
                 }
             };

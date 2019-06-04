@@ -28,3 +28,72 @@ impl UnsupportedTypeError {
         }
     }
 }
+
+#[derive(Debug)]
+pub enum RpcError {
+    CtorVis(Span),
+    HasAbi(Span),
+    HasAsync(Span),
+    HasGenerics(Span),
+    MissingContext {
+        from_ctor: bool,
+        span: Span,
+    },
+    MissingSelf(Span),
+    BadCtorReturn {
+        self_ty: syntax::ast::Ty,
+        span: Span,
+    },
+    MissingOutput(Span),
+}
+
+impl std::fmt::Display for RpcError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use RpcError::*;
+        match self {
+            CtorVis(..) => write!(f, "Service constructor must have `pub` visibility."),
+            HasAbi(..) => write!(f, "RPC method cannot declare an ABI."),
+            HasAsync(..) => write!(f, "RPC method cannot be async."),
+            HasGenerics(..) => write!(f, "RPC method cannot have generic parameters."),
+            MissingContext { from_ctor, .. } => {
+                if *from_ctor {
+                    write!(
+                        f,
+                        "Service constructor must take `&Context` as its first argument."
+                    )
+                } else {
+                    write!(f, "RPC method must take `&Context` as its second argument.")
+                }
+            }
+            MissingSelf(..) => write!(
+                f,
+                "RPC method must take `&self` or `&mut self` as its first argument."
+            ),
+            BadCtorReturn { self_ty, .. } => {
+                let self_ty_str = format!("{:?}", self_ty);
+                write!(
+                    f,
+                    "Service constructor must return `Self` (aka `{}`)",
+                    &self_ty_str["type(".len()..(self_ty_str.len() - 1)]
+                )
+            }
+            MissingOutput(..) => write!(f, "RPC method must return `Result`."),
+        }
+    }
+}
+
+impl RpcError {
+    pub fn span(&self) -> Span {
+        use RpcError::*;
+        match self {
+            CtorVis(span)
+            | HasAbi(span)
+            | HasAsync(span)
+            | HasGenerics(span)
+            | MissingContext { span, .. }
+            | MissingSelf(span)
+            | BadCtorReturn { span, .. }
+            | MissingOutput(span) => *span,
+        }
+    }
+}

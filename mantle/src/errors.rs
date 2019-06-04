@@ -1,12 +1,8 @@
-use failure::Fail;
-
-pub type Result<T> = std::result::Result<T, failure::Error>;
-
-#[derive(Fail, Debug)]
+#[derive(failure::Fail, Debug)]
 #[fail(display = "Call to Wasm import failed.")]
 pub struct ExtCallError;
 
-#[derive(Fail, Debug, Eq, PartialEq)]
+#[derive(failure::Fail, Debug, Eq, PartialEq)]
 pub enum AbiError {
     #[fail(display = "Invalid bool for provided input")]
     InvalidBool,

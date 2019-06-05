@@ -7,29 +7,6 @@ macro_rules! err {
     };
 }
 
-/// Checks whether struct derives a trait.
-/// Currently fails if trait is a path instead of an ident (@see syn#597)
-fn has_derive(s: &syn::ItemStruct, derive: &str) -> bool {
-    s.attrs.iter().any(|attr| match attr.parse_meta() {
-        Ok(syn::Meta::List(l)) => {
-            l.ident == "derive"
-                && l.nested.iter().any(|nest| match nest {
-                    syn::NestedMeta::Meta(m) => m.name() == derive,
-                    _ => false,
-                })
-        }
-        _ => false,
-    })
-}
-
-/// Checks if `impl T` is for a given ident `U`
-fn is_impl_of(imp: &syn::ItemImpl, typ: &syn::Ident) -> bool {
-    match &*imp.self_ty {
-        syn::Type::Path(tp) if &tp.path.segments.last().unwrap().value().ident == typ => true,
-        _ => false,
-    }
-}
-
 /// Hashes an ident into a `[u8; 32]` `TokenStream`.
 fn keccak_key(ident: &syn::Ident) -> proc_macro2::TokenStream {
     let key = syn::parse_str::<syn::Expr>(&format!(

@@ -1,11 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet}; // BTree for reproducability
 
-use rustc::hir::intravisit::Visitor;
+use rustc::{hir::intravisit::Visitor, util::nodemap::FxHashMap};
 use rustc_data_structures::sync::Once;
+use syntax_pos::symbol::Symbol;
 
 use crate::{
     rpc,
-    visitor::{AnalyzedRpcCollector, DefinedTypeCollector, EventCollector, ServiceDefFinder},
+    visitor::{
+        AnalyzedRpcCollector, DefinedTypeCollector, EventCollector, ParsedRpcCollector,
+        ServiceDefFinder,
+    },
 };
 
 #[derive(Deserialize)]
@@ -20,7 +24,8 @@ struct LockfileEntry {
 }
 
 pub struct BuildPlugin {
-    service_def_finder: ServiceDefFinder,
+    service_name: Once<Symbol>,
+    event_indexed_fields: FxHashMap<Symbol, Vec<Symbol>>, // event_name -> field_name
     iface: Once<rpc::Interface>,
     deps: Once<BTreeMap<String, LockfileEntry>>,
 }
@@ -28,7 +33,8 @@ pub struct BuildPlugin {
 impl BuildPlugin {
     pub fn new() -> Self {
         Self {
-            service_def_finder: ServiceDefFinder::default(),
+            service_name: Once::new(),
+            event_indexed_fields: Default::default(),
             iface: Once::new(),
             deps: Once::new(),
         }
@@ -84,33 +90,58 @@ impl rustc_driver::Callbacks for BuildPlugin {
             .parse()
             .expect("`after_parsing` is only called after parsing")
             .peek_mut();
-        syntax::visit::walk_crate(&mut self.service_def_finder, &parse);
-        let service_name = self.service_def_finder.service_name();
-        if let Some(mut parsed_rpc_collector) = self.service_def_finder.parsed_rpc_collector() {
-            syntax::visit::walk_crate(&mut parsed_rpc_collector, &parse);
-            let impl_span = parsed_rpc_collector.impl_span();
-            let rpcs = match parsed_rpc_collector.into_rpcs() {
-                Ok(rpcs) => rpcs,
-                Err(errs) => {
-                    for err in errs {
-                        sess.span_err(err.span(), &format!("{}", err));
-                    }
-                    return false;
+
+        let mut service_def_finder = ServiceDefFinder::default();
+        syntax::visit::walk_crate(&mut service_def_finder, &parse);
+
+        let (services, event_indexed_fields) = service_def_finder.get();
+        self.event_indexed_fields = event_indexed_fields;
+
+        let main_service = match services.as_slice() {
+            [] => return false,
+            [main_service] => main_service,
+            _ => {
+                sess.span_err(
+                    services[1].span,
+                    "Multiple invocations of `mantle::service!`. Second occurrence here:",
+                );
+                return false;
+            }
+        };
+        let service_name = main_service.name;
+        self.service_name.set(service_name);
+
+        let mut parsed_rpc_collector = ParsedRpcCollector::new(service_name);
+        syntax::visit::walk_crate(&mut parsed_rpc_collector, &parse);
+        let impl_span = parsed_rpc_collector.impl_span();
+        let rpcs = match parsed_rpc_collector.into_rpcs() {
+            Ok(rpcs) => rpcs,
+            Err(errs) => {
+                for err in errs {
+                    sess.span_err(err.span(), &format!("{}", err));
                 }
-            };
-            let (deploy_export, dispatch_tree) = crate::dispatcher_gen::generate(rpcs);
-            let deploy_export = match deploy_export {
-                Some(deploy_export) => deploy_export,
-                None => {
-                    sess.span_err(
-                        impl_span,
-                        &format!("Missing definition of `{}::new`.", service_name.unwrap()),
-                    );
-                    return false;
-                }
-            };
-            parse.module.items.push(dbg!(deploy_export));
-        }
+                return false;
+            }
+        };
+        let (ctor, rpcs): (Vec<_>, Vec<_>) = rpcs
+            .iter()
+            .partition(|(name, _)| *name == syntax_pos::symbol::Symbol::intern("new"));
+        let ctor_sig = match ctor.as_slice() {
+            [] => {
+                sess.span_err(
+                    impl_span,
+                    &format!("Missing definition of `{}::new`.", service_name),
+                );
+                return false;
+            }
+            [(_, sig)] => sig,
+            _ => return true, // Multiply defined `new` function. Let the compiler catch this.
+        };
+
+        let dispatchers = crate::dispatcher_gen::generate(service_name, ctor_sig, rpcs);
+        parse.module.items.push(dispatchers.ctor_fn);
+        crate::dispatcher_gen::insert_rpc_dispatcher(&mut parse, dispatchers.rpc_dispatcher);
+
         true
     }
 
@@ -118,13 +149,13 @@ impl rustc_driver::Callbacks for BuildPlugin {
         let sess = compiler.session();
         let mut global_ctxt = rustc_driver::abort_on_err(compiler.global_ctxt(), sess).peek_mut();
 
-        let service_name = match self.service_def_finder.service_name() {
+        let service_name = match self.service_name.try_get() {
             Some(service_name) => service_name,
-            None => return true, // `#[service]` will complain about missing `derive(Service)`.
+            None => return false,
         };
 
         global_ctxt.enter(|tcx| {
-            let mut rpc_collector = AnalyzedRpcCollector::new(tcx, service_name);
+            let mut rpc_collector = AnalyzedRpcCollector::new(tcx, *service_name);
             tcx.hir().krate().visit_all_item_likes(&mut rpc_collector);
 
             let defined_types = rpc_collector.rpcs().iter().flat_map(|(_, decl)| {
@@ -158,10 +189,10 @@ impl rustc_driver::Callbacks for BuildPlugin {
 
             let iface = match rpc::Interface::convert(
                 tcx,
-                service_name,
+                *service_name,
                 imports,
                 adt_defs,
-                self.service_def_finder.event_indices(),
+                &self.event_indexed_fields,
                 rpc_collector.rpcs(),
             ) {
                 Ok(iface) => iface,

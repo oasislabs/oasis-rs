@@ -19,6 +19,7 @@ mod dispatcher_gen;
 mod error;
 mod plugin;
 mod rpc;
+#[macro_use]
 mod utils;
 mod visitor;
 

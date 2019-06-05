@@ -39,3 +39,31 @@ pub fn get_type_args(path: &hir::Path) -> Vec<&hir::Ty> {
         })
         .unwrap_or_default()
 }
+
+pub fn mk_parse_sess() -> syntax::parse::ParseSess {
+    syntax::parse::ParseSess::new(syntax::source_map::FilePathMapping::empty())
+}
+
+/// Returns whether `path` ends with `suffix`.
+/// e.g, `path_is_suffix(crate::mantle::service, ["mantle", "service"]) == true`
+pub fn path_ends_with(path: &syntax::ast::Path, suffix: &[&'static str]) -> bool {
+    for (pseg, fpseg) in path.segments.iter().rev().zip(suffix.iter().rev()) {
+        if pseg.ident.name != Symbol::intern(fpseg) {
+            return false;
+        }
+    }
+    true
+}
+
+#[macro_export]
+macro_rules! parse {
+    ($src:expr => $parse_fn:ident) => {{
+        let sess = crate::utils::mk_parse_sess();
+        let mut parser = syntax::parse::new_parser_from_source_str(
+            &sess,
+            syntax::source_map::FileName::Custom(String::new()),
+            $src.to_string(),
+        );
+        parser.$parse_fn().unwrap()
+    }};
+}

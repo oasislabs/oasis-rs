@@ -14,7 +14,12 @@ include!("alloc.rs");
 
 pub mod prelude {
     pub use crate::{errors::*, exe::*, types::*};
-    pub use macros::{service, Event, Service};
+    pub use macros::{Event, Service};
+}
+
+#[macro_export]
+macro_rules! service {
+    ($svc:path) => {};
 }
 
 pub mod reexports {
@@ -25,4 +30,5 @@ pub mod reexports {
 }
 
 pub use build::build_service;
-pub use macros::{service, Event};
+pub use exe::Context;
+pub use macros::Event;

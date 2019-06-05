@@ -1,64 +1,90 @@
-mod visitor;
-
 use syntax::{
-    ast::{Arg, Block, Item, MethodSig},
-    parse::ParseSess,
+    ast::{Arg, Block, Crate, Item, ItemKind, MethodSig, StmtKind},
     print::pprust,
     ptr::P,
 };
 use syntax_pos::symbol::Symbol;
 
-// macro_rules! parse {
-//     ($quotable:block using $parse_fn:ident) => {{
-//         let src = format!("{}", quote!($quotable));
-//         let sess = syntax::parse::ParseSess::new(syntax::source_map::FilePathMapping::empty());
-//         let mut parser = syntax::parse::new_parser_from_source_str(
-//             &sess,
-//             syntax::source_map::FileName::Custom(String::new()),
-//             src,
-//         );
-//         parser.$parse_fn().unwrap()
-//     }};
-// }
+use crate::parse;
 
-macro_rules! parse {
-    ($src:expr => $parse_fn:ident) => {{
-        let sess = syntax::parse::ParseSess::new(syntax::source_map::FilePathMapping::empty());
-        let mut parser = syntax::parse::new_parser_from_source_str(
-            &sess,
-            syntax::source_map::FileName::Custom(String::new()),
-            $src,
-        );
-        parser.$parse_fn().unwrap()
-    }};
+pub struct Dispatchers {
+    pub ctor_fn: P<Item>,
+    pub rpc_dispatcher: P<Block>,
 }
 
 pub fn generate(
-    sess: ParseSess,
-    sigs: Vec<(Symbol, &MethodSig)>,
-) -> (
-    Option<P<Item>>, /* ctor fn */
-    P<Block>,        /* dispatch tree */
-) {
-    let ctor = sigs.iter().find(|(name, _)| *name == Symbol::intern("new"));
+    service_name: Symbol,
+    ctor: &MethodSig,
+    rpcs: Vec<(Symbol, &MethodSig)>,
+) -> Dispatchers {
+    let rpc_payload_types = rpcs // e.g., `fn_name { input1: String, input2: Option<u64> }`
+        .iter()
+        .map(|(name, sig)| {
+            format!(
+                "{} {{ {} }}",
+                name,
+                structify_args(&sig.decl.inputs[2..]).join(", ")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
 
-    let dispatch_tree = parse!(r#"{
-        let a = "hello, world!";
-    }"#.to_string() => parse_block);
+    let rpc_match_arms = rpcs
+        .iter()
+        .map(|(name, sig)| {
+            let arg_names = sig.decl.inputs[2..]
+                .iter()
+                .map(|arg| pprust::pat_to_string(&arg.pat))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                r#"RpcPayload::{name} {{ {arg_names} }} => {{
+                    let result = service.{name}(&ctx, {arg_names});
+                    mantle::reexports::serde_cbor::to_vec(&result.map_err(|err| err.to_string())) // TODO(#15)
+                }}"#,
+                name = name,
+                arg_names = arg_names,
+            )
+        })
+        .collect::<String>();
 
-    let dispatch_export = ctor.map(|(_, sig)| {
-        let ctor_body = "";
+    let rpc_dispatcher = parse!(format!(r#"{{
+            #[derive(serde::Serialize, serde::Deserialize)]
+            #[serde(tag = "method", content = "payload")]
+            #[allow(non_camel_case_types)]
+            pub enum RpcPayload<'a> {{
+                {rpc_payload_types}
+            }}
 
-        parse!(format!(r#"
+            let ctx = mantle::Context::default(); // TODO(#33)
+            let mut service = <{service_ident}>::coalesce();
+            use std::io::{{Read as _, Write as _}};
+            let payload: RpcPayload =
+                mantle::reexports::serde_cbor::from_reader(std::io::stdin()).unwrap();
+            let serialized_result = match payload {{
+                {call_tree}
+            }}.unwrap();
+            <{service_ident}>::sunder(service);
+            std::io::stdout().write_all(&serialized_result);
+        }}"#,
+        rpc_payload_types = rpc_payload_types,
+        service_ident = service_name.as_str().get(),
+        call_tree = rpc_match_arms,
+    ) => parse_block);
+
+    let ctor_body = "";
+    let ctor_fn = parse!(format!(r#"
             #[no_mangle]
             extern "C" fn _mantle_ctor() {{
                 {}
             }}
         "#, ctor_body) => parse_item)
-        .unwrap()
-    });
+    .unwrap();
 
-    (dispatch_export, dispatch_tree)
+    Dispatchers {
+        ctor_fn,
+        rpc_dispatcher,
+    }
 }
 
 fn structify_args(args: &[Arg]) -> Vec<String> {
@@ -71,4 +97,32 @@ fn structify_args(args: &[Arg]) -> Vec<String> {
             format!("{}: {}", pat_ident, pprust::ty_to_string(&arg.ty))
         })
         .collect()
+}
+
+pub fn insert_rpc_dispatcher(krate: &mut Crate, rpc_dispatcher: P<Block>) {
+    for item in krate.module.items.iter_mut() {
+        if item.ident.name != Symbol::intern("main") {
+            continue;
+        }
+        let main_fn_block = match &mut item.node {
+            ItemKind::Fn(_, _, _, ref mut block) => block,
+            _ => continue,
+        };
+        let mantle_macro_idx = main_fn_block
+            .stmts
+            .iter()
+            .position(|stmt| match &stmt.node {
+                StmtKind::Mac(mac) => {
+                    let mac_ = &mac.0.node;
+                    crate::utils::path_ends_with(&mac_.path, &["mantle", "service"])
+                }
+                _ => false,
+            })
+            .unwrap();
+        main_fn_block.stmts.splice(
+            mantle_macro_idx..=mantle_macro_idx,
+            rpc_dispatcher.into_inner().stmts,
+        );
+        break;
+    }
 }

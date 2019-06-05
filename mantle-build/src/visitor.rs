@@ -3,32 +3,27 @@ use rustc::{
     ty::{self, AdtDef, TyCtxt, TyS},
     util::nodemap::{FxHashMap, FxHashSet, HirIdSet},
 };
+use syntax::source_map::Span;
 use syntax_pos::symbol::Symbol;
 
 use crate::error::RpcError;
 
 #[derive(Default)]
 pub struct ServiceDefFinder {
-    service_name: Option<Symbol>, // set to `Some` once pass is complete
-    event_indices: FxHashMap<Symbol, Vec<Symbol>>, // event_name -> field_name
+    services: Vec<Service>,
+    event_indexed_fields: FxHashMap<Symbol, Vec<Symbol>>, // event_name -> field_name
 }
 
+#[derive(Debug)]
+pub struct Service {
+    pub span: Span,
+    pub name: Symbol,
+}
+
+/// Identifies the main `Service` and `Event` definitions.
 impl ServiceDefFinder {
-    pub fn service_name(&self) -> Option<Symbol> {
-        self.service_name
-    }
-
-    pub fn event_indices(&self) -> &FxHashMap<Symbol, Vec<Symbol>> {
-        &self.event_indices
-    }
-
-    pub fn parsed_rpc_collector(&self) -> Option<ParsedRpcCollector> {
-        self.service_name.map(|service_name| ParsedRpcCollector {
-            service_name,
-            rpcs: Vec::new(),
-            errors: Vec::new(),
-            impl_span: Default::default(),
-        })
+    pub fn get(self) -> (Vec<Service>, FxHashMap<Symbol, Vec<Symbol>>) {
+        (self.services, self.event_indexed_fields)
     }
 }
 
@@ -50,41 +45,62 @@ impl<'ast> syntax::visit::Visitor<'ast> for ServiceDefFinder {
                     Some(ident) => ident.as_str(),
                     None => continue,
                 };
-                if ident == "Service" {
-                    self.service_name = Some(item.ident.name);
-                } else if ident == "Event" {
-                    if let syntax::ast::ItemKind::Struct(variant_data, _) = &item.node {
-                        let indexed_fields = variant_data
-                            .fields()
-                            .iter()
-                            .filter_map(|field| {
-                                field
-                                    .attrs
-                                    .iter()
-                                    .find(|attr| attr.path == Symbol::intern("indexed"))
-                                    .and_then(|_| field.ident.map(|ident| ident.name))
-                            })
-                            .collect();
-                        self.event_indices.insert(item.ident.name, indexed_fields);
-                    }
+                if ident != "Event" {
+                    return;
+                }
+                if let syntax::ast::ItemKind::Struct(variant_data, _) = &item.node {
+                    let indexed_fields = variant_data
+                        .fields()
+                        .iter()
+                        .filter_map(|field| {
+                            field
+                                .attrs
+                                .iter()
+                                .find(|attr| attr.path == Symbol::intern("indexed"))
+                                .and_then(|_| field.ident.map(|ident| ident.name))
+                        })
+                        .collect();
+                    self.event_indexed_fields
+                        .insert(item.ident.name, indexed_fields);
                 }
             }
         }
         syntax::visit::walk_item(self, item);
     }
 
-    fn visit_mac(&mut self, _mac: &'ast syntax::ast::Mac) {}
+    fn visit_mac(&mut self, mac: &'ast syntax::ast::Mac) {
+        let mac_ = &mac.node;
+        if !crate::utils::path_ends_with(&mac_.path, &["mantle", "service"]) {
+            return;
+        }
+        // Why not parse the `TokenStream`, you ask? Because the `TokenStream`
+        // refers to sourcemap info not held by the anonymous `ParseSess` used
+        // for one-off parsing.
+        let service_ident = parse!(format!("{}", mac_.tts) => parse_ident);
+        self.services.push(Service {
+            span: mac.span,
+            name: service_ident.name,
+        });
+    }
 }
 
 pub struct ParsedRpcCollector<'ast> {
     service_name: Symbol,
     rpcs: Vec<(Symbol, &'ast syntax::ast::MethodSig)>,
     errors: Vec<RpcError>,
-    impl_span: syntax::source_map::Span,
+    impl_span: Span,
 }
 
 impl<'ast> ParsedRpcCollector<'ast> {
-    pub fn impl_span(&self) -> syntax::source_map::Span {
+    pub fn new(service_name: Symbol) -> Self {
+        Self {
+            service_name,
+            rpcs: Vec::new(),
+            errors: Vec::new(),
+            impl_span: Default::default(),
+        }
+    }
+    pub fn impl_span(&self) -> Span {
         self.impl_span
     }
 
@@ -107,15 +123,7 @@ impl<'ast> ParsedRpcCollector<'ast> {
         match &ty.node {
             syntax::ast::TyKind::Rptr(_, mut_ty) => match &mut_ty.ty.node {
                 syntax::ast::TyKind::Path(_, path) => {
-                    let mut path_rev_iter = path.segments.iter().rev();
-                    (match path_rev_iter.next() {
-                        Some(seg) if seg.ident.name == Symbol::intern("Context") => true,
-                        _ => false,
-                    }) && (match path_rev_iter.next() {
-                        Some(seg) if seg.ident.name == Symbol::intern("mantle") => true,
-                        Some(_) => false,
-                        None => true,
-                    })
+                    crate::utils::path_ends_with(&path, &["mantle", "Context"])
                 }
                 _ => false,
             },
@@ -226,7 +234,19 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector<'ast> {
                     for arg in args {
                         match arg.pat.node {
                             syntax::ast::PatKind::Ident(..) => (),
-                            _ => errors.push(RpcError::BadArg(arg.pat.span)),
+                            _ => errors.push(RpcError::BadArgPat(arg.pat.span)),
+                        }
+
+                        let mut ref_checker = RefChecker::default();
+                        ref_checker.visit_ty(&*arg.ty);
+                        if dbg!(ref_checker.has_ref) {
+                            use syntax::mut_visit::MutVisitor as _;
+                            let mut suggested_ty = arg.ty.clone();
+                            Deborrower {}.visit_ty(&mut suggested_ty);
+                            errors.push(RpcError::BadArgTy {
+                                span: arg.ty.span,
+                                suggestion: syntax::print::pprust::ty_to_string(&suggested_ty),
+                            });
                         }
                     }
 
@@ -273,6 +293,20 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector<'ast> {
     fn visit_mac(&mut self, _mac: &'ast syntax::ast::Mac) {
         // The default implementation panics. They exist pre-expansion, but we don't need
         // to look at them. Hopefully nobody generates `Event` structs in a macro.
+    }
+}
+
+#[derive(Default)]
+pub struct RefChecker {
+    has_ref: bool,
+}
+
+impl<'ast> syntax::visit::Visitor<'ast> for RefChecker {
+    fn visit_ty(&mut self, ty: &'ast syntax::ast::Ty) {
+        if let syntax::ast::TyKind::Rptr(..) = &ty.node {
+            self.has_ref = true;
+        }
+        syntax::visit::walk_ty(self, ty);
     }
 }
 
@@ -453,5 +487,26 @@ impl<'a, 'gcx, 'tcx> hir::intravisit::Visitor<'tcx> for EventCollector<'a, 'gcx,
 
     fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, 'tcx> {
         intravisit::NestedVisitorMap::OnlyBodies(self.tcx.hir())
+    }
+}
+
+pub struct Deborrower;
+impl syntax::mut_visit::MutVisitor for Deborrower {
+    fn visit_ty(&mut self, ty: &mut syntax::ptr::P<syntax::ast::Ty>) {
+        if let syntax::ast::TyKind::Rptr(_, syntax::ast::MutTy { ty: refd_ty, .. }) = &ty.node {
+            match &refd_ty.node {
+                syntax::ast::TyKind::Path(None, path) => {
+                    if path.segments.last().unwrap().ident.name == Symbol::intern("str") {
+                        *ty = parse!("String" => parse_ty);
+                    }
+                }
+                syntax::ast::TyKind::Slice(slice_ty) => {
+                    *ty = parse!(format!("Vec<{}>",
+                            syntax::print::pprust::ty_to_string(&slice_ty)) => parse_ty);
+                }
+                _ => (),
+            }
+        }
+        syntax::mut_visit::noop_visit_ty(ty, self);
     }
 }

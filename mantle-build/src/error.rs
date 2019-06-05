@@ -31,7 +31,11 @@ impl UnsupportedTypeError {
 
 #[derive(Debug)]
 pub enum RpcError {
-    BadArg(Span),
+    BadArgPat(Span),
+    BadArgTy {
+        span: Span,
+        suggestion: String,
+    },
     CtorVis(Span),
     HasAbi(Span),
     HasAsync(Span),
@@ -52,7 +56,12 @@ impl std::fmt::Display for RpcError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         use RpcError::*;
         match self {
-            BadArg(..) => write!(f, "Argument name must be a valid identifier."),
+            BadArgPat(..) => write!(f, "Argument name must be a valid identifier."),
+            BadArgTy { suggestion, .. } => write!(
+                f,
+                "RPC argument must be an owned type. Maybe try `{}`?",
+                suggestion
+            ),
             BadCtorReturn { self_ty, .. } => {
                 let self_ty_str = format!("{:?}", self_ty);
                 write!(
@@ -88,7 +97,8 @@ impl RpcError {
     pub fn span(&self) -> Span {
         use RpcError::*;
         match self {
-            BadArg(span)
+            BadArgPat(span)
+            | BadArgTy { span, .. }
             | CtorVis(span)
             | HasAbi(span)
             | HasAsync(span)

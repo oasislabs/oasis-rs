@@ -239,7 +239,7 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector<'ast> {
 
                         let mut ref_checker = RefChecker::default();
                         ref_checker.visit_ty(&*arg.ty);
-                        if dbg!(ref_checker.has_ref) {
+                        if ref_checker.has_ref {
                             use syntax::mut_visit::MutVisitor as _;
                             let mut suggested_ty = arg.ty.clone();
                             Deborrower {}.visit_ty(&mut suggested_ty);

@@ -17,7 +17,7 @@ pub fn generate(
     ctor: &MethodSig,
     rpcs: Vec<(Symbol, &MethodSig)>,
 ) -> Dispatchers {
-    let rpc_payload_types = rpcs // e.g., `fn_name { input1: String, input2: Option<u64> }`
+    let rpc_payload_variants = rpcs // e.g., `fn_name { input1: String, input2: Option<u64> }`
         .iter()
         .map(|(name, sig)| {
             format!(
@@ -39,8 +39,11 @@ pub fn generate(
                 .join(", ");
             format!(
                 r#"RpcPayload::{name} {{ {arg_names} }} => {{
-                    let result = service.{name}(&ctx, {arg_names});
-                    mantle::reexports::serde_cbor::to_vec(&result.map_err(|err| err.to_string())) // TODO(#15)
+                    service.{name}(&ctx, {arg_names})
+                        .map(|output| {{
+                            mantle::reexports::serde_cbor::to_vec(&output).unwrap()
+                        }})
+                        .map_err(|err| err.to_string())
                 }}"#,
                 name = name,
                 arg_names = arg_names,
@@ -49,36 +52,81 @@ pub fn generate(
         .collect::<String>();
 
     let rpc_dispatcher = parse!(format!(r#"{{
+            use std::io::{{Read as _, Write as _}};
+
             #[derive(serde::Serialize, serde::Deserialize)]
             #[serde(tag = "method", content = "payload")]
             #[allow(non_camel_case_types)]
-            pub enum RpcPayload<'a> {{
-                {rpc_payload_types}
+            enum RpcPayload {{
+                {rpc_payload_variants}
             }}
 
             let ctx = mantle::Context::default(); // TODO(#33)
             let mut service = <{service_ident}>::coalesce();
-            use std::io::{{Read as _, Write as _}};
             let payload: RpcPayload =
                 mantle::reexports::serde_cbor::from_reader(std::io::stdin()).unwrap();
-            let serialized_result = match payload {{
+            let result = match payload {{
                 {call_tree}
-            }}.unwrap();
-            <{service_ident}>::sunder(service);
-            std::io::stdout().write_all(&serialized_result);
+            }};
+            match result {{
+                Ok(output) => {{
+                    std::io::stdout().write_all(&output).unwrap();
+                    <{service_ident}>::sunder(service);
+                }}
+                Err(message) => {{
+                    std::io::stderr().write_all(&message.as_bytes());
+                    std::process::exit(1); // signal an error
+                }}
+            }}
         }}"#,
-        rpc_payload_types = rpc_payload_types,
+        rpc_payload_variants = rpc_payload_variants,
         service_ident = service_name.as_str().get(),
         call_tree = rpc_match_arms,
     ) => parse_block);
 
-    let ctor_body = "";
+    let ctor_arg_names = ctor.decl.inputs[1..]
+        .iter()
+        .map(|arg| pprust::pat_to_string(&arg.pat))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let ctor_payload_unpack = if ctor.decl.inputs.len() > 1 {
+        format!(
+            "let CtorPayload {{ {} }} =
+                    mantle::reexports::serde_cbor::from_reader(std::io::stdin()).unwrap();",
+            ctor_arg_names
+        )
+    } else {
+        String::new()
+    };
     let ctor_fn = parse!(format!(r#"
             #[no_mangle]
-            extern "C" fn _mantle_ctor() {{
-                {}
+            extern "C" fn _mantle_deploy() {{
+                use std::io::{{Read as _, Write as _}};
+
+                #[derive(serde::Serialize, serde::Deserialize)]
+                #[allow(non_camel_case_types)]
+                struct CtorPayload {{
+                    {ctor_payload_types}
+                }}
+
+                let ctx = mantle::Context::default(); // TODO(#33)
+                {ctor_payload_unpack}
+                let mut service = match <{service_ident}>::new(&ctx, {ctor_arg_names}) {{
+                    Ok(service) => service,
+                    Err(err) => {{
+                        std::io::stdout().write_all(err.to_string().as_bytes()).unwrap();
+                        std::process::exit(1);
+                    }}
+                }};
+                <{service_ident}>::sunder(service);
             }}
-        "#, ctor_body) => parse_item)
+        "#,
+        ctor_payload_unpack = ctor_payload_unpack,
+        ctor_arg_names = ctor_arg_names,
+        ctor_payload_types = structify_args(&ctor.decl.inputs[1..]).join(", "),
+        service_ident = service_name.as_str().get(),
+        ) => parse_item)
     .unwrap();
 
     Dispatchers {

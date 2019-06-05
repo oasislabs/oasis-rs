@@ -276,9 +276,9 @@ impl<'bc> Blockchain for Block<'bc> {
             .unwrap_or_default()
     }
 
-    fn input_len(&self) -> u64 {
+    fn input_len(&self) -> u32 {
         self.pending_transaction()
-            .map(|tx| tx.input().len() as u64)
+            .map(|tx| tx.input().len() as u32)
             .unwrap_or_default()
     }
 
@@ -305,8 +305,8 @@ impl<'bc> Blockchain for Block<'bc> {
         }
     }
 
-    fn ret_len(&self) -> u64 {
-        self.fetch_ret().len() as u64
+    fn ret_len(&self) -> u32 {
+        self.fetch_ret().len() as u32
     }
 
     fn fetch_err(&self) -> Vec<u8> {
@@ -320,8 +320,8 @@ impl<'bc> Blockchain for Block<'bc> {
         }
     }
 
-    fn err_len(&self) -> u64 {
-        self.fetch_err().len() as u64
+    fn err_len(&self) -> u32 {
+        self.fetch_err().len() as u32
     }
 
     fn emit(&mut self, topics: Vec<[u8; 32]>, data: Vec<u8>) {
@@ -336,10 +336,10 @@ impl<'bc> Blockchain for Block<'bc> {
             .map(|acct| acct.code.as_slice())
     }
 
-    fn code_len(&self, addr: &Address) -> u64 {
+    fn code_len(&self, addr: &Address) -> u32 {
         self.current_state()
             .get(&addr)
-            .map(|acct| acct.code.len() as u64)
+            .map(|acct| acct.code.len() as u32)
             .unwrap_or_default()
     }
 

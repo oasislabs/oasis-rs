@@ -217,12 +217,12 @@ impl<A: Address> BCFS<A> {
             return Ok(meta);
         }
         let (file_size, inode) = match &file.kind {
-            FileKind::Stdin => (blockchain.input_len(), u32::from(fd).into()),
+            FileKind::Stdin => (blockchain.input_len() as u64, u32::from(fd).into()),
             FileKind::Stdout | FileKind::Stderr | FileKind::Log => return Err(ErrNo::Inval),
             FileKind::Bytecode {
                 addr: AnyAddress::Native(addr),
             } => (
-                blockchain.code_len(addr),
+                blockchain.code_len(addr) as u64,
                 Self::hash_inode(addr.as_ref(), "bytecode"),
             ),
             FileKind::Balance {

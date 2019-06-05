@@ -42,7 +42,7 @@ pub trait Blockchain: KVStore {
 
     /// Returns the input provided by the calling context.
     fn fetch_input(&self) -> Vec<u8>;
-    fn input_len(&self) -> u64;
+    fn input_len(&self) -> u32;
 
     /// Returns data to the calling context.
     fn ret(&mut self, data: Vec<u8>);
@@ -52,11 +52,11 @@ pub trait Blockchain: KVStore {
 
     /// Returns the `ret` data of the called transaction.
     fn fetch_ret(&self) -> Vec<u8>;
-    fn ret_len(&self) -> u64;
+    fn ret_len(&self) -> u32;
 
     /// Returns the `err` data of the called transaction.
     fn fetch_err(&self) -> Vec<u8>;
-    fn err_len(&self) -> u64;
+    fn err_len(&self) -> u32;
 
     /// Requests that an event be emitted in this block.
     fn emit(&mut self, topics: Vec<[u8; 32]>, data: Vec<u8>);
@@ -64,7 +64,7 @@ pub trait Blockchain: KVStore {
     /// Returns the bytecode stored at `addr`, if it exists.
     /// `None` signifies that no account exists at `addr`.
     fn code_at(&self, addr: &Self::Address) -> Option<&[u8]>;
-    fn code_len(&self, addr: &Self::Address) -> u64;
+    fn code_len(&self, addr: &Self::Address) -> u32;
 
     /// Returns the metadata of the account stored at `addr`, if it exists.
     fn metadata_at(&self, addr: &Self::Address) -> Option<AccountMetadata>;

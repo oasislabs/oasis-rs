@@ -227,8 +227,6 @@ pub enum Type {
     Bytes,
     String,
     Address,
-    U256,
-    H256,
     Defined {
         #[serde(skip_serializing_if = "Option::is_none")]
         namespace: Option<Ident>,
@@ -268,12 +266,8 @@ macro_rules! convert_def {
                 )
             } else if ty_str == "HashSet" || ty_str == "BTreeSet" {
                 Type::Set(box $converter($tcx, $did, $arg_at(0))?)
-            } else if ty_str == "Address" || ty_str == "H160" {
+            } else if ty_str == "Address" {
                 Type::Address
-            } else if ty_str == "U256" {
-                Type::U256
-            } else if ty_str == "H256" {
-                Type::H256
             } else {
                 // this branch includes `sync`, among other things
                 return Err(UnsupportedTypeError::NotReprC(

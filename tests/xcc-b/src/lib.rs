@@ -3,7 +3,7 @@
 mod service {
     #[derive(Service, Default)]
     pub struct ServiceB {
-        total_value: U256,
+        total_value: u64,
     }
 
     impl ServiceB {
@@ -12,13 +12,13 @@ mod service {
         }
 
         /// Records the `value` passed to this service. Returns the transferred value.
-        pub fn record_value(&mut self, ctx: &Context) -> Result<U256> {
+        pub fn record_value(&mut self, ctx: &Context) -> Result<u64> {
             self.total_value += ctx.value();
             Ok(ctx.value())
         }
 
         /// Returns the total value transferred to this service (c.f. `balance`).
-        pub fn total_value(&self, _ctx: &Context) -> Result<U256> {
+        pub fn total_value(&self, _ctx: &Context) -> Result<u64> {
             Ok(self.total_value)
         }
     }

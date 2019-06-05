@@ -1,7 +1,4 @@
-use crate::{
-    ext,
-    types::{Address, U256},
-};
+use crate::{ext, types::Address};
 
 /// A type that can be stored in blockchain storage.
 pub trait Storage = serde::Serialize + serde::de::DeserializeOwned;
@@ -22,13 +19,13 @@ pub trait Event {
     /// #[derive(Event)]
     /// struct MyEvent {
     ///    #[indexed]
-    ///    my_topic: U256
+    ///    my_topic: u64
     ///    #[indexed]
-    ///    my_other_topic: U256,
+    ///    my_other_topic: String,
     /// }
     ///
-    /// let topics: Vec<H256> = MyTopics::Topics::default()
-    ///    .set_my_other_topic(&U256::from(42))
+    /// let topics: Vec<Vec<u8>> = MyTopics::Topics::default()
+    ///    .set_my_other_topic("hi".to_string())
     ///    .hash();
     /// // topics = vec![0, keccak256(abi_encode(my_other_topic))]
     /// ```
@@ -46,10 +43,10 @@ pub struct Context {
     pub sender: Option<Address>,
 
     #[doc(hidden)]
-    pub value: Option<U256>,
+    pub value: Option<u64>,
 
     #[doc(hidden)]
-    pub gas: Option<U256>,
+    pub gas: Option<u64>,
 
     #[doc(hidden)]
     pub call_type: CallType,
@@ -84,15 +81,15 @@ impl Context {
     }
 
     /// Amends a Context with the value that should be transferred to the callee.
-    pub fn with_value<V: Into<U256>>(mut self, value: V) -> Self {
-        self.value = Some(value.into());
+    pub fn with_value(mut self, value: u64) -> Self {
+        self.value = Some(value);
         self
     }
 
     /// Sets the amount of computation resources available to the callee.
     /// Payed for by the `payer` of the `Context`.
-    pub fn with_gas<V: Into<U256>>(mut self, gas: V) -> Self {
-        self.gas = Some(gas.into());
+    pub fn with_gas(mut self, gas: u64) -> Self {
+        self.gas = Some(gas);
         self
     }
 
@@ -108,12 +105,12 @@ impl Context {
     }
 
     /// Returns the value with which this `Context` was created.
-    pub fn value(&self) -> U256 {
+    pub fn value(&self) -> u64 {
         self.value.unwrap_or_else(ext::value)
     }
 
     /// Returns the remaining gas allocated to this transaction.
-    pub fn gas_left(&self) -> U256 {
+    pub fn gas_left(&self) -> u64 {
         ext::gas_left()
     }
 }

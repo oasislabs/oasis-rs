@@ -11,7 +11,7 @@ mod service {
             Ok(Self { b_addr })
         }
 
-        pub fn do_the_thing(&self, ctx: &Context) -> Result<U256> {
+        pub fn do_the_thing(&self, ctx: &Context) -> Result<u64> {
             let b_ctx = Context::default().with_value(ctx.value());
             xcc_b::ServiceB::at(self.b_addr).record_value(&b_ctx)
         }
@@ -31,7 +31,7 @@ mod tests {
         // 4. transfer `val - 1` to `ServiceB`
         // 5. transfer `1` to `ServiceB`
 
-        let val = U256::from(0x0A515);
+        let val = 0x0A515u64;
 
         let user = mantle_test::create_account(val);
         let ctx = Context::default().with_sender(user);

@@ -62,7 +62,7 @@ fn get_serde(
                         .collect();
                     (
                         parse_quote!(#struct_index): syn::Member,
-                        quote! { H256::from(#index as u32) },
+                        quote! { &#index.to_le_bytes() },
                     )
                 }
             };

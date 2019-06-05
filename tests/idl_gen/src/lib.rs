@@ -9,7 +9,7 @@ pub enum InnerTy {
     Field2,
 }
 
-pub type Tuple = (H256, U256, Address);
+pub type Tuple = (Address, u64, Address);
 
 #[derive(Serialize, Deserialize, Event, Default)]
 pub struct TestEvent {
@@ -57,7 +57,7 @@ mod service {
             unimplemented!()
         }
 
-        fn private(&self, ctx: &Context, arg: String) -> Result<U256> {
+        fn private(&self, ctx: &Context, arg: String) -> Result<u64> {
             TestEvent::default().emit();
             unimplemented!()
         }

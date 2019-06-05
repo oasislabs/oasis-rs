@@ -27,12 +27,10 @@ pub fn event_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         let setter_ident = format_ident!("set_{}", ident);
         let ty = &f.ty;
 
-        option_fields.push(quote! { #ident: Option<mantle::types::H256> });
+        option_fields.push(quote! { #ident: Option<[u8; 32]> });
         topic_setters.push(quote! {
             fn #setter_ident(&mut self, #ident: &#ty) -> &mut Self {
-                self.#ident = Some(mantle::types::H256::from_slice(
-                    &tiny_keccak::keccak256(&serde_cbor::to_vec(#ident).unwrap()
-                )));
+                self.#ident = Some(tiny_keccak::keccak256(&serde_cbor::to_vec(#ident).unwrap()));
                 self
             }
         });
@@ -55,7 +53,7 @@ pub fn event_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             impl #topics_struct_ident {
                 #(#topic_setters)*
 
-                pub fn hash(&mut self) -> Vec<mantle::types::H256> {
+                pub fn hash(&mut self) -> Vec<[u8; 32]> {
                     vec![ #(#topic_getters),* ]
                 }
             }

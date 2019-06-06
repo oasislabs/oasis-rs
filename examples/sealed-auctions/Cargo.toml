@@ -1,0 +1,18 @@
+[package]
+name = "auctions"
+version = "0.1.0"
+authors = ["Oasis Labs <feedback@oasislabs.com>"]
+edition = "2018"
+publish = false
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+chrono = "0.4.6"
+failure = "0.1"
+mantle = { git = "https://github.com/oasislabs/mantle" }
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+mantle-test = { git = "https://github.com/oasislabs/mantle" }

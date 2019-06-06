@@ -61,6 +61,10 @@ jobs:
           name: Test messaging example
           working_directory: examples/messaging
           command: cargo test --tests
+      - run:
+          name: Test auction example
+          working_directory: examples/sealed-auctions
+          command: cargo test --tests -- --test-threads 1
 
   test_idl:
     docker:

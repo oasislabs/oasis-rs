@@ -2,8 +2,10 @@
 extern crate serde;
 
 /// A 160-bit little-endian hash address type.
-#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
-pub struct Address([u8; 20]);
+#[derive(
+    Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Serialize, Deserialize,
+)]
+pub struct Address(pub [u8; 20]);
 
 impl Address {
     /// Creates an `Address` from a little-endian byte array.

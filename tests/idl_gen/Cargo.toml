@@ -5,22 +5,14 @@ authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
 publish = false
 
-[lib]
-crate-type = ["rlib", "cdylib"]
-
 [dependencies]
 mantle = { path = "../../mantle" }
 serde = { version = "1.0", features = ["derive"] }
 testlib = { path = "../testlib" }
 
 [dev-dependencies]
-mantle-test = { path = "../../mantle-test" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-[build-dependencies]
-mantle = { path = "../../mantle" }
-
 [features]
-deploy = []
-test = []
+mantle-build-test = []

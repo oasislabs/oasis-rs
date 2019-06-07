@@ -1,8 +1,0 @@
-error: `service!` must contain exactly one #[derive(Service)] struct. Additional occurrence here:
- --> $DIR/multi_service_derive.rs:7:5
-  |
-7 |     #[derive(Service)]
-  |     ^
-
-error: aborting due to previous error
-

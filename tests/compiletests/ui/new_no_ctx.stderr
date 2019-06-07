@@ -1,8 +1,0 @@
-error: `Counter::new` must take `&Context` as its first argument
- --> $DIR/new_no_ctx.rs:8:20
-  |
-8 |         pub fn new(ctx: Context) -> Result<Self> {
-  |                    ^^^
-
-error: aborting due to previous error
-

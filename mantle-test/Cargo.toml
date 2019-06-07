@@ -1,6 +1,6 @@
 [package]
 name = "mantle-test"
-version = "0.1.0"
+version = "0.2.0"
 license = "Apache-2.0"
 description = "A testing framework for Mantle executables."
 edition = "2018"
@@ -10,5 +10,5 @@ readme = "README.md"
 keywords = ["mantle", "test", "testing"]
 
 [dependencies]
-mantle = { version = "0.1", path = "../mantle" }
-mantle-macros = { version = "0.1", path = "../mantle-macros" }
+mantle = { version = "0.2", path = "../mantle" }
+mantle-macros = { version = "0.2", path = "../mantle-macros" }

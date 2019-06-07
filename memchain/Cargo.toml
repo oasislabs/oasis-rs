@@ -14,7 +14,7 @@ crate_type = ["rlib", "cdylib"]
 
 [dependencies]
 blockchain-traits = { version = "0.1", path = "../blockchain-traits" }
-mantle-types = { version = "0.1", path = "../mantle-types" }
+mantle-types = { version = "0.2", path = "../mantle-types" }
 
 [features]
 ffi = []

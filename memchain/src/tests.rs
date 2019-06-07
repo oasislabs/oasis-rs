@@ -2,6 +2,9 @@
 
 use crate::*;
 
+const ADDR_1: Address = Address([1u8; 20]);
+const ADDR_2: Address = Address([2u8; 20]);
+
 fn giga(num: u64) -> u64 {
     num * 1_000_000_000
 }
@@ -13,7 +16,7 @@ extern "C" fn nop_main(_bc: *const *mut dyn Blockchain<Address = Address>) -> u1
 extern "C" fn simple_main(bc: *const *mut dyn Blockchain<Address = Address>) -> u16 {
     let bc = unsafe { &mut **bc };
 
-    assert_eq!(bc.sender(), &Address::from(2));
+    assert_eq!(bc.sender(), &ADDR_2);
 
     bc.emit(vec![[42u8; 32]], vec![0u8; 3]);
 
@@ -34,7 +37,7 @@ extern "C" fn subtx_main(bc: *const *mut dyn Blockchain<Address = Address>) -> u
     let bc = unsafe { &mut **bc };
     bc.transact(
         Address::default(), /* caller */
-        Address::from(1),   /* callee */
+        ADDR_1,             /* callee */
         0,
         bc.fetch_input(),
         1_000_000,
@@ -63,7 +66,7 @@ fn create_bc<'bc>(
         .map(|(i, main)| {
             let i = i + 1;
             (
-                Address::from(i),
+                Address([i as u8; 20]),
                 Cow::Owned(Account {
                     balance: giga(i as u64),
                     code: format!("\0asm not wasm {}", i).into_bytes(),
@@ -92,25 +95,15 @@ fn create_bc<'bc>(
 #[test]
 fn transfer() {
     let mut bc = create_bc(vec![None, Some(nop_main)]);
-    assert_eq!(bc.metadata_at(&Address::from(1)).unwrap().balance, giga(1));
-    assert_eq!(bc.metadata_at(&Address::from(2)).unwrap().balance, giga(2));
+    assert_eq!(bc.metadata_at(&ADDR_1).unwrap().balance, giga(1));
+    assert_eq!(bc.metadata_at(&ADDR_2).unwrap().balance, giga(2));
     let value = 50;
-    bc.transact(
-        Address::from(1),
-        Address::from(2),
-        value,
-        Vec::new(),
-        BASE_GAS,
-        1,
-    );
+    bc.transact(ADDR_1, ADDR_2, value, Vec::new(), BASE_GAS, 1);
     assert_eq!(
-        bc.metadata_at(&Address::from(1)).unwrap().balance,
+        bc.metadata_at(&ADDR_1).unwrap().balance,
         giga(1) - BASE_GAS - value,
     );
-    assert_eq!(
-        bc.metadata_at(&Address::from(2)).unwrap().balance,
-        giga(2) + value,
-    );
+    assert_eq!(bc.metadata_at(&ADDR_2).unwrap().balance, giga(2) + value,);
 }
 
 #[test]
@@ -119,8 +112,8 @@ fn static_account() {
 
     bc.create_block(); // should take state from prev block
 
-    let addr1 = Address::from(1);
-    let addr2 = Address::from(2);
+    let addr1 = ADDR_1;
+    let addr2 = ADDR_2;
 
     assert_eq!(bc.metadata_at(&addr1).unwrap().balance, giga(1),);
 
@@ -128,7 +121,7 @@ fn static_account() {
 
     let code2 = "\0asm not wasm 2".as_bytes();
     assert_eq!(bc.code_at(&addr2).unwrap(), code2);
-    assert_eq!(bc.code_len(&addr2), code2.len() as u64);
+    assert_eq!(bc.code_len(&addr2), code2.len() as u32);
 
     let common_key = b"common_key".as_ref();
     assert_eq!(
@@ -143,7 +136,7 @@ fn static_account() {
     assert_eq!(bc.get(&addr1, b"key_1"), Ok(Some(b"value_1".as_ref())));
 
     assert_eq!(
-        bc.get(&Address::zero(), common_key),
+        bc.get(&Address::default(), common_key),
         Err(KVError::NoAccount)
     );
     assert!(bc.get(&addr1, &Vec::new()).unwrap().is_none());
@@ -152,46 +145,22 @@ fn static_account() {
 #[test]
 fn simple_tx() {
     let mut bc = create_bc(vec![Some(simple_main), None]);
-    bc.transact(
-        Address::from(2),
-        Address::from(1),
-        50,
-        vec![1, 2, 3],
-        BASE_GAS,
-        0,
-    );
+    bc.transact(ADDR_2, ADDR_1, 50, vec![1, 2, 3], BASE_GAS, 0);
     assert_eq!(bc.fetch_ret(), vec![1, 2, 3, 4]);
 }
 
 #[test]
 fn revert_tx() {
     let mut bc = create_bc(vec![None, Some(fail_main)]);
-    bc.transact(
-        Address::from(1),
-        Address::from(2),
-        10_000,
-        Vec::new(),
-        BASE_GAS,
-        1,
-    );
-    assert_eq!(
-        bc.metadata_at(&Address::from(1)).unwrap().balance,
-        giga(1) - BASE_GAS,
-    );
-    assert_eq!(bc.metadata_at(&Address::from(2)).unwrap().balance, giga(2),);
+    bc.transact(ADDR_1, ADDR_2, 10_000, Vec::new(), BASE_GAS, 1);
+    assert_eq!(bc.metadata_at(&ADDR_1).unwrap().balance, giga(1) - BASE_GAS,);
+    assert_eq!(bc.metadata_at(&ADDR_2).unwrap().balance, giga(2),);
 }
 
 #[test]
 fn subtx_ok() {
     let mut bc = create_bc(vec![Some(simple_main), Some(subtx_main)]);
-    bc.transact(
-        Address::from(1),
-        Address::from(2),
-        1000,
-        vec![1, 2, 3],
-        BASE_GAS,
-        0,
-    );
+    bc.transact(ADDR_1, ADDR_2, 1000, vec![1, 2, 3], BASE_GAS, 0);
 
     assert_eq!(bc.fetch_ret(), vec![1, 2, 3, 4, 5]);
 
@@ -201,7 +170,7 @@ fn subtx_ok() {
     assert_eq!(logs[0].data, vec![0u8; 3]);
 
     assert_eq!(
-        bc.get(&Address::from(2), b"common_key"),
+        bc.get(&ADDR_2, b"common_key"),
         Ok(Some(b"uncommon_value".as_ref()))
     );
 }
@@ -209,18 +178,11 @@ fn subtx_ok() {
 #[test]
 fn subtx_revert() {
     let mut bc = create_bc(vec![Some(fail_main), Some(subtx_main)]);
-    bc.transact(
-        Address::from(1),
-        Address::from(2),
-        0,
-        vec![1, 2, 3],
-        BASE_GAS,
-        0,
-    );
+    bc.transact(ADDR_1, ADDR_2, 0, vec![1, 2, 3], BASE_GAS, 0);
     assert_eq!(bc.fetch_ret(), vec![]);
     assert!(bc.last_block().logs().is_empty());
     assert_eq!(
-        bc.get(&Address::from(2), b"common_key"),
+        bc.get(&ADDR_2, b"common_key"),
         Ok(Some(b"common_value".as_ref()))
     );
 }

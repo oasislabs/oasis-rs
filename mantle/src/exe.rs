@@ -1,4 +1,4 @@
-use crate::{ext, types::Address};
+use mantle_types::Address;
 
 /// A type that can be stored in blockchain storage.
 pub trait Storage = serde::Serialize + serde::de::DeserializeOwned;
@@ -87,7 +87,7 @@ impl Context {
     }
 
     /// Sets the amount of computation resources available to the callee.
-    /// Payed for by the `payer` of the `Context`.
+    /// Has no effect when called inside of a service.
     pub fn with_gas(mut self, gas: u64) -> Self {
         self.gas = Some(gas);
         self
@@ -95,22 +95,17 @@ impl Context {
 
     /// Returns the `Address` of the sender of the current RPC.
     pub fn sender(&self) -> Address {
-        self.sender.unwrap_or_else(ext::sender)
+        self.sender.unwrap_or_else(|| crate::ext::sender())
     }
 
     /// Returns the `Address` of the currently executing service.
-    /// Panics if not currently in a service.
+    /// Panics if not called from within a service RPC.
     pub fn address(&self) -> Address {
-        ext::address()
+        crate::ext::address()
     }
 
     /// Returns the value with which this `Context` was created.
     pub fn value(&self) -> u64 {
-        self.value.unwrap_or_else(ext::value)
-    }
-
-    /// Returns the remaining gas allocated to this transaction.
-    pub fn gas_left(&self) -> u64 {
-        ext::gas_left()
+        self.value.unwrap_or_else(crate::ext::value)
     }
 }

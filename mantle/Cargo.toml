@@ -1,6 +1,6 @@
 [package]
 name = "mantle"
-version = "0.1.0"
+version = "0.2.0"
 license = "Apache-2.0"
 description = "A humane programming model for blockchain."
 edition = "2018"
@@ -11,8 +11,8 @@ keywords = ["mantle"]
 
 [dependencies]
 failure = "0.1"
-mantle-macros = { version = "0.1", path = "../mantle-macros" }
-mantle-types = { version = "0.1", path = "../mantle-types" }
+mantle-macros = { version = "0.2", path = "../mantle-macros" }
+mantle-types = { version = "0.2", path = "../mantle-types" }
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.9"
 tiny-keccak = "1.4"

@@ -5,6 +5,7 @@ extern crate serde;
 #[derive(
     Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Serialize, Deserialize,
 )]
+#[repr(C)]
 pub struct Address(pub [u8; 20]);
 
 impl Address {

@@ -43,7 +43,7 @@ pub fn generate(
                         .map(|output| {{
                             mantle::reexports::serde_cbor::to_vec(&output).unwrap()
                         }})
-                        .map_err(|err| err.to_string())
+                        .map_err(|err| format!("{{:?}}", err))
                 }}"#,
                 name = name,
                 arg_names = arg_names,
@@ -53,8 +53,9 @@ pub fn generate(
 
     let rpc_dispatcher = parse!(format!(r#"{{
             use std::io::{{Read as _, Write as _}};
+            use mantle::Service as _;
 
-            #[derive(serde::Serialize, serde::Deserialize)]
+            #[derive(Serialize, Deserialize)]
             #[serde(tag = "method", content = "payload")]
             #[allow(non_camel_case_types)]
             enum RpcPayload {{
@@ -64,19 +65,13 @@ pub fn generate(
             let ctx = mantle::Context::default(); // TODO(#33)
             let mut service = <{service_ident}>::coalesce();
             let payload: RpcPayload =
-                mantle::reexports::serde_cbor::from_reader(std::io::stdin()).unwrap();
-            let result = match payload {{
-                {call_tree}
+                mantle::reexports::serde_cbor::from_slice(&mantle::ext::input()).unwrap();
+            let output = match payload {{
+                {call_tree} // match arms return ABI-encoded vecs
             }};
-            match result {{
-                Ok(output) => {{
-                    std::io::stdout().write_all(&output).unwrap();
-                    <{service_ident}>::sunder(service);
-                }}
-                Err(message) => {{
-                    std::io::stderr().write_all(&message.as_bytes());
-                    std::process::exit(1); // signal an error
-                }}
+            match output {{
+                Ok(output) => mantle::ext::ret(output),
+                Err(err) => mantle::ext::err(format!("{{:#?}}", err).into_bytes()),
             }}
         }}"#,
         rpc_payload_variants = rpc_payload_variants,
@@ -93,7 +88,7 @@ pub fn generate(
     let ctor_payload_unpack = if ctor.decl.inputs.len() > 1 {
         format!(
             "let CtorPayload {{ {} }} =
-                    mantle::reexports::serde_cbor::from_reader(std::io::stdin()).unwrap();",
+                    mantle::reexports::serde_cbor::from_slice(&mantle::ext::input()).unwrap();",
             ctor_arg_names
         )
     } else {
@@ -101,10 +96,10 @@ pub fn generate(
     };
     let ctor_fn = parse!(format!(r#"
             #[no_mangle]
-            extern "C" fn _mantle_deploy() {{
-                use std::io::{{Read as _, Write as _}};
+            extern "C" fn _mantle_deploy() -> u8 {{
+                use mantle::Service as _;
 
-                #[derive(serde::Serialize, serde::Deserialize)]
+                #[derive(Serialize, Deserialize)]
                 #[allow(non_camel_case_types)]
                 struct CtorPayload {{
                     {ctor_payload_types}
@@ -115,11 +110,12 @@ pub fn generate(
                 let mut service = match <{service_ident}>::new(&ctx, {ctor_arg_names}) {{
                     Ok(service) => service,
                     Err(err) => {{
-                        std::io::stdout().write_all(err.to_string().as_bytes()).unwrap();
-                        std::process::exit(1);
+                        mantle::ext::err(format!("{{:#?}}", err).into_bytes());
+                        return 1;
                     }}
                 }};
                 <{service_ident}>::sunder(service);
+                return 0;
             }}
         "#,
         ctor_payload_unpack = ctor_payload_unpack,

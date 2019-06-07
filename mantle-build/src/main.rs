@@ -66,13 +66,18 @@ fn main() {
         let crate_name = arg_value(&args, "--crate-name", |name| {
             gen_crate_names.contains(&name)
         });
-        let is_bin = arg_value(&args, "--crate-type", |ty| ty == "bin");
-        let do_gen = idl_out_dir.is_some() && crate_name.is_some() && is_bin.is_some();
+        let is_bin = arg_value(&args, "--crate-type", |ty| ty == "bin").is_some();
+        let is_testing =
+            arg_value(&args, "--cfg", |ty| ty == "feature=\"mantle-compiletest\"").is_some();
+        let do_gen = idl_out_dir.is_some() && crate_name.is_some() && is_bin;
 
         let mut idl8r = mantle_build::BuildPlugin::new();
         let mut default = rustc_driver::DefaultCallbacks;
-        let callbacks: &mut (dyn rustc_driver::Callbacks + Send) =
-            if do_gen { &mut idl8r } else { &mut default };
+        let callbacks: &mut (dyn rustc_driver::Callbacks + Send) = if do_gen || is_testing {
+            &mut idl8r
+        } else {
+            &mut default
+        };
         rustc_driver::run_compiler(&args, callbacks, None, None)?;
 
         if do_gen {

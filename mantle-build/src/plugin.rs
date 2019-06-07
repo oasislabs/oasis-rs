@@ -30,8 +30,8 @@ pub struct BuildPlugin {
     deps: Once<BTreeMap<String, LockfileEntry>>,
 }
 
-impl BuildPlugin {
-    pub fn new() -> Self {
+impl Default for BuildPlugin {
+    fn default() -> Self {
         Self {
             service_name: Once::new(),
             event_indexed_fields: Default::default(),
@@ -39,7 +39,9 @@ impl BuildPlugin {
             deps: Once::new(),
         }
     }
+}
 
+impl BuildPlugin {
     /// Returns the generated interface.
     /// Only valid after rustc callback has been executed. Panics if called before.
     pub fn try_get(&self) -> Option<&rpc::Interface> {
@@ -85,6 +87,20 @@ impl BuildPlugin {
 
 impl rustc_driver::Callbacks for BuildPlugin {
     fn after_parsing(&mut self, compiler: &rustc_interface::interface::Compiler) -> bool {
+        let gen_dir = compiler
+            .output_dir()
+            .as_ref()
+            .expect("Could not determine output dir")
+            .join("mantle_generated");
+        std::fs::create_dir_all(&gen_dir)
+            .unwrap_or_else(|_| panic!("Could not create dir: `{}`", gen_dir.display()));
+
+        let crate_name_query = compiler
+            .crate_name()
+            .expect("Could not determine crate name");
+        let crate_name = crate_name_query.take();
+        crate_name_query.give(crate_name.clone());
+
         let sess = compiler.session();
         let mut parse = compiler
             .parse()
@@ -124,7 +140,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
             }
         };
         let (ctor, rpcs): (Vec<_>, Vec<_>) = rpcs
-            .iter()
+            .into_iter()
             .partition(|(name, _)| *name == syntax_pos::symbol::Symbol::intern("new"));
         let ctor_sig = match ctor.as_slice() {
             [] => {
@@ -138,9 +154,14 @@ impl rustc_driver::Callbacks for BuildPlugin {
             _ => return true, // Multiply defined `new` function. Let the compiler catch this.
         };
 
-        let dispatchers = crate::dispatcher_gen::generate(service_name, ctor_sig, rpcs);
-        parse.module.items.push(dispatchers.ctor_fn);
-        crate::dispatcher_gen::insert_rpc_dispatcher(&mut parse, dispatchers.rpc_dispatcher);
+        crate::dispatcher_gen::generate_and_insert(
+            &mut parse,
+            &gen_dir,
+            &crate_name,
+            service_name,
+            ctor_sig,
+            rpcs,
+        );
 
         true
     }

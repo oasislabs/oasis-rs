@@ -84,14 +84,14 @@ impl<'ast> syntax::visit::Visitor<'ast> for ServiceDefFinder {
     }
 }
 
-pub struct ParsedRpcCollector<'ast> {
+pub struct ParsedRpcCollector {
     service_name: Symbol,
-    rpcs: Vec<(Symbol, &'ast syntax::ast::MethodSig)>,
+    rpcs: Vec<(Symbol, syntax::ast::MethodSig)>,
     errors: Vec<RpcError>,
     impl_span: Span,
 }
 
-impl<'ast> ParsedRpcCollector<'ast> {
+impl ParsedRpcCollector {
     pub fn new(service_name: Symbol) -> Self {
         Self {
             service_name,
@@ -104,7 +104,7 @@ impl<'ast> ParsedRpcCollector<'ast> {
         self.impl_span
     }
 
-    pub fn into_rpcs(self) -> Result<Vec<(Symbol, &'ast syntax::ast::MethodSig)>, Vec<RpcError>> {
+    pub fn into_rpcs(self) -> Result<Vec<(Symbol, syntax::ast::MethodSig)>, Vec<RpcError>> {
         if self.errors.is_empty() {
             Ok(self.rpcs)
         } else {
@@ -156,7 +156,7 @@ impl<'ast> ParsedRpcCollector<'ast> {
     }
 }
 
-impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector<'ast> {
+impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector {
     fn visit_item(&mut self, item: &'ast syntax::ast::Item) {
         match &item.node {
             syntax::ast::ItemKind::Impl(_, _, _, _, None, service_ty, impl_items)
@@ -279,7 +279,7 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector<'ast> {
                     }
 
                     if errors.is_empty() {
-                        self.rpcs.push((impl_item.ident.name, msig));
+                        self.rpcs.push((impl_item.ident.name, msig.clone()));
                     } else {
                         self.errors.append(&mut errors);
                     }

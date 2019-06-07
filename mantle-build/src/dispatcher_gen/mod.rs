@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use syntax::{
     ast::{Arg, Block, Crate, Item, ItemKind, MethodSig, StmtKind},
     print::pprust,
@@ -7,16 +9,32 @@ use syntax_pos::symbol::Symbol;
 
 use crate::parse;
 
-pub struct Dispatchers {
-    pub ctor_fn: P<Item>,
-    pub rpc_dispatcher: P<Block>,
-}
-
-pub fn generate(
+pub fn generate_and_insert(
+    krate: &mut Crate,
+    out_dir: &Path,
+    crate_name: &str,
     service_name: Symbol,
     ctor: &MethodSig,
-    rpcs: Vec<(Symbol, &MethodSig)>,
-) -> Dispatchers {
+    rpcs: Vec<(Symbol, MethodSig)>,
+) {
+    let rpcs_dispatcher = generate_rpc_dispatcher(service_name, &rpcs);
+    let rpcs_include_file = out_dir.join(format!("{}_dispatcher.rs", crate_name));
+    std::fs::write(
+        &rpcs_include_file,
+        pprust::block_to_string(&rpcs_dispatcher),
+    )
+    .unwrap();
+    insert_rpc_dispatcher_stub(krate, &rpcs_include_file);
+
+    let ctor_fn = generate_ctor_fn(service_name, &ctor);
+    let ctor_include_file = out_dir.join(format!("{}_ctor.rs", crate_name));
+    std::fs::write(&ctor_include_file, pprust::item_to_string(&ctor_fn)).unwrap();
+    krate.module.items.push(
+        parse!(format!("include!(\"{}\");", ctor_include_file.display()) => parse_item).unwrap(),
+    );
+}
+
+fn generate_rpc_dispatcher(service_name: Symbol, rpcs: &[(Symbol, MethodSig)]) -> P<Block> {
     let rpc_payload_variants = rpcs // e.g., `fn_name { input1: String, input2: Option<u64> }`
         .iter()
         .map(|(name, sig)| {
@@ -51,8 +69,7 @@ pub fn generate(
         })
         .collect::<String>();
 
-    let rpc_dispatcher = parse!(format!(r#"{{
-            use std::io::{{Read as _, Write as _}};
+    parse!(format!(r#"{{
             use mantle::Service as _;
 
             #[derive(Serialize, Deserialize)]
@@ -77,8 +94,10 @@ pub fn generate(
         rpc_payload_variants = rpc_payload_variants,
         service_ident = service_name.as_str().get(),
         call_tree = rpc_match_arms,
-    ) => parse_block);
+    ) => parse_block)
+}
 
+fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
     let ctor_arg_names = ctor.decl.inputs[1..]
         .iter()
         .map(|arg| pprust::pat_to_string(&arg.pat))
@@ -94,7 +113,7 @@ pub fn generate(
     } else {
         String::new()
     };
-    let ctor_fn = parse!(format!(r#"
+    parse!(format!(r#"
             #[no_mangle]
             extern "C" fn _mantle_deploy() -> u8 {{
                 use mantle::Service as _;
@@ -104,7 +123,6 @@ pub fn generate(
                 struct CtorPayload {{
                     {ctor_payload_types}
                 }}
-
                 let ctx = mantle::Context::default(); // TODO(#33)
                 {ctor_payload_unpack}
                 let mut service = match <{service_ident}>::new(&ctx, {ctor_arg_names}) {{
@@ -122,13 +140,8 @@ pub fn generate(
         ctor_arg_names = ctor_arg_names,
         ctor_payload_types = structify_args(&ctor.decl.inputs[1..]).join(", "),
         service_ident = service_name.as_str().get(),
-        ) => parse_item)
-    .unwrap();
-
-    Dispatchers {
-        ctor_fn,
-        rpc_dispatcher,
-    }
+    ) => parse_item)
+    .unwrap()
 }
 
 fn structify_args(args: &[Arg]) -> Vec<String> {
@@ -143,7 +156,7 @@ fn structify_args(args: &[Arg]) -> Vec<String> {
         .collect()
 }
 
-pub fn insert_rpc_dispatcher(krate: &mut Crate, rpc_dispatcher: P<Block>) {
+fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
     for item in krate.module.items.iter_mut() {
         if item.ident.name != Symbol::intern("main") {
             continue;
@@ -165,7 +178,7 @@ pub fn insert_rpc_dispatcher(krate: &mut Crate, rpc_dispatcher: P<Block>) {
             .unwrap();
         main_fn_block.stmts.splice(
             mantle_macro_idx..=mantle_macro_idx,
-            rpc_dispatcher.into_inner().stmts,
+            parse!(format!("include!(\"{}\");", include_file.display()) => parse_stmt),
         );
         break;
     }

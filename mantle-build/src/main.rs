@@ -71,7 +71,7 @@ fn main() {
             arg_value(&args, "--cfg", |ty| ty == "feature=\"mantle-compiletest\"").is_some();
         let do_gen = idl_out_dir.is_some() && crate_name.is_some() && is_bin;
 
-        let mut idl8r = mantle_build::BuildPlugin::new();
+        let mut idl8r = mantle_build::BuildPlugin::default();
         let mut default = rustc_driver::DefaultCallbacks;
         let callbacks: &mut (dyn rustc_driver::Callbacks + Send) = if do_gen || is_testing {
             &mut idl8r

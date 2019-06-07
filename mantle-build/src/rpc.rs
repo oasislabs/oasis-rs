@@ -272,7 +272,7 @@ macro_rules! convert_def {
                 // this branch includes `sync`, among other things
                 return Err(UnsupportedTypeError::NotReprC(
                     format!("{}::{}", crate_name, def_path_comps.join("::")),
-                    $tcx.def_span($did),
+                    $tcx.def_span($did).into(),
                 ));
             }
         } else {
@@ -339,7 +339,7 @@ impl Type {
                         _ => {
                             return Err(UnsupportedTypeError::NotReprC(
                                 format!("{:?}", path),
-                                path.span,
+                                path.span.into(),
                             ))
                         }
                     },
@@ -354,12 +354,17 @@ impl Type {
                     _ => {
                         return Err(UnsupportedTypeError::NotReprC(
                             format!("{:?}", path),
-                            path.span,
+                            path.span.into(),
                         ))
                     }
                 }
             }
-            _ => return Err(UnsupportedTypeError::NotReprC(format!("{:?}", ty), ty.span)),
+            _ => {
+                return Err(UnsupportedTypeError::NotReprC(
+                    format!("{:?}", ty),
+                    ty.span.into(),
+                ))
+            }
         })
     }
 
@@ -402,7 +407,7 @@ impl Type {
             _ => {
                 return Err(UnsupportedTypeError::NotReprC(
                     ty.to_string(),
-                    tcx.def_span(did),
+                    tcx.def_span(did).into(),
                 ))
             }
         })
@@ -419,7 +424,7 @@ impl Type {
             IntTy::I32 => Type::I32,
             IntTy::I64 => Type::I64,
             IntTy::I128 | IntTy::Isize => {
-                return Err(UnsupportedTypeError::NotReprC(ty.to_string(), span))
+                return Err(UnsupportedTypeError::NotReprC(ty.to_string(), span.into()))
             }
         })
     }
@@ -435,7 +440,7 @@ impl Type {
             UintTy::U32 => Type::U32,
             UintTy::U64 => Type::U64,
             UintTy::U128 | UintTy::Usize => {
-                return Err(UnsupportedTypeError::NotReprC(ty.to_string(), span))
+                return Err(UnsupportedTypeError::NotReprC(ty.to_string(), span.into()))
             }
         })
     }
@@ -474,7 +479,9 @@ impl TypeDef {
         if def.is_enum() {
             if !def.is_payloadfree() {
                 // TODO: convert Rust struct enum to tagged union
-                return Err(UnsupportedTypeError::ComplexEnum(tcx.def_span(def.did)));
+                return Err(UnsupportedTypeError::ComplexEnum(
+                    tcx.def_span(def.did).into(),
+                ));
             }
             Ok(TypeDef::Enum {
                 name: ty_name,
@@ -506,7 +513,7 @@ impl TypeDef {
             // TODO? serde doesn't derive unions. not sure if un-tagged unions are actually useful.
             Err(UnsupportedTypeError::NotReprC(
                 def.descr().to_string(),
-                tcx.def_span(def.did),
+                tcx.def_span(def.did).into(),
             ))
         } else {
             unreachable!("AdtDef must be struct, enum, or union");

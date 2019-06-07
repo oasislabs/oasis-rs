@@ -1,12 +1,12 @@
-use syntax_pos::Span;
+use syntax_pos::{MultiSpan, Span};
 
 type TypeStr = String;
 
 #[derive(Debug)]
 pub enum UnsupportedTypeError {
-    NotReprC(TypeStr, Span),
-    ComplexEnum(Span),
-    Unimplemented(TypeStr, Span),
+    NotReprC(TypeStr, MultiSpan),
+    ComplexEnum(MultiSpan),
+    Unimplemented(TypeStr, MultiSpan),
 }
 
 impl std::fmt::Display for UnsupportedTypeError {
@@ -21,10 +21,19 @@ impl std::fmt::Display for UnsupportedTypeError {
 }
 
 impl UnsupportedTypeError {
-    pub fn span(&self) -> Span {
+    pub fn span(&self) -> MultiSpan {
+        use UnsupportedTypeError::*;
+        match &self {
+            NotReprC(_, span) | ComplexEnum(span) | Unimplemented(_, span) => span.clone(),
+        }
+    }
+
+    pub fn span_mut(&mut self) -> &mut MultiSpan {
         use UnsupportedTypeError::*;
         match self {
-            NotReprC(_, span) | ComplexEnum(span) | Unimplemented(_, span) => *span,
+            NotReprC(_, ref mut span)
+            | ComplexEnum(ref mut span)
+            | Unimplemented(_, ref mut span) => span,
         }
     }
 }

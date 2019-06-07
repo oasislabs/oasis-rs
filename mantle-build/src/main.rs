@@ -57,7 +57,6 @@ fn main() {
         args.push("--sysroot".to_string());
         args.push(sys_root);
 
-        let idl_out_dir = std::env::var_os("IDL_TARGET_DIR");
         let gen_crate_names_env = std::env::var("GEN_IDL_FOR");
         let gen_crate_names = gen_crate_names_env
             .as_ref()
@@ -68,34 +67,45 @@ fn main() {
         });
         let is_bin = arg_value(&args, "--crate-type", |ty| ty == "bin").is_some();
         let is_testing =
-            arg_value(&args, "--cfg", |ty| ty == "feature=\"mantle-compiletest\"").is_some();
-        let do_gen = idl_out_dir.is_some() && crate_name.is_some() && is_bin;
+            arg_value(&args, "--cfg", |ty| ty == "feature=\"mantle-build-test\"").is_some();
+        let do_gen = (crate_name.is_some() || is_testing) && is_bin;
 
         let mut idl8r = mantle_build::BuildPlugin::default();
         let mut default = rustc_driver::DefaultCallbacks;
-        let callbacks: &mut (dyn rustc_driver::Callbacks + Send) = if do_gen || is_testing {
-            &mut idl8r
-        } else {
-            &mut default
-        };
+        let callbacks: &mut (dyn rustc_driver::Callbacks + Send) =
+            if do_gen { &mut idl8r } else { &mut default };
         rustc_driver::run_compiler(&args, callbacks, None, None)?;
 
-        if do_gen {
-            let rpc_iface = match idl8r.try_get() {
-                Some(rpc_iface) => rpc_iface,
-                None => {
-                    eprintln!(
-                        "    {} No service defined in crate: `{}`",
-                        "warning:".yellow(),
-                        crate_name.unwrap()
-                    );
-                    return Err(rustc::util::common::ErrorReported);
-                }
-            };
-            let mut idl_path = std::path::PathBuf::from(idl_out_dir.unwrap());
-            idl_path.push(format!("{}.json", rpc_iface.service_name()));
-            std::fs::write(idl_path, serde_json::to_string_pretty(rpc_iface).unwrap()).unwrap()
+        if !do_gen {
+            return Ok(());
         }
+
+        let mut out_dir = std::path::PathBuf::from(match arg_value(&args, "--out-dir", |_| true) {
+            Some(out_dir) => out_dir,
+            None => return Ok(()),
+        });
+
+        out_dir.pop(); // remove the `/deps`
+        out_dir.pop(); // remove the `/<opt_level>`
+        out_dir.pop(); // remove the `/<target>``
+        out_dir.push("service"); // should look like `.../target/service`
+
+        std::fs::create_dir_all(&out_dir).expect("Could not create service dir");
+
+        let rpc_iface = match idl8r.try_get() {
+            Some(rpc_iface) => rpc_iface,
+            None => {
+                eprintln!(
+                    "    {} No service defined in crate: `{}`",
+                    "warning:".yellow(),
+                    crate_name.unwrap()
+                );
+                return Err(rustc::util::common::ErrorReported);
+            }
+        };
+        let idl_path = out_dir.join(format!("{}.json", rpc_iface.service_name()));
+        std::fs::write(idl_path, serde_json::to_string_pretty(rpc_iface).unwrap()).unwrap();
+
         Ok(())
     });
 

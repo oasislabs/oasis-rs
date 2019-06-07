@@ -7,12 +7,12 @@ pub mod exe;
 pub mod ext;
 
 pub mod reexports {
-    pub use serde;
     pub use serde_cbor;
     pub use tiny_keccak;
 }
 
 pub use mantle_macros::{Event, Service};
+pub use mantle_types::Address;
 
 pub use crate::exe::*;
 
@@ -36,7 +36,7 @@ pub trait AddressExt {
     fn balance(&self) -> u64;
 }
 
-impl AddressExt for mantle_types::Address {
+impl AddressExt for Address {
     fn transfer<'a>(&self, value: u64) -> Result<(), crate::error::Error> {
         crate::ext::transfer(self, value)
     }

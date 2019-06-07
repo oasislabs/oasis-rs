@@ -100,10 +100,10 @@ fn get_type_serde(
             quote! {
                 mantle::ext::write(
                     &#key,
-                    &serde_cbor::to_vec(&service.#struct_idx).unwrap()
-                ).unwrap()
+                    serde_cbor::to_vec(&service.#struct_idx).unwrap()
+                )
             },
-            quote! { serde_cbor::from_slice(&mantle::ext::read(&#key).unwrap()).unwrap() },
+            quote! { serde_cbor::from_slice(&mantle::ext::read(&#key)).unwrap() },
         ),
         ty => {
             err!(ty: "Service field must be a POD type.");

@@ -34,7 +34,7 @@ pub fn event_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 self
             }
         });
-        topic_getters.push(quote! { self.#ident.unwrap_or_default() });
+        topic_getters.push(quote! { self.#ident.map(|t| t.to_vec()).unwrap_or_default() });
         topic_assigners.push(quote! { .#setter_ident(&self.#ident) });
     }
 
@@ -53,7 +53,7 @@ pub fn event_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
             impl #topics_struct_ident {
                 #(#topic_setters)*
 
-                pub fn hash(&mut self) -> Vec<[u8; 32]> {
+                pub fn to_key(&self) -> Vec<Vec<u8>> {
                     vec![ #(#topic_getters),* ]
                 }
             }
@@ -62,13 +62,13 @@ pub fn event_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
                 type Topics = #topics_struct_ident;
 
                 fn emit(&self) {
-                    let indexed_topics = Self::Topics::default()
+                    let mut indexed_topics = Self::Topics::default()
                         #(#topic_assigners)*
-                        .hash();
-                    let topics = std::iter::once(#event_name_topic)
-                        .chain(indexed_topics.into_iter())
-                        .collect::<Vec<_>>();
-                    mantle::ext::log(&topics, &serde_cbor::to_vec(self).unwrap());
+                        .to_key();
+                    let mut topics = Vec::with_capacity(indexed_topics.len());
+                    topics.push(vec!#event_name_topic);
+                    topics.append(&mut indexed_topics);
+                    mantle::ext::emit(topics, serde_cbor::to_vec(self).unwrap());
                 }
             }
         }

@@ -14,7 +14,7 @@ fn keccak_key(ident: &syn::Ident) -> proc_macro2::TokenStream {
         tiny_keccak::keccak256(ident.to_string().as_bytes())
     ))
     .unwrap();
-    quote! { &#key }
+    quote! { #key }
 }
 
 macro_rules! format_ident {

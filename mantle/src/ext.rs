@@ -46,6 +46,18 @@ mod ext {
         pub fn address(addr: *mut Address) -> StatusCode;
         pub fn sender(addr: *mut Address) -> StatusCode;
         pub fn value(value: *mut u64) -> StatusCode;
+
+        pub fn read(key: *const u8, key_len: u32, value: *mut u8) -> StatusCode;
+        pub fn read_len(key: *const u8, key_len: u32, value_len: *mut u32) -> StatusCode;
+        pub fn write(key: *const u8, key_len: u32, value: *const u8, value_len: u32) -> StatusCode;
+
+        pub fn emit(
+            topics: *const *const u8,
+            topic_lens: *const u32,
+            num_topics: u32,
+            data: *const u8,
+            data_len: u32,
+        ) -> StatusCode;
     }
 }
 
@@ -111,7 +123,7 @@ pub fn transact(callee: &Address, value: u64, input: Vec<u8>) -> Result<Vec<u8>,
     ))?;
 
     let mut ret_len = 0u32;
-    unsafe { ext::ret_len(&mut ret_len as *mut _) };
+    ext!(ret_len(&mut ret_len as *mut _))?;
 
     let mut ret = Vec::with_capacity(ret_len as usize);
     unsafe { ret.set_len(ret_len as usize) };
@@ -125,7 +137,7 @@ pub fn transfer(to: &Address, value: u64) -> Result<(), Error> {
 
 pub fn fetch_input() -> Vec<u8> {
     let mut input_len = 0u32;
-    unsafe { ext::input_len(&mut input_len as *mut _) };
+    ext!(input_len(&mut input_len as *mut _)).unwrap();
 
     let mut input = Vec::with_capacity(input_len as usize);
     unsafe { input.set_len(input_len as usize) };
@@ -139,7 +151,7 @@ pub fn fetch_ret() -> Vec<u8> {
     unsafe { ext::ret_len(&mut ret_len as *mut _) };
 
     let mut ret = Vec::with_capacity(ret_len as usize);
-    unsafe { ret.set_len(ret_len as usize) };
+    ext!(ret_len(&mut ret_len as *mut _)).unwrap();
 
     ext!(fetch_ret(ret.as_mut_ptr())).unwrap();
     ret
@@ -147,7 +159,7 @@ pub fn fetch_ret() -> Vec<u8> {
 
 pub fn fetch_err() -> Vec<u8> {
     let mut err_len = 0u32;
-    unsafe { ext::err_len(&mut err_len as *mut _) };
+    ext!(err_len(&mut err_len as *mut _)).unwrap();
 
     let mut err = Vec::with_capacity(err_len as usize);
     unsafe { err.set_len(err_len as usize) };
@@ -162,4 +174,43 @@ pub fn ret(ret: Vec<u8>) {
 
 pub fn err(err: Vec<u8>) {
     ext!(err(err.as_ptr(), err.len() as u32)).unwrap();
+}
+
+pub fn read(key: &[u8]) -> Vec<u8> {
+    let mut val_len = 0u32;
+    ext!(read_len(
+        key.as_ptr(),
+        key.len() as u32,
+        &mut val_len as *mut _
+    ))
+    .unwrap();
+
+    let mut val = Vec::with_capacity(val_len as usize);
+    unsafe { val.set_len(val_len as usize) };
+
+    ext!(read(key.as_ptr(), key.len() as u32, val.as_mut_ptr())).unwrap();
+    val
+}
+
+pub fn write(key: &[u8], value: Vec<u8>) {
+    ext!(write(
+        key.as_ptr(),
+        key.len() as u32,
+        value.as_ptr(),
+        value.len() as u32
+    ))
+    .unwrap();
+}
+
+pub fn emit(topics: Vec<Vec<u8>>, data: Vec<u8>) {
+    let topic_ptrs: Vec<*const u8> = topics.iter().map(|t| t.as_ptr()).collect();
+    let topic_lens: Vec<u32> = topics.iter().map(|t| t.len() as u32).collect();
+    ext!(emit(
+        topic_ptrs.as_ptr(),
+        topic_lens.as_ptr(),
+        topics.len() as u32,
+        data.as_ptr(),
+        data.len() as u32
+    ))
+    .unwrap();
 }

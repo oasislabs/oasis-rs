@@ -88,7 +88,7 @@ pub struct ParsedRpcCollector {
     service_name: Symbol,
     rpcs: Vec<(Symbol, syntax::ast::MethodSig)>,
     errors: Vec<RpcError>,
-    impl_span: Span,
+    struct_span: Span,
 }
 
 impl ParsedRpcCollector {
@@ -97,11 +97,12 @@ impl ParsedRpcCollector {
             service_name,
             rpcs: Vec::new(),
             errors: Vec::new(),
-            impl_span: Default::default(),
+            struct_span: Default::default(),
         }
     }
-    pub fn impl_span(&self) -> Span {
-        self.impl_span
+
+    pub fn struct_span(&self) -> Span {
+        self.struct_span
     }
 
     pub fn into_rpcs(self) -> Result<Vec<(Symbol, syntax::ast::MethodSig)>, Vec<RpcError>> {
@@ -159,15 +160,19 @@ impl ParsedRpcCollector {
 impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector {
     fn visit_item(&mut self, item: &'ast syntax::ast::Item) {
         match &item.node {
+            syntax::ast::ItemKind::Struct(_, generics) if item.ident.name == self.service_name => {
+                if !generics.params.is_empty() {
+                    self.errors.push(RpcError::HasGenerics(generics.span))
+                }
+
+                self.struct_span = item.span;
+            }
             syntax::ast::ItemKind::Impl(_, _, _, _, None, service_ty, impl_items)
                 if match &service_ty.node {
                     syntax::ast::TyKind::Path(_, p) => *p == self.service_name,
                     _ => false,
                 } =>
             {
-                if self.impl_span == Default::default() {
-                    self.impl_span = item.span;
-                }
                 for impl_item in impl_items {
                     let mut errors = Vec::new();
 
@@ -175,14 +180,10 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector {
 
                     match impl_item.vis.node {
                         syntax::ast::VisibilityKind::Public => (),
-                        _ => {
-                            if is_ctor {
-                                errors.push(RpcError::CtorVis(impl_item.vis.span));
-                            } else {
-                                continue;
-                            }
-                        }
+                        _ if is_ctor => (),
+                        _ => continue,
                     }
+
                     let msig = match &impl_item.node {
                         syntax::ast::ImplItemKind::Method(msig, _) => msig,
                         _ => continue,
@@ -193,6 +194,10 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector {
 
                     if let syntax::ast::IsAsync::Async { .. } = msig.header.asyncness.node {
                         errors.push(RpcError::HasAsync(msig.header.asyncness.span));
+                    }
+
+                    if let syntax::ast::Unsafety::Unsafe = msig.header.unsafety {
+                        errors.push(RpcError::Unsafe(impl_item.span));
                     }
 
                     match msig.header.abi {
@@ -284,6 +289,9 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector {
                         self.errors.append(&mut errors);
                     }
                 }
+            }
+            _ if item.ident.name == self.service_name => {
+                self.errors.push(RpcError::BadStruct(item.span));
             }
             _ => (),
         }

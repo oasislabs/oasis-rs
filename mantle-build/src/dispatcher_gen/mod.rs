@@ -17,14 +17,16 @@ pub fn generate_and_insert(
     ctor: &MethodSig,
     rpcs: Vec<(Symbol, MethodSig)>,
 ) {
-    let rpcs_dispatcher = generate_rpc_dispatcher(service_name, &rpcs);
-    let rpcs_include_file = out_dir.join(format!("{}_dispatcher.rs", crate_name));
-    std::fs::write(
-        &rpcs_include_file,
-        pprust::block_to_string(&rpcs_dispatcher),
-    )
-    .unwrap();
-    insert_rpc_dispatcher_stub(krate, &rpcs_include_file);
+    if !rpcs.is_empty() {
+        let rpcs_dispatcher = generate_rpc_dispatcher(service_name, &rpcs);
+        let rpcs_include_file = out_dir.join(format!("{}_dispatcher.rs", crate_name));
+        std::fs::write(
+            &rpcs_include_file,
+            pprust::block_to_string(&rpcs_dispatcher),
+        )
+        .unwrap();
+        insert_rpc_dispatcher_stub(krate, &rpcs_include_file);
+    }
 
     let ctor_fn = generate_ctor_fn(service_name, &ctor);
     let ctor_include_file = out_dir.join(format!("{}_ctor.rs", crate_name));
@@ -70,6 +72,7 @@ fn generate_rpc_dispatcher(service_name: Symbol, rpcs: &[(Symbol, MethodSig)]) -
         .collect::<String>();
 
     parse!(format!(r#"{{
+            use mantle::reexports::serde::{{Serialize, Deserialize}};
             use mantle::Service as _;
 
             #[derive(Serialize, Deserialize)]
@@ -117,6 +120,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
             #[no_mangle]
             extern "C" fn _mantle_deploy() -> u8 {{
                 use mantle::Service as _;
+                use mantle::reexports::serde::{{Serialize, Deserialize}};
 
                 #[derive(Serialize, Deserialize)]
                 #[allow(non_camel_case_types)]

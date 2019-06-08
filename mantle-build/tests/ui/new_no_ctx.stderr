@@ -1,0 +1,8 @@
+error: Service constructor must take `&Context` as its first argument.
+ --> $DIR/new_no_ctx.rs:7:16
+  |
+7 |     pub fn new(ctx: Context) -> Result<Self, String> {
+  |                ^^^^^^^^^^^^
+
+error: aborting due to previous error
+

@@ -1,0 +1,8 @@
+error: RPC definition cannot have generic parameters.
+ --> $DIR/generic_state.rs:4:17
+  |
+4 | pub struct State<T>(Option<T>);
+  |                 ^^^
+
+error: aborting due to previous error
+

@@ -45,7 +45,11 @@ pub enum RpcError {
         span: Span,
         suggestion: String,
     },
-    CtorVis(Span),
+    BadStruct(Span),
+    BadCtorReturn {
+        self_ty: syntax::ast::Ty,
+        span: Span,
+    },
     HasAbi(Span),
     HasAsync(Span),
     HasGenerics(Span),
@@ -53,12 +57,9 @@ pub enum RpcError {
         from_ctor: bool,
         span: Span,
     },
-    MissingSelf(Span),
-    BadCtorReturn {
-        self_ty: syntax::ast::Ty,
-        span: Span,
-    },
     MissingOutput(Span),
+    MissingSelf(Span),
+    Unsafe(Span),
 }
 
 impl std::fmt::Display for RpcError {
@@ -71,6 +72,7 @@ impl std::fmt::Display for RpcError {
                 "RPC argument must be an owned type. Maybe try `{}`?",
                 suggestion
             ),
+            BadStruct(..) => write!(f, "Service state definition must have named fields."),
             BadCtorReturn { self_ty, .. } => {
                 let self_ty_str = format!("{:?}", self_ty);
                 write!(
@@ -79,10 +81,9 @@ impl std::fmt::Display for RpcError {
                     &self_ty_str["type(".len()..(self_ty_str.len() - 1)]
                 )
             }
-            CtorVis(..) => write!(f, "Service constructor must have `pub` visibility."),
             HasAbi(..) => write!(f, "RPC method cannot declare an ABI."),
             HasAsync(..) => write!(f, "RPC method cannot be async."),
-            HasGenerics(..) => write!(f, "RPC method cannot have generic parameters."),
+            HasGenerics(..) => write!(f, "RPC definition cannot have generic parameters."),
             MissingContext { from_ctor, .. } => {
                 if *from_ctor {
                     write!(
@@ -98,6 +99,7 @@ impl std::fmt::Display for RpcError {
                 "RPC method must take `&self` or `&mut self` as its first argument."
             ),
             MissingOutput(..) => write!(f, "RPC method must return `Result`."),
+            Unsafe(..) => write!(f, "RPC method cannot be unsafe."),
         }
     }
 }
@@ -108,14 +110,15 @@ impl RpcError {
         match self {
             BadArgPat(span)
             | BadArgTy { span, .. }
-            | CtorVis(span)
+            | BadStruct(span)
+            | BadCtorReturn { span, .. }
             | HasAbi(span)
             | HasAsync(span)
             | HasGenerics(span)
             | MissingContext { span, .. }
+            | MissingOutput(span)
             | MissingSelf(span)
-            | BadCtorReturn { span, .. }
-            | MissingOutput(span) => *span,
+            | Unsafe(span) => *span,
         }
     }
 }

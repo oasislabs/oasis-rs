@@ -1,0 +1,8 @@
+error: RPC method must take `&self` or `&mut self` as its first argument.
+  --> $DIR/rpc_no_self.rs:11:17
+   |
+11 |     pub fn incr(mut self, ctx: &Context) -> Result<(), ()> {
+   |                 ^^^^^^^^
+
+error: aborting due to previous error
+

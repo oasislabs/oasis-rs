@@ -90,7 +90,8 @@ impl rustc_driver::Callbacks for BuildPlugin {
         let gen_dir = compiler
             .output_dir()
             .as_ref()
-            .expect("Could not determine output dir")
+            .map(std::path::PathBuf::clone)
+            .unwrap_or_else(|| std::env::temp_dir())
             .join("mantle_generated");
         std::fs::create_dir_all(&gen_dir)
             .unwrap_or_else(|_| panic!("Could not create dir: `{}`", gen_dir.display()));
@@ -129,7 +130,9 @@ impl rustc_driver::Callbacks for BuildPlugin {
 
         let mut parsed_rpc_collector = ParsedRpcCollector::new(service_name);
         syntax::visit::walk_crate(&mut parsed_rpc_collector, &parse);
-        let impl_span = parsed_rpc_collector.impl_span();
+
+        let struct_span = parsed_rpc_collector.struct_span();
+
         let rpcs = match parsed_rpc_collector.into_rpcs() {
             Ok(rpcs) => rpcs,
             Err(errs) => {
@@ -145,7 +148,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
         let ctor_sig = match ctor.as_slice() {
             [] => {
                 sess.span_err(
-                    impl_span,
+                    struct_span,
                     &format!("Missing definition of `{}::new`.", service_name),
                 );
                 return false;

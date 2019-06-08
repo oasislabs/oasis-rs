@@ -7,6 +7,7 @@ pub mod exe;
 pub mod ext;
 
 pub mod reexports {
+    pub use serde;
     pub use serde_cbor;
     pub use tiny_keccak;
 }

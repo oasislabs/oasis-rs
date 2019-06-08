@@ -32,20 +32,10 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Unit tests
-          command: cargo test --tests
-
-  test_xcc:
-    docker:
-      - image: nhdh/rust:latest
-        environment:
-          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    resource_class: xlarge
-    steps:
-      - checkout
+          name: Install mantle-build
+          command: cargo install --path mantle-build
       - run:
-          name: Cross-service call integration test
-          working_directory: tests/xcc-a
+          name: Unit tests
           command: cargo test --tests
 
   test_examples:
@@ -56,6 +46,9 @@ jobs:
     resource_class: xlarge
     steps:
       - checkout
+      - run:
+          name: Install mantle-build
+          command: cargo install --path mantle-build
       - run:
           name: Test ballot example
           working_directory: examples/ballot
@@ -87,9 +80,6 @@ workflows:
     jobs:
       - init
       - unit_test:
-          requires:
-            - init
-      - test_xcc:
           requires:
             - init
       - test_idl:

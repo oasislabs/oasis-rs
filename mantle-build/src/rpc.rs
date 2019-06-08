@@ -243,7 +243,7 @@ pub enum Type {
 
 // this is a macro because it's difficult to convince rustc that `T` \in {`Ty`, `TyS`}`
 macro_rules! convert_def {
-    ($tcx:ident, $did:expr, $converter:expr, $arg_at:expr, $vec_is_bytes:expr) => {{
+    ($tcx:ident, $did:expr, $owner_did:expr, $converter:expr, $arg_at:expr, $vec_is_bytes:expr) => {{
         let (crate_name, def_path_comps) = crate::utils::def_path($tcx, $did);
         let ty_str = def_path_comps.last().cloned().unwrap_or_default();
 
@@ -272,7 +272,7 @@ macro_rules! convert_def {
                 // this branch includes `sync`, among other things
                 return Err(UnsupportedTypeError::NotReprC(
                     format!("{}::{}", crate_name, def_path_comps.join("::")),
-                    $tcx.def_span($did).into(),
+                    $tcx.def_span($owner_did).into(),
                 ));
             }
         } else {
@@ -331,6 +331,7 @@ impl Type {
                             convert_def!(
                                 tcx,
                                 id,
+                                ty.hir_id.owner_local_def_id().to_def_id(),
                                 |tcx, _, ty| Type::convert_ty(tcx, ty),
                                 |i| { type_args[i] },
                                 is_vec_u8
@@ -386,6 +387,7 @@ impl Type {
                 };
                 convert_def!(
                     tcx,
+                    *did,
                     *did,
                     &Type::convert_sty,
                     |i| substs.type_at(i),

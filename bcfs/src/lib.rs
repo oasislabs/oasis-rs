@@ -1,4 +1,4 @@
-#![feature(concat_idents)]
+#![feature(cell_update)]
 
 #[cfg(feature = "ffi")]
 pub mod ffi;

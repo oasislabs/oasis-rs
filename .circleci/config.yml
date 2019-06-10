@@ -71,7 +71,7 @@ jobs:
           command: cargo install --path mantle-build
       - run:
           name: Test IDL generation
-          working_directory: tests/mantle_build
+          working_directory: tests/idl_gen
           command: cargo test --tests
 
 workflows:

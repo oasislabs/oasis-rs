@@ -9,12 +9,8 @@ publish = false
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-mantle = "0.2"
+mantle = { git = "https://github.com/oasislabs/mantle", branch = "plugin" }
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
-mantle-test = "0.2"
-
-[patch.crates-io]
-mantle = { path = "../../mantle" }
-mantle-test = { path = "../../mantle-test" }
+mantle = { git = "https://github.com/oasislabs/mantle", branch = "plugin" }

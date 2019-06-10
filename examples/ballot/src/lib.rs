@@ -85,6 +85,8 @@ impl Ballot {
 
 #[cfg(test)]
 mod tests {
+    // This is required even in Rust 2018. If omitted, rustc will not link in the testing
+    // library and will produce a giant error message.
     extern crate mantle_test;
 
     use super::*;

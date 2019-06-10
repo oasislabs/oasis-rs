@@ -37,7 +37,8 @@ fn run_mode(mode: &'static str) {
         )),
         rustc_path: PathBuf::from("mantle-build"),
         ..Default::default()
-    };
+    }
+    .tempdir();
 
     config.link_deps();
     config.clean_rmeta();

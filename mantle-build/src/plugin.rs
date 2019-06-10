@@ -91,7 +91,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
             .output_dir()
             .as_ref()
             .map(std::path::PathBuf::clone)
-            .unwrap_or_else(|| std::env::temp_dir())
+            .unwrap_or_else(std::env::temp_dir)
             .join("mantle_generated");
         std::fs::create_dir_all(&gen_dir)
             .unwrap_or_else(|_| panic!("Could not create dir: `{}`", gen_dir.display()));

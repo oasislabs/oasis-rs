@@ -85,9 +85,9 @@ fn main() {
             None => return Ok(()),
         });
 
-        out_dir.pop(); // remove the `/deps`
-        out_dir.pop(); // remove the `/<opt_level>`
-        out_dir.pop(); // remove the `/<target>``
+        while out_dir.file_name() != Some(&std::ffi::OsStr::new("target")) {
+            out_dir.pop();
+        }
         out_dir.push("service"); // should look like `.../target/service`
 
         std::fs::create_dir_all(&out_dir).expect("Could not create service dir");

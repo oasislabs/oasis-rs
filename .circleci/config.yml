@@ -39,7 +39,7 @@ jobs:
           command: cargo install --path mantle-build
       - run:
           name: Unit tests
-          command: cargo test --tests --features test-matle-build
+          command: cargo test --tests --features mantle-build-test
 
   test_examples:
     docker:
@@ -77,7 +77,7 @@ jobs:
       - run:
           name: Test IDL generation
           working_directory: tests/idl_gen
-          command: cargo test --tests --features test-matle-build
+          command: cargo test --tests --features mantle-build-test
 
 workflows:
   version: 2

@@ -99,7 +99,7 @@ fn get_type_serde(
         Array(_) | Tuple(_) | Path(_) => (
             quote! {
                 mantle::ext::write(
-                    #key,
+                    &#key,
                     mantle::reexports::serde_cbor::to_vec(&service.#struct_idx).unwrap()
                 )
             },

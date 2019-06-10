@@ -1,3 +1,5 @@
+use mantle_types::ExtStatusCode;
+
 #[derive(Debug, Eq, PartialEq, failure::Fail)]
 pub enum Error {
     #[fail(display = "Unknown error occured.")]
@@ -16,11 +18,11 @@ pub enum Error {
     Execution { code: u32, payload: Vec<u8> },
 }
 
-impl From<crate::ext::StatusCode> for Error {
-    fn from(code: crate::ext::StatusCode) -> Self {
+impl From<ExtStatusCode> for Error {
+    fn from(code: ExtStatusCode) -> Self {
         match code {
-            crate::ext::StatusCode::InsufficientFunds => Error::InsufficientFunds,
-            crate::ext::StatusCode::OutOfGas => Error::OutOfGas,
+            ExtStatusCode::InsufficientFunds => Error::InsufficientFunds,
+            ExtStatusCode::OutOfGas => Error::OutOfGas,
             code if code.0 < u8::max_value() as u32 => Error::Unknown,
             code => Error::Execution {
                 code: code.0,

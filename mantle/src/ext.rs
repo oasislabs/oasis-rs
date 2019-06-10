@@ -1,60 +1,48 @@
-use mantle_types::Address;
+use mantle_types::{Address, ExtStatusCode};
 
 use crate::error::Error;
-
-#[repr(C)]
-#[derive(PartialEq, Eq)]
-pub struct StatusCode(pub u32);
-
-#[allow(non_upper_case_globals)] // it's supposed to be a non-exhaustive enum
-impl StatusCode {
-    pub const Success: StatusCode = StatusCode(0);
-    pub const InsufficientFunds: StatusCode = StatusCode(1);
-    pub const OutOfGas: StatusCode = StatusCode(2);
-    pub const NoAccount: StatusCode = StatusCode(3);
-}
 
 mod ext {
     use super::*;
 
     /// @see the `blockchain-traits` crate for descriptions of these methods.
     extern "C" {
-        pub fn mantle_balance(addr: *const Address, balance: *mut u64) -> StatusCode;
+        pub fn mantle_balance(addr: *const Address, balance: *mut u64) -> ExtStatusCode;
 
-        pub fn mantle_code(addr: *const Address, buf: *mut u8) -> StatusCode;
-        pub fn mantle_code_len(at: *const Address, len: *mut u32) -> StatusCode;
+        pub fn mantle_code(addr: *const Address, buf: *mut u8) -> ExtStatusCode;
+        pub fn mantle_code_len(at: *const Address, len: *mut u32) -> ExtStatusCode;
 
-        pub fn mantle_fetch_input(buf: *mut u8) -> StatusCode;
-        pub fn mantle_input_len(len: *mut u32) -> StatusCode;
+        pub fn mantle_fetch_input(buf: *mut u8) -> ExtStatusCode;
+        pub fn mantle_input_len(len: *mut u32) -> ExtStatusCode;
 
-        pub fn mantle_ret(buf: *const u8, len: u32) -> StatusCode;
-        pub fn mantle_err(buf: *const u8, len: u32) -> StatusCode;
+        pub fn mantle_ret(buf: *const u8, len: u32) -> ExtStatusCode;
+        pub fn mantle_err(buf: *const u8, len: u32) -> ExtStatusCode;
 
-        pub fn mantle_fetch_ret(buf: *mut u8) -> StatusCode;
-        pub fn mantle_ret_len(len: *mut u32) -> StatusCode;
+        pub fn mantle_fetch_ret(buf: *mut u8) -> ExtStatusCode;
+        pub fn mantle_ret_len(len: *mut u32) -> ExtStatusCode;
 
-        pub fn mantle_fetch_err(buf: *mut u8) -> StatusCode;
-        pub fn mantle_err_len(len: *mut u32) -> StatusCode;
+        pub fn mantle_fetch_err(buf: *mut u8) -> ExtStatusCode;
+        pub fn mantle_err_len(len: *mut u32) -> ExtStatusCode;
 
         pub fn mantle_transact(
             callee: *const Address,
             value: u64,
             input: *const u8,
             input_len: u32,
-        ) -> StatusCode;
+        ) -> ExtStatusCode;
 
-        pub fn mantle_address(addr: *mut Address) -> StatusCode;
-        pub fn mantle_sender(addr: *mut Address) -> StatusCode;
-        pub fn mantle_value(value: *mut u64) -> StatusCode;
+        pub fn mantle_address(addr: *mut Address) -> ExtStatusCode;
+        pub fn mantle_sender(addr: *mut Address) -> ExtStatusCode;
+        pub fn mantle_value(value: *mut u64) -> ExtStatusCode;
 
-        pub fn mantle_read(key: *const u8, key_len: u32, value: *mut u8) -> StatusCode;
-        pub fn mantle_read_len(key: *const u8, key_len: u32, value_len: *mut u32) -> StatusCode;
+        pub fn mantle_read(key: *const u8, key_len: u32, value: *mut u8) -> ExtStatusCode;
+        pub fn mantle_read_len(key: *const u8, key_len: u32, value_len: *mut u32) -> ExtStatusCode;
         pub fn mantle_write(
             key: *const u8,
             key_len: u32,
             value: *const u8,
             value_len: u32,
-        ) -> StatusCode;
+        ) -> ExtStatusCode;
 
         pub fn mantle_emit(
             topics: *const *const u8,
@@ -62,14 +50,14 @@ mod ext {
             num_topics: u32,
             data: *const u8,
             data_len: u32,
-        ) -> StatusCode;
+        ) -> ExtStatusCode;
     }
 }
 
 macro_rules! ext {
     ($fn:ident $args:tt ) => {{
         let outcome = unsafe { ext::$fn$args };
-        if outcome != StatusCode::Success {
+        if outcome != ExtStatusCode::Success {
             Err(Error::from(outcome))
         } else {
             Ok(())

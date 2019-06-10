@@ -9,14 +9,12 @@ publish = false
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-mantle = { git = "https://github.com/oasislabs/mantle" }
+mantle = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
-mantle-test = { git = "https://github.com/oasislabs/mantle" } # required for tests
+mantle-test = "0.2"
 
-[build-dependencies]
-mantle = { git = "https://github.com/oasislabs/mantle" } # required for build script
-
-[features]
-deploy = [] # (automatically) set when building deployable service Wasm binary
+[patch.crates-io]
+mantle = { path = "../../mantle" }
+mantle-test = { path = "../../mantle-test" }

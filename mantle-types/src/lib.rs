@@ -50,3 +50,16 @@ impl std::str::FromStr for Address {
         Ok(addr)
     }
 }
+
+#[repr(C)]
+#[derive(PartialEq, Eq)]
+#[doc(hidden)]
+pub struct ExtStatusCode(pub u32);
+
+#[allow(non_upper_case_globals)] // it's supposed to be a non-exhaustive enum
+impl ExtStatusCode {
+    pub const Success: ExtStatusCode = ExtStatusCode(0);
+    pub const InsufficientFunds: ExtStatusCode = ExtStatusCode(1);
+    pub const OutOfGas: ExtStatusCode = ExtStatusCode(2);
+    pub const NoAccount: ExtStatusCode = ExtStatusCode(3);
+}

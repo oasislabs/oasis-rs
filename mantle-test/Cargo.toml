@@ -9,6 +9,11 @@ authors = ["Oasis Labs <feedback@oasislabs.com>"]
 readme = "README.md"
 keywords = ["mantle", "test", "testing"]
 
+[lib]
+crate-type = ["rlib", "cdylib"]
+
 [dependencies]
-mantle = { version = "0.2", path = "../mantle" }
+blockchain-traits = { version = "0.1", path = "../blockchain-traits" }
 mantle-macros = { version = "0.2", path = "../mantle-macros" }
+mantle-types = { version = "0.2", path = "../mantle-types" }
+memchain = { version = "0.1", path = "../memchain" }

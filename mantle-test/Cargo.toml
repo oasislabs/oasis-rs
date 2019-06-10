@@ -1,6 +1,6 @@
 [package]
 name = "mantle-test"
-version = "0.1.0"
+version = "0.2.0"
 license = "Apache-2.0"
 description = "A testing framework for Mantle executables."
 edition = "2018"
@@ -9,6 +9,11 @@ authors = ["Oasis Labs <feedback@oasislabs.com>"]
 readme = "README.md"
 keywords = ["mantle", "test", "testing"]
 
+[lib]
+crate-type = ["rlib", "cdylib"]
+
 [dependencies]
-mantle = { version = "0.1", path = "../mantle" }
-mantle-macros = { version = "0.1", path = "../mantle-macros" }
+blockchain-traits = { version = "0.1", path = "../blockchain-traits" }
+mantle-macros = { version = "0.2", path = "../mantle-macros" }
+mantle-types = { version = "0.2", path = "../mantle-types" }
+memchain = { version = "0.1", path = "../memchain" }

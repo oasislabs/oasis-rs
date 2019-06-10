@@ -3,7 +3,7 @@ pub fn service_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream
     let input = parse_macro_input!(input as syn::DeriveInput);
     let service = &input.ident;
     proc_macro::TokenStream::from(match get_serde(&input) {
-        Ok((ser, de)) => {
+        Some((ser, de)) => {
             quote! {
                 impl mantle::exe::Service for #service {
                     fn coalesce() -> Self {
@@ -16,18 +16,18 @@ pub fn service_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream
                 }
             }
         }
-        Err(_) => quote! {},
+        None => quote! {},
     })
 }
 
 fn get_serde(
     input: &syn::DeriveInput,
-) -> Result<(proc_macro2::TokenStream, proc_macro2::TokenStream), ()> {
+) -> Option<(proc_macro2::TokenStream, proc_macro2::TokenStream)> {
     if input.generics.type_params().count() > 0 {
         err!(input.generics: "Service cannot contain generic types.");
         // early return because `impl Service` won't have generics which will
         // result in additional, confusing error messages.
-        return Err(());
+        return None;
     }
 
     let (named, fields) = match &input.data {
@@ -40,7 +40,7 @@ fn get_serde(
         }
         _ => {
             err!(input: "`#[derive(Service)]` can only be applied to structs.");
-            return Err(());
+            return None;
         }
     };
 
@@ -62,7 +62,7 @@ fn get_serde(
                         .collect();
                     (
                         parse_quote!(#struct_index): syn::Member,
-                        quote! { H256::from(#index as u32) },
+                        quote! { #index.to_le_bytes().as_ref() },
                     )
                 }
             };
@@ -83,10 +83,10 @@ fn get_serde(
         quote! { Self(#(#des),*) }
     };
 
-    Ok((ser, de))
+    Some((ser, de))
 }
 
-/// Returns the serializer and deserializer for a (possibly lazy) Type.
+/// Returns the serializer and deserializer for a Type.
 fn get_type_serde(
     ty: &syn::Type,
     struct_idx: syn::Member,
@@ -96,48 +96,20 @@ fn get_type_serde(
     match ty {
         Group(g) => get_type_serde(&*g.elem, struct_idx, key),
         Paren(p) => get_type_serde(&*p.elem, struct_idx, key),
-        Array(_) | Tuple(_) => default_serde(&struct_idx, &key),
-        Path(syn::TypePath { path, .. }) => {
-            if path
-                .segments
-                .last()
-                .map(|seg| seg.value().ident == parse_quote!(Lazy): syn::Ident)
-                .unwrap_or(false)
-            {
-                (
-                    quote! {
-                        if service.#struct_idx.is_initialized() {
-                            mantle::ext::set_bytes(
-                                &#key,
-                                &serde_cbor::to_vec(service.#struct_idx.get()).unwrap()
-                            ).unwrap()
-                        }
-                    },
-                    quote! { mantle::exe::Lazy::_uninitialized(#key) },
+        Array(_) | Tuple(_) | Path(_) => (
+            quote! {
+                mantle::ext::write(
+                    &#key,
+                    mantle::reexports::serde_cbor::to_vec(&service.#struct_idx).unwrap()
                 )
-            } else {
-                default_serde(&struct_idx, &key)
-            }
-        }
+            },
+            quote! {
+                mantle::reexports::serde_cbor::from_slice(&mantle::ext::read(&#key)).unwrap()
+            },
+        ),
         ty => {
             err!(ty: "Service field must be a POD type.");
             (quote!(unreachable!()), quote!(unreachable!()))
         }
     }
-}
-
-/// Returns the default serializer and deserializer for a struct field.
-fn default_serde(
-    struct_idx: &syn::Member,
-    key: &proc_macro2::TokenStream,
-) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    (
-        quote! {
-            mantle::ext::set_bytes(
-                &#key,
-                &serde_cbor::to_vec(&service.#struct_idx).unwrap()
-            ).unwrap()
-        },
-        quote! { serde_cbor::from_slice(&mantle::ext::get_bytes(&#key).unwrap()).unwrap() },
-    )
 }

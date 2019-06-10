@@ -1,411 +1,215 @@
-//! Safe wrappers around interpreter intrinsics.
+use mantle_types::{Address, ExtStatusCode};
 
-use crate::{errors::ExtCallError, types::*};
+use crate::error::Error;
 
-static BASE_GAS: u64 = 2100;
+mod ext {
+    use super::*;
 
-mod eth {
+    /// @see the `blockchain-traits` crate for descriptions of these methods.
     extern "C" {
-        /// Direct/classic call. Corresponds to "CALL" opcode in EVM
-        pub fn ccall(
-            gas: *const u8,
-            address: *const u8,
-            val_ptr: *const u8,
-            input_ptr: *const u8,
+        pub fn mantle_balance(addr: *const Address, balance: *mut u64) -> ExtStatusCode;
+
+        pub fn mantle_code(addr: *const Address, buf: *mut u8) -> ExtStatusCode;
+        pub fn mantle_code_len(at: *const Address, len: *mut u32) -> ExtStatusCode;
+
+        pub fn mantle_fetch_input(buf: *mut u8) -> ExtStatusCode;
+        pub fn mantle_input_len(len: *mut u32) -> ExtStatusCode;
+
+        pub fn mantle_ret(buf: *const u8, len: u32) -> ExtStatusCode;
+        pub fn mantle_err(buf: *const u8, len: u32) -> ExtStatusCode;
+
+        pub fn mantle_fetch_ret(buf: *mut u8) -> ExtStatusCode;
+        pub fn mantle_ret_len(len: *mut u32) -> ExtStatusCode;
+
+        pub fn mantle_fetch_err(buf: *mut u8) -> ExtStatusCode;
+        pub fn mantle_err_len(len: *mut u32) -> ExtStatusCode;
+
+        pub fn mantle_transact(
+            callee: *const Address,
+            value: u64,
+            input: *const u8,
             input_len: u32,
-        ) -> i32;
+        ) -> ExtStatusCode;
 
-        /// Delegate call. Corresponds to "CALLCODE" opcode in EVM
-        pub fn dcall(
-            gas: *const u8,
-            address: *const u8,
-            input_ptr: *const u8,
-            input_len: u32,
-        ) -> i32;
+        pub fn mantle_address(addr: *mut Address) -> ExtStatusCode;
+        pub fn mantle_sender(addr: *mut Address) -> ExtStatusCode;
+        pub fn mantle_value(value: *mut u64) -> ExtStatusCode;
 
-        /// Static call. Corresponds to "STACICCALL" opcode in EVM
-        pub fn scall(
-            gas: *const u8,
-            address: *const u8,
-            input_ptr: *const u8,
-            input_len: u32,
-        ) -> i32;
+        pub fn mantle_read(key: *const u8, key_len: u32, value: *mut u8) -> ExtStatusCode;
+        pub fn mantle_read_len(key: *const u8, key_len: u32, value_len: *mut u32) -> ExtStatusCode;
+        pub fn mantle_write(
+            key: *const u8,
+            key_len: u32,
+            value: *const u8,
+            value_len: u32,
+        ) -> ExtStatusCode;
 
-        // blockchain functions
-        pub fn address(dest: *mut u8);
-        pub fn balance(address: *const u8, dest: *mut u8);
-        pub fn blockhash(number: i64, dest: *mut u8);
-        pub fn blocknumber() -> i64;
-        pub fn coinbase(dest: *mut u8);
-        pub fn create(
-            endowment: *const u8,
-            code_ptr: *const u8,
-            code_len: u32,
-            result_ptr: *mut u8,
-        ) -> i32;
-        #[cfg(feature = "create2")]
-        pub fn create2(
-            endowment: *const u8,
-            salt: *const u8,
-            code_ptr: *const u8,
-            code_len: u32,
-            result_ptr: *mut u8,
-        ) -> i32;
-        pub fn difficulty(dest: *mut u8);
-        pub fn elog(topic_ptr: *const u8, topic_count: u32, data_ptr: *const u8, data_len: u32);
-        pub fn input_length() -> u32;
-        pub fn fetch_input(dest: *mut u8);
-        pub fn gasleft() -> *const u8;
-        pub fn gaslimit(dest: *mut u8);
-        pub fn origin(dest: *mut u8);
-        pub fn ret(ptr: *const u8, len: u32); // -> !
-        pub fn sender(dest: *mut u8);
-        pub fn suicide(refund: *const u8); //  -> !
-        pub fn timestamp() -> i64;
-        pub fn value(dest: *mut u8);
-        pub fn return_length() -> u32;
-        pub fn fetch_return(dest: *mut u8);
+        pub fn mantle_emit(
+            topics: *const *const u8,
+            topic_lens: *const u32,
+            num_topics: u32,
+            data: *const u8,
+            data_len: u32,
+        ) -> ExtStatusCode;
     }
 }
 
-mod mantle {
-    extern "C" {
-        // mantle platform functions
-        pub fn storage_read(key: *const u8, dest: *mut u8);
-        pub fn storage_write(key: *const u8, src: *const u8);
-
-        // Key must be 32 bytes.
-        pub fn get_bytes(key: *const u8, result: *mut u8);
-        // Key must be 32 bytes.
-        pub fn get_bytes_len(key: *const u8) -> u64;
-        // Key must be 32 bytes.
-        pub fn set_bytes(key: *const u8, bytes: *const u8, bytes_len: u64);
-    }
-}
-
-/// Halt execution and register account for deletion.
-///
-/// Value of the current account will be tranfered to `refund` address.
-/// Runtime SHOULD trap the execution.
-pub fn suicide(refund: &Address) {
-    unsafe {
-        eth::suicide(refund.as_ptr());
-    }
-}
-
-/// Get balance of the given account.
-///
-/// If an account is not registered in the chain yet,
-/// it is considered as an account with `balance = 0`.
-pub fn balance(address: &Address) -> U256 {
-    unsafe { fetch_u256(|x| eth::balance(address.as_ptr(), x)) }
-}
-
-/// Create a new account with the given code
-/// Returns an error if the service constructor failed.
-pub fn create(endowment: U256, code: &[u8]) -> Result<Address, ExtCallError> {
-    let mut endowment_arr = [0u8; 32];
-    endowment.to_big_endian(&mut endowment_arr);
-    let mut result = Address::zero();
-    unsafe {
-        if eth::create(
-            endowment_arr.as_ptr(),
-            code.as_ptr(),
-            code.len() as u32,
-            (&mut result).as_mut_ptr(),
-        ) == 0
-        {
-            Ok(result)
+macro_rules! ext {
+    ($fn:ident $args:tt ) => {{
+        let outcome = unsafe { ext::$fn$args };
+        if outcome != ExtStatusCode::Success {
+            Err(Error::from(outcome))
         } else {
-            Err(ExtCallError)
+            Ok(())
         }
-    }
+    }}
 }
 
-/// Create a new account with the given code and salt.
-/// Returns an error if the service constructor failed.
-#[cfg(feature = "create2")]
-pub fn create2(endowment: U256, salt: H256, code: &[u8]) -> Result<Address, ExtCallError> {
-    let mut endowment_arr = [0u8; 32];
-    endowment.to_big_endian(&mut endowment_arr);
-    let mut result = Address::zero();
-    unsafe {
-        if eth::create2(
-            endowment_arr.as_ptr(),
-            salt.as_ptr(),
-            code.as_ptr(),
-            code.len() as u32,
-            (&mut result).as_mut_ptr(),
-        ) == 0
-        {
-            Ok(result)
-        } else {
-            Err(ExtCallError)
-        }
-    }
-}
-
-/// Message-call into an account
-///
-///  # Arguments:
-/// * `gas`- a gas limit for a call. A call execution will halt if call exceed this amount
-/// * `address` - an address of service to send a call
-/// * `value` - a value in Wei to send with a call
-/// * `input` - a data to send with a call
-/// * `result` - a mutable reference to be filled with a result data
-pub fn call(
-    gas: U256,
-    address: &Address,
-    value: U256,
-    input: &[u8],
-) -> Result<Vec<u8>, ExtCallError> {
-    let mut value_arr = [0u8; 32];
-    value.to_big_endian(&mut value_arr);
-    unsafe {
-        if eth::ccall(
-            gas.as_ptr(),
-            address.as_ptr(),
-            value_arr.as_ptr(),
-            input.as_ptr(),
-            input.len() as u32,
-        ) == 0
-        {
-            let mut result = vec![0u8; eth::return_length() as usize];
-            eth::fetch_return(result.as_mut_ptr());
-            Ok(result)
-        } else {
-            Err(ExtCallError)
-        }
-    }
-}
-
-pub fn transfer(address: &Address, value: &U256) -> Result<(), ExtCallError> {
-    let base_gas = U256::from(BASE_GAS);
-    let mut value_arr = [0u8; 32];
-    value.to_big_endian(&mut value_arr);
-    let result = crate::testing::call_with(
-        address,
-        None,
-        Some(value),
-        &Vec::new(), /* input */
-        &base_gas,
-        || unsafe {
-            eth::ccall(
-                base_gas.as_ptr(),
-                address.as_ptr(),
-                value_arr.as_ptr(),
-                std::ptr::null(), /* input */
-                0,                /* input len */
-            )
+pub fn code(at: &Address) -> Option<Vec<u8>> {
+    let mut code_len = 0u32;
+    let mut code = Vec::with_capacity(
+        match ext!(mantle_code_len(
+            at as *const Address,
+            &mut code_len as *mut _
+        )) {
+            Ok(_) => code_len as usize,
+            Err(_) => return None,
         },
     );
-    if result == 0 {
-        Ok(())
-    } else {
-        Err(ExtCallError)
-    }
+    ext!(mantle_code(at as *const Address, code.as_mut_ptr()))
+        .ok()
+        .map(|_| code)
 }
 
-/// Like `call`, but with code at the given `address`
-///
-/// Effectively this function is like calling current account but with
-/// different code (i.e. like `DELEGATECALL` EVM instruction).
-pub fn call_code(gas: U256, address: &Address, input: &[u8]) -> Result<Vec<u8>, ExtCallError> {
-    unsafe {
-        if eth::dcall(
-            gas.as_ptr(),
-            address.as_ptr(),
-            input.as_ptr(),
-            input.len() as u32,
-        ) == 0
-        {
-            let mut result = vec![0u8; eth::return_length() as usize];
-            eth::fetch_return(result.as_mut_ptr());
-            Ok(result)
-        } else {
-            Err(ExtCallError)
-        }
-    }
-}
-
-/// Like `call`, but this call and any of it's subcalls are disallowed to modify any storage.
-/// It will return an error in this case.
-pub fn static_call(gas: U256, address: &Address, input: &[u8]) -> Result<Vec<u8>, ExtCallError> {
-    unsafe {
-        if eth::scall(
-            gas.as_ptr(),
-            address.as_ptr(),
-            input.as_ptr(),
-            input.len() as u32,
-        ) == 0
-        {
-            let mut result = vec![0u8; eth::return_length() as usize];
-            eth::fetch_return(result.as_mut_ptr());
-            Ok(result)
-        } else {
-            Err(ExtCallError)
-        }
-    }
-}
-
-/// Returns hash of the given block or H256::zero()
-///
-/// Only works for 256 most recent blocks excluding current
-/// Returns H256::zero() in case of failure
-pub fn block_hash(block_number: u64) -> H256 {
-    let mut res = H256::zero();
-    unsafe { eth::blockhash(block_number as i64, res.as_mut_ptr()) }
-    res
-}
-
-/// Get the current block’s beneficiary address (the current miner account address)
-pub fn coinbase() -> Address {
-    unsafe { fetch_address(|x| eth::coinbase(x)) }
-}
-
-/// Get the block's timestamp
-///
-/// It can be viewed as an output of Unix's `time()` function at
-/// current block's inception.
-pub fn timestamp() -> u64 {
-    unsafe { eth::timestamp() as u64 }
-}
-
-/// Get the block's number
-///
-/// This value represents number of ancestor blocks.
-/// The genesis block has a number of zero.
-pub fn block_number() -> u64 {
-    unsafe { eth::blocknumber() as u64 }
-}
-
-/// Get the block's difficulty.
-pub fn difficulty() -> U256 {
-    unsafe { fetch_u256(|x| eth::difficulty(x)) }
-}
-
-/// Get the block's gas limit.
-pub fn gas_limit() -> U256 {
-    unsafe { fetch_u256(|x| eth::gaslimit(x)) }
-}
-
-/// Get amount of gas left.
-pub fn gas_left() -> U256 {
-    unsafe { U256::from_raw(eth::gasleft()) }
-}
-
-/// Get caller address
-///
-/// This is the address of the account that is directly responsible for this execution.
-/// Use `origin` to get an address of external account - an original initiator of a transaction
-pub fn sender() -> Address {
-    unsafe { fetch_address(|x| eth::sender(x)) }
-}
-
-/// Get execution origination address
-///
-/// This is the sender of original transaction.
-/// It could be only external account, not a service
-pub fn origin() -> Address {
-    unsafe { fetch_address(|x| eth::origin(x)) }
-}
-
-/// Get deposited value by the instruction/transaction responsible for this execution.
-pub fn value() -> U256 {
-    unsafe { fetch_u256(|x| eth::value(x)) }
-}
-
-/// Get address of currently executing account
 pub fn address() -> Address {
-    unsafe { fetch_address(|x| eth::address(x)) }
+    let mut addr = Address::default();
+    ext!(mantle_address(&mut addr as *mut _)).unwrap();
+    addr
 }
 
-/// Creates log entry with up to four topics and data.
-///
-/// # Panics
-/// If `topics` contains more than 4 elements then this function will trap.
-pub fn log(topics: &[H256], data: &[u8]) {
-    unsafe {
-        eth::elog(
-            topics.as_ptr() as *const u8,
-            topics.len() as u32,
-            data.as_ptr(),
-            data.len() as u32,
-        );
-    }
+pub fn balance(addr: &Address) -> Option<u64> {
+    let mut balance = 0;
+    ext!(mantle_balance(addr as *const _, &mut balance as *mut _))
+        .ok()
+        .map(|_| balance)
 }
 
-/// Allocates and requests `call` arguments (input)
-/// Input data comes either with external transaction or from `call` input value.
+pub fn sender() -> Address {
+    let mut addr = Address::default();
+    ext!(mantle_sender(&mut addr as *mut _)).unwrap();
+    addr
+}
+
+pub fn value() -> u64 {
+    let mut value = 0;
+    ext!(mantle_value(&mut value as *mut _)).unwrap();
+    value
+}
+
+pub fn transact(callee: &Address, value: u64, input: Vec<u8>) -> Result<Vec<u8>, Error> {
+    ext!(mantle_transact(
+        callee as *const _,
+        value,
+        input.as_ptr(),
+        if input.len() > u32::max_value() as usize {
+            return Err(Error::InvalidInput);
+        } else {
+            input.len() as u32
+        },
+    ))?;
+
+    let mut ret_len = 0u32;
+    ext!(mantle_ret_len(&mut ret_len as *mut _))?;
+
+    let mut ret = Vec::with_capacity(ret_len as usize);
+    unsafe { ret.set_len(ret_len as usize) };
+
+    ext!(mantle_fetch_ret(ret.as_mut_ptr())).map(|_| ret)
+}
+
+pub fn transfer(to: &Address, value: u64) -> Result<(), Error> {
+    ext!(mantle_transact(to as *const _, value, std::ptr::null(), 0))
+}
+
 pub fn input() -> Vec<u8> {
-    match unsafe { eth::input_length() } {
-        0 => Vec::new(),
-        len => {
-            let mut data = vec![0; len as usize];
-            unsafe {
-                eth::fetch_input(data.as_mut_ptr());
-            }
-            data
-        }
-    }
+    let mut input_len = 0u32;
+    ext!(mantle_input_len(&mut input_len as *mut _)).unwrap();
+
+    let mut input = Vec::with_capacity(input_len as usize);
+    unsafe { input.set_len(input_len as usize) };
+
+    ext!(mantle_fetch_input(input.as_mut_ptr())).unwrap();
+    input
 }
 
-/// Sets a `call` return value
-/// Pass return data to the runtime. Runtime SHOULD trap the execution.
-pub fn ret(data: &[u8]) {
-    unsafe {
-        eth::ret(data.as_ptr(), data.len() as u32);
-    }
+pub fn fetch_ret() -> Vec<u8> {
+    let mut ret_len = 0u32;
+    ext!(mantle_ret_len(&mut ret_len as *mut _)).unwrap();
+
+    let mut ret = Vec::with_capacity(ret_len as usize);
+    ext!(mantle_fetch_ret(ret.as_mut_ptr())).unwrap();
+    ret
 }
 
-/// Performs read from the storage.
-pub fn read(key: &H256) -> [u8; 32] {
-    let mut dest = [0u8; 32];
-    unsafe {
-        mantle::storage_read(key.as_ptr(), dest.as_mut_ptr());
-    }
-    dest
+pub fn fetch_err() -> Vec<u8> {
+    let mut err_len = 0u32;
+    ext!(mantle_err_len(&mut err_len as *mut _)).unwrap();
+
+    let mut err = Vec::with_capacity(err_len as usize);
+    unsafe { err.set_len(err_len as usize) };
+
+    ext!(mantle_fetch_err(err.as_mut_ptr())).unwrap();
+    err
 }
 
-/// Performs write to the storage
-pub fn write(key: &H256, val: &[u8; 32]) {
-    unsafe {
-        mantle::storage_write(key.as_ptr(), val.as_ptr());
-    }
+pub fn ret(ret: Vec<u8>) {
+    ext!(mantle_ret(ret.as_ptr(), ret.len() as u32)).unwrap();
 }
 
-/// Retrieve data directly from the service storage trie.
-pub fn get_bytes(key: &H256) -> Result<Vec<u8>, ExtCallError> {
-    let result_len = get_bytes_len(key)?;
-    let mut result = vec![0; result_len as usize];
-    unsafe {
-        mantle::get_bytes(key.as_ptr(), result.as_mut_ptr());
-    }
-    Ok(result)
+pub fn err(err: Vec<u8>) {
+    ext!(mantle_err(err.as_ptr(), err.len() as u32)).unwrap();
 }
 
-fn get_bytes_len(key: &H256) -> Result<u32, ExtCallError> {
-    unsafe { Ok(mantle::get_bytes_len(key.as_ptr()) as u32) }
+pub fn read(key: &[u8]) -> Vec<u8> {
+    let mut val_len = 0u32;
+    ext!(mantle_read_len(
+        key.as_ptr(),
+        key.len() as u32,
+        &mut val_len as *mut _
+    ))
+    .unwrap();
+
+    let mut val = Vec::with_capacity(val_len as usize);
+    unsafe { val.set_len(val_len as usize) };
+
+    ext!(mantle_read(
+        key.as_ptr(),
+        key.len() as u32,
+        val.as_mut_ptr()
+    ))
+    .unwrap();
+    val
 }
 
-/// Store data directly into the service storage trie.
-pub fn set_bytes<T: AsRef<[u8]>>(key: &H256, bytes: T) -> Result<(), ExtCallError> {
-    let bytes = bytes.as_ref();
-    let len = bytes.len() as u64;
-    unsafe {
-        mantle::set_bytes(key.as_ptr(), bytes.as_ptr(), len);
-    }
-    Ok(())
+pub fn write(key: &[u8], value: Vec<u8>) {
+    ext!(mantle_write(
+        key.as_ptr(),
+        key.len() as u32,
+        value.as_ptr(),
+        value.len() as u32
+    ))
+    .unwrap();
 }
 
-unsafe fn fetch_address<F: Fn(*mut u8)>(f: F) -> Address {
-    let mut res = Address::zero();
-    f(res.as_mut_ptr());
-    res
-}
-
-unsafe fn fetch_u256<F: Fn(*mut u8)>(f: F) -> U256 {
-    let mut res = [0u8; 32];
-    f(res.as_mut_ptr());
-    U256::from_big_endian(&res)
+pub fn emit(topics: Vec<Vec<u8>>, data: Vec<u8>) {
+    let topic_ptrs: Vec<*const u8> = topics.iter().map(|t| t.as_ptr()).collect();
+    let topic_lens: Vec<u32> = topics.iter().map(|t| t.len() as u32).collect();
+    ext!(mantle_emit(
+        topic_ptrs.as_ptr(),
+        topic_lens.as_ptr(),
+        topics.len() as u32,
+        data.as_ptr(),
+        data.len() as u32
+    ))
+    .unwrap();
 }

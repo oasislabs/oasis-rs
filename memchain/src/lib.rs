@@ -99,7 +99,7 @@ impl<'bc> Blockchain for Memchain<'bc> {
         self.last_block().fetch_input()
     }
 
-    fn input_len(&self) -> u64 {
+    fn input_len(&self) -> u32 {
         self.last_block().input_len()
     }
 
@@ -115,7 +115,7 @@ impl<'bc> Blockchain for Memchain<'bc> {
         self.last_block().fetch_ret()
     }
 
-    fn ret_len(&self) -> u64 {
+    fn ret_len(&self) -> u32 {
         self.last_block().ret_len()
     }
 
@@ -123,7 +123,7 @@ impl<'bc> Blockchain for Memchain<'bc> {
         self.last_block().fetch_err()
     }
 
-    fn err_len(&self) -> u64 {
+    fn err_len(&self) -> u32 {
         self.last_block().err_len()
     }
 
@@ -135,7 +135,7 @@ impl<'bc> Blockchain for Memchain<'bc> {
         self.last_block().code_at(addr)
     }
 
-    fn code_len(&self, addr: &Address) -> u64 {
+    fn code_len(&self, addr: &Address) -> u32 {
         self.last_block().code_len(addr)
     }
 

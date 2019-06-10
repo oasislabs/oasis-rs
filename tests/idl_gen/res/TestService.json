@@ -27,8 +27,7 @@
             "params": {
               "type": "DefTy"
             }
-          },
-          "indexed": true
+          }
         },
         {
           "name": "non_indexed",
@@ -97,10 +96,10 @@
             "type": "tuple",
             "params": [
               {
-                "type": "h256"
+                "type": "address"
               },
               {
-                "type": "u256"
+                "type": "u64"
               },
               {
                 "type": "address"
@@ -118,15 +117,13 @@
           "name": "indexed1",
           "type": {
             "type": "u32"
-          },
-          "indexed": true
+          }
         },
         {
           "name": "indexed2",
           "type": {
             "type": "u32"
-          },
-          "indexed": true
+          }
         }
       ]
     }
@@ -222,5 +219,5 @@
       }
     }
   ],
-  "idl_gen_version": "0.1.0"
+  "mantle_build_version": "0.1.0"
 }

@@ -1,179 +1,119 @@
-#![allow(unused_attributes)]
-
-use std::{cell::RefCell, collections::HashMap};
-
-use mantle::types::*;
-
-mantle_macros::test_host!();
+use mantle_types::{Address, ExtStatusCode};
 
 #[no_mangle]
-extern "C" fn is_testing() -> bool {
-    true
-}
+static mantle_testing: bool = true;
 
-thread_local! {
-    static ACCOUNTS: RefCell<HashMap<Address, AccountState>> = RefCell::new(HashMap::new());
-    static EXPORTS: RefCell<HashMap<Address, HashMap<String, extern "C" fn()>>> =
-        RefCell::new(HashMap::new());
-}
-
-#[derive(Debug)]
-struct AccountState {
-    balance: U256,
-    storage: HashMap<H256, Vec<u8>>,
-}
-
-impl AccountState {
-    pub fn new_with_balance<V: Into<U256>>(balance: V) -> Self {
-        Self {
-            balance: balance.into(),
-            storage: HashMap::new(),
-        }
-    }
-}
-
-fn cur_addr() -> Address {
-    ADDRESS.with(|addr| addr.borrow().last().copied().unwrap())
-}
-
-fn with_cur_state<T, F: FnOnce(&AccountState) -> T>(f: F) -> T {
-    ACCOUNTS.with(|accts| f(accts.borrow().get(&cur_addr()).unwrap()))
-}
-
-fn with_cur_state_mut<T, F: FnOnce(&mut AccountState) -> T>(f: F) -> T {
-    ACCOUNTS.with(|accts| f(accts.borrow_mut().get_mut(&cur_addr()).unwrap()))
-}
-
-fn invoke_export<S: AsRef<str>>(addr: Address, name: S) {
-    EXPORTS.with(|exports| {
-        exports
-            .borrow()
-            .get(&addr)
-            .and_then(|service_exports| service_exports.get(name.as_ref()))
-            .unwrap()()
-    });
+#[no_mangle]
+pub extern "C" fn mantle_balance(addr: *const Address, balance: *mut u64) -> ExtStatusCode {
+    ExtStatusCode::Success
 }
 
 #[no_mangle]
-fn gasleft() -> *const u8 {
-    U256::zero().as_ptr() // TODO (#14)
+pub extern "C" fn mantle_code(addr: *const Address, buf: *mut u8) -> ExtStatusCode {
+    ExtStatusCode::Success
 }
 
 #[no_mangle]
-pub fn get_bytes(key: *const u8, result: *mut u8) {
-    with_cur_state(|state| {
-        if let Some(val) = state.storage.get(&unsafe { H256::from_raw(key) }) {
-            unsafe { result.copy_from_nonoverlapping(val.as_ptr(), val.len()) };
-        }
-    })
+pub extern "C" fn mantle_code_len(at: *const Address, len: *mut u32) -> ExtStatusCode {
+    ExtStatusCode::Success
 }
 
 #[no_mangle]
-pub fn get_bytes_len(key: *const u8) -> u64 {
-    with_cur_state(|state| {
-        if let Some(val) = state.storage.get(&unsafe { H256::from_raw(key) }) {
-            val.len() as u64
-        } else {
-            0
-        }
-    })
+pub extern "C" fn mantle_fetch_input(buf: *mut u8) -> ExtStatusCode {
+    ExtStatusCode::Success
 }
 
 #[no_mangle]
-pub fn set_bytes(key: *const u8, bytes: *const u8, bytes_len: u64) {
-    with_cur_state_mut(|state| unsafe {
-        state.storage.insert(
-            H256::from_raw(key),
-            std::slice::from_raw_parts(bytes, bytes_len as usize).to_vec(),
-        );
-    });
+pub extern "C" fn mantle_input_len(len: *mut u32) -> ExtStatusCode {
+    ExtStatusCode::Success
 }
 
 #[no_mangle]
-pub fn ccall(
-    _gas: *const u8, // TODO (#14)
-    address_ptr: *const u8,
-    value_ptr: *const u8,
-    _input_ptr: *const u8,
+pub extern "C" fn mantle_ret(buf: *const u8, len: u32) -> ExtStatusCode {
+    ExtStatusCode::Success
+}
+
+#[no_mangle]
+pub extern "C" fn mantle_err(buf: *const u8, len: u32) -> ExtStatusCode {
+    ExtStatusCode::Success
+}
+
+#[no_mangle]
+pub extern "C" fn mantle_fetch_ret(buf: *mut u8) -> ExtStatusCode {
+    ExtStatusCode::Success
+}
+
+#[no_mangle]
+pub extern "C" fn mantle_ret_len(len: *mut u32) -> ExtStatusCode {
+    ExtStatusCode::Success
+}
+
+#[no_mangle]
+pub extern "C" fn mantle_fetch_err(buf: *mut u8) -> ExtStatusCode {
+    ExtStatusCode::Success
+}
+
+#[no_mangle]
+pub extern "C" fn mantle_err_len(len: *mut u32) -> ExtStatusCode {
+    ExtStatusCode::Success
+}
+
+#[no_mangle]
+pub extern "C" fn mantle_transact(
+    callee: *const Address,
+    value: u64,
+    input: *const u8,
     input_len: u32,
-) -> u32 {
-    let value = unsafe { U256::from_raw(value_ptr) };
-    let sender = SENDER.with(|sender| *sender.borrow().last().unwrap());
-    if ACCOUNTS.with(|accounts| value > accounts.borrow().get(&sender).unwrap().balance) {
-        return 1;
-    }
-    if input_len > 0 {
-        invoke_export(cur_addr(), "call");
-    }
-    ACCOUNTS.with(|accounts| {
-        let mut accounts = accounts.borrow_mut();
-        let recipient = unsafe { Address::from_raw(address_ptr) };
-        accounts.get_mut(&sender).unwrap().balance -= value;
-        accounts.get_mut(&recipient).unwrap().balance += value;
-    });
-    0
+) -> ExtStatusCode {
+    ExtStatusCode::Success
 }
 
 #[no_mangle]
-pub fn ret(ptr: *const u8, len: u32) {
-    pp_receivers::push_return(ptr, len as usize);
+pub extern "C" fn mantle_address(addr: *mut Address) -> ExtStatusCode {
+    ExtStatusCode::Success
 }
 
 #[no_mangle]
-pub fn elog(topic_ptr: *const u8, topic_count: u32, data_ptr: *const u8, data_len: u32) {
-    // unimplemented!();
+pub extern "C" fn mantle_sender(addr: *mut Address) -> ExtStatusCode {
+    ExtStatusCode::Success
 }
 
 #[no_mangle]
-pub fn balance(address: *const u8, dest: *mut u8) {
-    let addr = unsafe { Address::from_raw(address) };
-    ACCOUNTS.with(|accounts| {
-        accounts
-            .borrow()
-            .get(&addr)
-            .unwrap()
-            .balance
-            .to_big_endian(unsafe { std::slice::from_raw_parts_mut(dest, 32) });
-    });
+pub extern "C" fn mantle_value(value: *mut u64) -> ExtStatusCode {
+    ExtStatusCode::Success
 }
 
 #[no_mangle]
-pub fn create(endowment: *const u8, _code: *const u8, _code_len: u32, ret_addr: *mut u8) -> i32 {
-    let balance = unsafe { U256::from_raw(endowment) };
-    let addr = ACCOUNTS.with(|accounts| {
-        let mut accounts = accounts.borrow_mut();
-        let addr = Address::from(accounts.len());
-        accounts.insert(addr, AccountState::new_with_balance(balance));
-        addr
-    });
-    unsafe {
-        ret_addr.copy_from_nonoverlapping(addr.as_ptr(), 20);
-    }
-    0
+pub extern "C" fn mantle_read(key: *const u8, key_len: u32, value: *mut u8) -> ExtStatusCode {
+    ExtStatusCode::Success
 }
 
 #[no_mangle]
-extern "C" fn register_exports(
-    addr: *const u8,
-    export_names: *const *const i8,
-    export_fns: *const extern "C" fn(),
-    num_exports: u32,
-) {
-    let addr = unsafe { Address::from_raw(addr) };
-    let export_names: Vec<String> = unsafe {
-        std::slice::from_raw_parts(export_names, num_exports as usize)
-            .into_iter()
-            .map(|ptr| std::ffi::CStr::from_ptr(*ptr))
-            .map(|cstr| cstr.to_str().unwrap().to_string())
-            .collect()
-    };
-    let export_fns: Vec<extern "C" fn()> = unsafe {
-        std::slice::from_raw_parts(export_fns, num_exports as usize)
-            .into_iter()
-            .map(|func| func.to_owned())
-            .collect()
-    };
-    let addr_exports: HashMap<String, extern "C" fn()> =
-        export_names.into_iter().zip(export_fns).collect();
-    EXPORTS.with(|exports| exports.borrow_mut().insert(addr, addr_exports));
+pub extern "C" fn mantle_read_len(
+    key: *const u8,
+    key_len: u32,
+    value_len: *mut u32,
+) -> ExtStatusCode {
+    ExtStatusCode::Success
+}
+
+#[no_mangle]
+pub extern "C" fn mantle_write(
+    key: *const u8,
+    key_len: u32,
+    value: *const u8,
+    value_len: u32,
+) -> ExtStatusCode {
+    ExtStatusCode::Success
+}
+
+#[no_mangle]
+pub extern "C" fn mantle_emit(
+    topics: *const *const u8,
+    topic_lens: *const u32,
+    num_topics: u32,
+    data: *const u8,
+    data_len: u32,
+) -> ExtStatusCode {
+    ExtStatusCode::Success
 }

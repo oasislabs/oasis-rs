@@ -1,8 +1,0 @@
-error: Service field must be a POD type.
- --> $DIR/state_non_pod_type.rs:5:23
-  |
-5 |     pub struct NonPOD(*const u8);
-  |                       ^
-
-error: aborting due to previous error
-

@@ -1,6 +1,6 @@
 [package]
 name = "mantle-types"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
 license = "Apache-2.0"
@@ -11,7 +11,5 @@ keywords = ["blockchain", "mantle"]
 
 [dependencies]
 blockchain-traits = { version = "0.1", path = "../blockchain-traits" }
-fixed-hash = { version = "0.3", default-features = false, features = ["byteorder"] }
 hex = "0.3"
 serde = { version = "1.0", features = ["derive"] }
-uint = "0.6"

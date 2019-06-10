@@ -1,8 +1,0 @@
-error: Service definition must contain a #[derive(Service)] struct.
- --> $DIR/no_service_derive.rs:2:1
-  |
-2 | #[mantle::service]
-  | ^^^^^^^^^^^^^^^^^^
-
-error: aborting due to previous error
-

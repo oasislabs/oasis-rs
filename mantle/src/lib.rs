@@ -1,28 +1,48 @@
-#![feature(linkage, trait_alias)]
+#![feature(bind_by_move_pattern_guards, linkage, non_exhaustive, trait_alias)]
 
-pub extern crate mantle_macros as macros;
+extern crate mantle_macros;
 
-pub mod build;
-pub mod errors;
+pub mod error;
 pub mod exe;
 pub mod ext;
-pub mod testing;
-pub mod types;
-
-#[cfg(feature = "platform-alloc")]
-include!("alloc.rs");
-
-pub mod prelude {
-    pub use crate::{errors::*, exe::*, types::*};
-    pub use macros::{service, Event, Service};
-}
 
 pub mod reexports {
-    pub use failure;
     pub use serde;
     pub use serde_cbor;
     pub use tiny_keccak;
 }
 
-pub use build::build_service;
-pub use macros::{service, Event};
+pub use mantle_macros::{Event, Service};
+pub use mantle_types::Address;
+
+pub use crate::exe::*;
+
+/// This macro is used to define the "main" service.
+///
+/// ## Example
+
+/// ```norun
+/// fn main() {
+///    mantle::service!(TheMainService);
+/// }
+/// ```
+#[macro_export]
+macro_rules! service {
+    ($svc:path) => {};
+}
+
+pub trait AddressExt {
+    fn transfer<'a>(&self, value: u64) -> Result<(), crate::error::Error>;
+
+    fn balance(&self) -> u64;
+}
+
+impl AddressExt for Address {
+    fn transfer<'a>(&self, value: u64) -> Result<(), crate::error::Error> {
+        crate::ext::transfer(self, value)
+    }
+
+    fn balance(&self) -> u64 {
+        crate::ext::balance(self).unwrap()
+    }
+}

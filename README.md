@@ -7,7 +7,7 @@ You can find more information in the [developer documentation](https://docs.oasi
 
 * **mantle** - A framework for conveniently developing blockchain services.
 * **mantle-test** - A testing framework for testing services built using Mantle.
-* **idl-gen** - A compiler plugin that generates RPC schemas from Rust types.
+* **mantle-build** - A compiler plugin that adds boilerplate code and generates RPC schemas from Rust types.
 
 ## Crates for Mantle Developers
 

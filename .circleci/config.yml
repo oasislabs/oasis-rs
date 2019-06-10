@@ -26,7 +26,7 @@ jobs:
           name: Wasm build
           command: cargo build --target wasm32-unknown-unknown --all-features -p memchain -p bcfs
 
-  unit_test:
+  compiletest:
     docker:
       - image: nhdh/rust:latest
         environment:
@@ -39,7 +39,7 @@ jobs:
           command: cargo install --path mantle-build
       - run:
           name: Unit tests
-          command: cargo test --tests --features mantle-build-test
+          command: cargo test --tests -p mantle-build
 
   test_examples:
     docker:
@@ -84,7 +84,7 @@ workflows:
   test:
     jobs:
       - init
-      - unit_test:
+      - compiletest:
           requires:
             - init
       - test_idl:

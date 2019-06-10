@@ -110,7 +110,6 @@ mod tests {
 
         assert_eq!(ballot.description(&admin_ctx).unwrap(), description);
         assert_eq!(ballot.candidates(&admin_ctx).unwrap(), candidates);
-        // mantle_test::ext::mantle_err_len(std::ptr::null_mut());
 
         // Can't get winner before voting has closed.
         assert!(ballot.winner(&voter_ctx).is_err());

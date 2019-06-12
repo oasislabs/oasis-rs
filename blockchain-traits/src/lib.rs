@@ -80,10 +80,6 @@ pub trait Blockchain: KVStore {
     /// Returns the address of the sender of the current transaction.
     /// Panics if there is no pending transaction.
     fn sender(&self) -> &Self::Address;
-
-    /// Returns the address of the payer of the current transaction.
-    /// Panics if there is no pending transaction.
-    fn payer(&self) -> &Self::Address;
 }
 
 pub struct AccountMetadata {

@@ -1,0 +1,147 @@
+use std::{
+    fs,
+    io::{self, Read as _, Write as _},
+    os::wasi::{ffi::OsStringExt, io::FromRawFd},
+    path::{Path, PathBuf},
+    str::FromStr,
+};
+
+use blockchain_traits::Address as _;
+use libc::{__wasi_errno_t, __wasi_fd_t};
+use mantle_types::Address;
+
+use crate::Error;
+
+macro_rules! chain_dir {
+    ($($ext:literal),*) => {
+        concat!("/opt/", env!("MANTLE_BLOCKCHAIN_NAME"), "/", $($ext),*)
+    }
+}
+fn home<P: AsRef<Path>>(addr: &Address, file: P) -> PathBuf {
+    let mut home = PathBuf::from(chain_dir!());
+    home.push(addr.path_repr());
+    home.push(file.as_ref());
+    home
+}
+
+fn env_addr(key: &str) -> Address {
+    let mut addr = Address::default();
+    addr.0
+        .copy_from_slice(&hex::decode(&std::env::var_os(key).unwrap().into_vec()).unwrap());
+    addr
+}
+
+pub fn address() -> Address {
+    env_addr("ADDRESS")
+}
+
+pub fn sender() -> Address {
+    env_addr("SENDER")
+}
+
+pub fn payer() -> Address {
+    env_addr("PAYER")
+}
+
+pub fn value() -> u64 {
+    u64::from_str(&std::env::var("VALUE").unwrap()).unwrap()
+}
+
+pub fn balance(addr: &Address) -> Option<u64> {
+    Some(unsafe {
+        *std::mem::transmute::<*const u8, *const u64>(match fs::read(home(&*addr, "balance")) {
+            Ok(balance) => balance.as_ptr(),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return None,
+            Err(err) => panic!(err),
+        })
+    })
+}
+
+pub fn code(addr: &Address) -> Option<Vec<u8>> {
+    Some(match fs::read(home(&*addr, "code")) {
+        Ok(code) => code,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return None,
+        Err(err) => panic!(err),
+    })
+}
+
+extern "C" {
+    fn __wasi_blockchain_transact(
+        callee_addr: *const u8,
+        value: u64,
+        input: *const u8,
+        input_len: u64,
+        fd: *mut __wasi_fd_t,
+    ) -> __wasi_errno_t;
+}
+
+const __WASI_EBAL: __wasi_errno_t = 256; // not enough balance
+const __WASI_EGAS: __wasi_errno_t = 257; // not enough gas
+
+pub fn transact(callee: &Address, value: u64, input: &[u8]) -> Result<Vec<u8>, Error> {
+    let mut fd: __wasi_fd_t = 0;
+    let errno = unsafe {
+        __wasi_blockchain_transact(
+            callee.0.as_ptr(),
+            value,
+            input.as_ptr(),
+            input.len() as u64,
+            &mut fd as *mut _,
+        )
+    };
+    match errno {
+        libc::__WASI_ESUCCESS => (),
+        libc::__WASI_EFAULT | libc::__WASI_EINVAL => return Err(Error::InvalidInput),
+        libc::__WASI_ENOENT => return Err(Error::NoAccount),
+        __WASI_EBAL => return Err(Error::InsufficientFunds),
+        __WASI_EGAS => return Err(Error::OutOfGas),
+        _ => return Err(Error::Unknown),
+    };
+    let mut f_out = unsafe { fs::File::from_raw_fd(fd) };
+    let mut out = Vec::new();
+    match f_out.read_to_end(&mut out) {
+        Ok(_) => Ok(out),
+        Err(err) => panic!(err), // TODO: how to interpret io::Error
+    }
+}
+
+pub fn input() -> Vec<u8> {
+    let mut inp = Vec::new();
+    io::stdin().read_to_end(&mut inp).unwrap();
+    inp
+}
+
+pub fn ret(ret: &[u8]) -> ! {
+    io::stdout().write_all(&ret).unwrap();
+    std::process::exit(0);
+}
+
+pub fn err(err: &[u8]) -> ! {
+    io::stdout().write_all(&err).unwrap();
+    std::process::exit(1);
+}
+
+pub fn read(key: &[u8]) -> Vec<u8> {
+    fs::read(std::str::from_utf8(key).unwrap()).unwrap_or_default()
+}
+
+pub fn write(key: &[u8], value: &[u8]) {
+    fs::write(std::str::from_utf8(key).unwrap(), value).unwrap()
+}
+
+pub fn emit(topics: &[&[u8]], data: &[u8]) {
+    let mut f_log = fs::OpenOptions::new()
+        .append(true)
+        .open(chain_dir!("log"))
+        .unwrap();
+    f_log
+        .write_all(&(topics.len() as u32).to_le_bytes())
+        .unwrap();
+    for topic in topics {
+        f_log
+            .write_all(&(topic.len() as u32).to_le_bytes())
+            .unwrap();
+        f_log.write_all(topic).unwrap();
+    }
+    f_log.write_all(data).unwrap();
+}

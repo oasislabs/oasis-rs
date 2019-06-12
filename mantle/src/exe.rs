@@ -95,17 +95,17 @@ impl Context {
 
     /// Returns the `Address` of the sender of the current RPC.
     pub fn sender(&self) -> Address {
-        self.sender.unwrap_or_else(|| crate::ext::sender())
+        self.sender.unwrap_or_else(crate::backend::sender)
     }
 
     /// Returns the `Address` of the currently executing service.
     /// Panics if not called from within a service RPC.
     pub fn address(&self) -> Address {
-        crate::ext::address()
+        crate::backend::address()
     }
 
     /// Returns the value with which this `Context` was created.
     pub fn value(&self) -> u64 {
-        self.value.unwrap_or_else(crate::ext::value)
+        self.value.unwrap_or_else(crate::backend::value)
     }
 }

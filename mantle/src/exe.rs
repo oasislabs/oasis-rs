@@ -12,25 +12,6 @@ pub trait Service {
 }
 
 pub trait Event {
-    /// A struct implementing the builder pattern for setting topics.
-    ///
-    /// For example,
-    /// ```
-    /// #[derive(Event)]
-    /// struct MyEvent {
-    ///    #[indexed]
-    ///    my_topic: u64
-    ///    #[indexed]
-    ///    my_other_topic: String,
-    /// }
-    ///
-    /// let topics: Vec<Vec<u8>> = MyTopics::Topics::default()
-    ///    .set_my_other_topic("hi".to_string())
-    ///    .hash();
-    /// // topics = vec![0, keccak256(abi_encode(my_other_topic))]
-    /// ```
-    type Topics;
-
     /// Emits an event tagged with the (keccak) hashed function name and topics.
     fn emit(&self);
 }

@@ -155,12 +155,12 @@ pub fn input() -> Vec<u8> {
     input
 }
 
-pub fn ret(ret: Vec<u8>) -> ! {
+pub fn ret(ret: &[u8]) -> ! {
     ext!(mantle_ret(ret.as_ptr(), ret.len() as u32)).unwrap();
     std::process::abort();
 }
 
-pub fn err(err: Vec<u8>) -> ! {
+pub fn err(err: &[u8]) -> ! {
     ext!(mantle_err(err.as_ptr(), err.len() as u32)).unwrap();
     std::process::abort();
 }

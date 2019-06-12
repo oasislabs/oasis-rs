@@ -85,13 +85,13 @@ fn generate_rpc_dispatcher(service_name: Symbol, rpcs: &[(Symbol, MethodSig)]) -
             let ctx = mantle::Context::default(); // TODO(#33)
             let mut service = <{service_ident}>::coalesce();
             let payload: RpcPayload =
-                mantle::reexports::serde_cbor::from_slice(&mantle::ext::input()).unwrap();
+                mantle::reexports::serde_cbor::from_slice(&mantle::backend::input()).unwrap();
             let output = match payload {{
                 {call_tree} // match arms return ABI-encoded vecs
             }};
             match output {{
-                Ok(output) => mantle::ext::ret(output),
-                Err(err) => mantle::ext::err(format!("{{:#?}}", err).into_bytes()),
+                Ok(output) => mantle::backend::ret(&output),
+                Err(err) => mantle::backend::err(&format!("{{:#?}}", err).into_bytes()),
             }}
         }}"#,
         rpc_payload_variants = rpc_payload_variants,
@@ -110,7 +110,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
     let ctor_payload_unpack = if ctor.decl.inputs.len() > 1 {
         format!(
             "let CtorPayload {{ {} }} =
-                    mantle::reexports::serde_cbor::from_slice(&mantle::ext::input()).unwrap();",
+                    mantle::reexports::serde_cbor::from_slice(&mantle::backend::input()).unwrap();",
             ctor_arg_names
         )
     } else {
@@ -132,7 +132,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
                 let mut service = match <{service_ident}>::new(&ctx, {ctor_arg_names}) {{
                     Ok(service) => service,
                     Err(err) => {{
-                        mantle::ext::err(format!("{{:#?}}", err).into_bytes());
+                        mantle::backend::err(&format!("{{:#?}}", err).into_bytes());
                         return 1;
                     }}
                 }};

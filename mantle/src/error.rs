@@ -6,9 +6,6 @@ pub enum Error {
     #[fail(display = "Not enough funds to pay for transaction.")]
     InsufficientFunds,
 
-    #[fail(display = "Execution ran out of gas.")]
-    OutOfGas,
-
     #[fail(display = "Invalid input provided to a transaction.")]
     InvalidInput,
 

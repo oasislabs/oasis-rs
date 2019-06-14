@@ -75,9 +75,6 @@ extern "C" {
     ) -> __wasi_errno_t;
 }
 
-const __WASI_EBAL: __wasi_errno_t = 256; // not enough balance
-const __WASI_EGAS: __wasi_errno_t = 257; // not enough gas
-
 pub fn transact(callee: &Address, value: u64, input: &[u8]) -> Result<Vec<u8>, Error> {
     let mut fd: __wasi_fd_t = 0;
     let errno = unsafe {
@@ -93,8 +90,7 @@ pub fn transact(callee: &Address, value: u64, input: &[u8]) -> Result<Vec<u8>, E
         libc::__WASI_ESUCCESS => (),
         libc::__WASI_EFAULT | libc::__WASI_EINVAL => return Err(Error::InvalidInput),
         libc::__WASI_ENOENT => return Err(Error::NoAccount),
-        __WASI_EBAL => return Err(Error::InsufficientFunds),
-        __WASI_EGAS => return Err(Error::OutOfGas),
+        libc::__WASI_EDQUOT => return Err(Error::InsufficientFunds),
         _ => return Err(Error::Unknown),
     };
     let mut f_out = unsafe { fs::File::from_raw_fd(fd) };

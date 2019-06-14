@@ -49,11 +49,6 @@ extern "C" fn subtx_main(
     let ptx = unsafe { &mut **ptx };
     let subtx = ptx.transact(ADDR_1, 0 /* value */, &ptx.input());
 
-    assert_eq!(
-        subtx.outcome(),
-        blockchain_traits::TransactionOutcome::Success
-    );
-
     if subtx.reverted() {
         dbg!(subtx.outcome());
         ptx.ret(b"error");
@@ -171,13 +166,7 @@ fn static_account() {
         Some(b"value_1".as_ref())
     );
 
-    assert_eq!(
-        bc.last_block()
-            .state_at(&Address::default())
-            .unwrap()
-            .get(common_key),
-        None
-    );
+    assert!(bc.last_block().state_at(&Address::default()).is_none());
     assert_eq!(
         bc.last_block().state_at(&ADDR_1).unwrap().get(&Vec::new()),
         None

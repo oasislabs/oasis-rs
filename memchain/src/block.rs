@@ -104,7 +104,7 @@ impl<'bc> blockchain_traits::Block for Block<'bc> {
             events: Vec::new(),
             output: Vec::new(),
             base_gas: self.base_gas,
-            gas_left: dbg!(dbg!(gas) - self.base_gas),
+            gas_left: gas - self.base_gas,
         };
 
         if let Some(main) = self.state.get(&callee).unwrap().main {

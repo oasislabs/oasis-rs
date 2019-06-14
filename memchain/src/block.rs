@@ -1,370 +1,163 @@
-use std::{borrow::Cow, collections::hash_map::Entry};
+use blockchain_traits::TransactionOutcome;
+use mantle_types::{AccountMeta, Address};
 
-use blockchain_traits::{AccountMetadata, Blockchain, KVError, KVStore};
-use mantle_types::Address;
+use crate::{output::Receipt, pending_transaction::PendingTransaction, State};
 
-use crate::{Account, Log, Receipt, State, Transaction, TransactionOutcome, BASE_GAS};
-
+#[derive(Debug)]
 pub struct Block<'bc> {
-    chain_name: String,
-    state: State<'bc>,
-    pending_transaction: Option<PendingTransaction<'bc>>,
-    completed_transactions: Vec<Receipt>,
-}
-
-struct PendingTransaction<'bc> {
-    state: State<'bc>,
-    logs: Vec<Log>,
-    call_stack: Vec<Transaction>,
-    ret_buf: Vec<u8>,
-    err_buf: Vec<u8>,
-    outcome: TransactionOutcome,
-}
-
-impl<'bc> PendingTransaction<'bc> {
-    fn input(&self) -> Vec<u8> {
-        self.call_stack.last().unwrap().input.to_vec()
-    }
+    pub base_gas: u64,
+    pub height: u64,
+    pub state: State<'bc>,
+    pub completed_transactions: Vec<Receipt>,
 }
 
 impl<'bc> Block<'bc> {
-    pub fn new(chain_name: String, state: State<'bc>) -> Self {
+    pub fn new(height: u64, state: State<'bc>, base_gas: u64) -> Self {
         Self {
-            chain_name,
+            height,
             state,
-            pending_transaction: None,
             completed_transactions: Vec::new(),
-        }
-    }
-
-    pub fn logs(&self) -> Vec<&Log> {
-        self.completed_transactions
-            .iter()
-            .flat_map(|tx| tx.logs.iter())
-            .collect()
-    }
-
-    pub fn create_account(&mut self, address: Address, account: Account) -> bool {
-        match self.current_state_mut().entry(address) {
-            Entry::Occupied(_) => false,
-            Entry::Vacant(v) => {
-                v.insert(Cow::Owned(account));
-                true
-            }
-        }
-    }
-
-    fn pending_transaction(&self) -> Option<&PendingTransaction> {
-        self.pending_transaction.as_ref()
-    }
-
-    fn pending_transaction_mut(&mut self) -> Option<&mut PendingTransaction<'bc>> {
-        self.pending_transaction.as_mut()
-    }
-
-    pub fn current_state(&self) -> &State<'bc> {
-        match &self.pending_transaction {
-            Some(ptx) => &ptx.state,
-            None => &self.state,
-        }
-    }
-
-    fn current_state_mut(&mut self) -> &mut State<'bc> {
-        match &mut self.pending_transaction {
-            Some(ptx) => &mut ptx.state,
-            None => &mut self.state,
-        }
-    }
-
-    pub fn has_pending_transaction(&self) -> bool {
-        self.pending_transaction.is_some()
-    }
-
-    fn parse_addr<'a>(
-        &'a self,
-        addr: &'a <Self as KVStore>::Address,
-    ) -> &'a <Self as KVStore>::Address {
-        match self.pending_transaction() {
-            Some(ptx) if addr == &<Self as KVStore>::Address::default() => {
-                &ptx.call_stack.last().unwrap().callee
-            }
-            _ => addr,
+            base_gas,
         }
     }
 }
 
-impl<'bc> KVStore for Block<'bc> {
+impl<'bc> blockchain_traits::Block for Block<'bc> {
     type Address = Address;
+    type AccountMeta = AccountMeta;
 
-    fn contains(&self, addr: &Address, key: &[u8]) -> Result<bool, KVError> {
-        match self.current_state().get(self.parse_addr(addr)) {
-            Some(acct) => Ok(acct.storage.contains_key(key)),
-            None => Err(KVError::NoAccount),
-        }
-    }
-
-    fn size(&self, address: &Address, key: &[u8]) -> Result<u64, KVError> {
-        Ok(self.get(address, key)?.map(|v| v.len() as u64).unwrap_or(0))
-    }
-
-    fn get(&self, addr: &Address, key: &[u8]) -> Result<Option<&[u8]>, KVError> {
-        match self.current_state().get(self.parse_addr(addr)) {
-            Some(acct) => Ok(acct.storage.get(key).map(Vec::as_slice)),
-            None => Err(KVError::NoAccount),
-        }
-    }
-
-    fn set(&mut self, addr: &Address, key: Vec<u8>, value: Vec<u8>) -> Result<(), KVError> {
-        let addr = *self.parse_addr(addr);
-        match self.current_state_mut().get_mut(&addr) {
-            Some(acct) => {
-                acct.to_mut().storage.insert(key, value);
-                Ok(())
-            }
-            None => Err(KVError::NoAccount),
-        }
-    }
-}
-
-impl<'bc> Blockchain for Block<'bc> {
-    fn name(&self) -> &str {
-        &self.chain_name
+    fn height(&self) -> u64 {
+        self.height
     }
 
     fn transact(
         &mut self,
-        mut caller: Address,
-        callee: Address,
+        caller: Self::Address,
+        callee: Self::Address,
+        payer: Self::Address,
         value: u64,
-        input: Vec<u8>,
+        input: &[u8],
         gas: u64,
         gas_price: u64,
-    ) {
+    ) -> Box<dyn blockchain_traits::Receipt<Address = Self::Address>> {
         let mut receipt = Receipt {
             caller,
             callee,
             value,
             gas_used: gas,
-            ret_buf: Vec::new(),
-            err_buf: Vec::new(),
-            logs: Vec::new(),
+            output: Vec::new(),
+            events: Vec::new(),
             outcome: TransactionOutcome::Success,
         };
 
         macro_rules! early_return {
             ($outcome:ident) => {{
-                match &mut self.pending_transaction {
-                    Some(ptx) => {
-                        ptx.outcome = TransactionOutcome::$outcome;
-                    }
-                    None => {
-                        receipt.outcome = TransactionOutcome::$outcome;
-                        receipt.ret_buf.clear();
-                        receipt.logs.clear();
-                        self.completed_transactions.push(receipt);
-                    }
-                }
-                return;
+                receipt.outcome = TransactionOutcome::$outcome;
+                self.completed_transactions.push(receipt.clone());
+                return box receipt;
             }};
         }
 
-        if let Some(ptx) = &self.pending_transaction {
-            let prev_callee = ptx.call_stack.last().unwrap().callee;
-            if caller == Address::default() {
-                caller = prev_callee;
-            } else if caller != prev_callee {
-                early_return!(InvalidCaller);
-            }
-        };
-
-        // Check callee existence here so that caller balances can be modified
-        // and dropped before `&mut callee` is required.
         if !self.state.contains_key(&callee) {
-            early_return!(NoCallee);
+            early_return!(NoAccount);
         }
 
-        let caller_acct = match self.state.get_mut(&caller) {
-            Some(acct) => acct.to_mut(),
-            None => early_return!(NoCaller),
-        };
-
-        if gas < BASE_GAS {
+        if gas < self.base_gas {
             early_return!(InsufficientGas);
         }
 
-        if caller_acct.balance < (gas * gas_price + value) {
-            caller_acct.balance = 0;
-            early_return!(InsuffientFunds)
-        }
-        caller_acct.balance -= gas * gas_price;
-
-        let callee_acct = match self.state.get_mut(&callee) {
-            Some(acct) => acct.to_mut(),
-            None => early_return!(NoCallee),
+        match self.state.get_mut(&payer) {
+            Some(payer_acct) => {
+                let payer_acct = payer_acct.to_mut();
+                let gas_cost = gas * gas_price;
+                if payer_acct.balance < gas_cost {
+                    payer_acct.balance = 0;
+                    early_return!(InsufficientFunds);
+                }
+                payer_acct.balance -= gas_cost;
+            }
+            None => early_return!(NoAccount),
         };
 
-        let tx = Transaction {
+        let mut ptx_state = self.state.clone();
+
+        match ptx_state.get_mut(&caller) {
+            Some(caller_acct) => {
+                let caller_acct = caller_acct.to_mut();
+                if caller_acct.balance < value {
+                    early_return!(InsufficientFunds);
+                }
+                caller_acct.balance -= value;
+            }
+            None => early_return!(NoAccount),
+        };
+
+        ptx_state.get_mut(&callee).unwrap().to_mut().balance += value;
+
+        let mut pending_transaction = PendingTransaction {
             caller,
             callee,
             value,
-            input,
-            gas,
+            input: input.to_vec(),
+            outcome: TransactionOutcome::Success,
+            state: ptx_state,
+            events: Vec::new(),
+            output: Vec::new(),
+            base_gas: self.base_gas,
+            gas_left: dbg!(dbg!(gas) - self.base_gas),
         };
 
-        let main_fn = callee_acct.main;
-
-        match &mut self.pending_transaction {
-            Some(ptx) => {
-                ptx.call_stack.push(tx);
-            }
-            None => {
-                self.pending_transaction = Some(PendingTransaction {
-                    state: self.state.clone(),
-                    logs: Vec::new(),
-                    call_stack: vec![tx],
-                    ret_buf: Vec::new(),
-                    err_buf: Vec::new(),
-                    outcome: TransactionOutcome::Success,
-                })
-            }
-        }
-
-        if let Some(main) = main_fn {
-            let bci: &mut dyn Blockchain<Address = Address> = self;
+        if let Some(main) = self.state.get(&callee).unwrap().main {
+            let ptx: &mut dyn blockchain_traits::PendingTransaction<
+                Address = Address,
+                AccountMeta = AccountMeta,
+            > = &mut pending_transaction;
             let errno = main(unsafe {
                 // Extend the lifetime, as required by the FFI type.
                 // This is only unsafe if the `main` fn stores the pointer,
                 // but this is disallowed by the precondition on `main`.
-                &(std::mem::transmute::<&mut _, &'static mut _>(bci) as *mut _) as *const _
+                &(std::mem::transmute::<&mut _, &'static mut _>(ptx) as *mut _) as *const _
             });
-            if errno == 0 {
-                // success
-                let ptx = self.pending_transaction_mut().unwrap();
-                ptx.state.get_mut(&caller).unwrap().to_mut().balance -= value;
-                ptx.state.get_mut(&callee).unwrap().to_mut().balance += value;
-            } else {
-                self.pending_transaction.as_mut().unwrap().outcome = TransactionOutcome::Aborted;
+            if errno != 0 {
+                pending_transaction.outcome = TransactionOutcome::Aborted;
             }
         }
 
-        self.pending_transaction.as_mut().unwrap().call_stack.pop();
-        if self
-            .pending_transaction
-            .as_ref()
-            .unwrap()
-            .call_stack
-            .is_empty()
-        {
-            let ptx = self.pending_transaction.take().unwrap();
-            receipt.outcome = ptx.outcome;
-            receipt.ret_buf = ptx.ret_buf;
-            receipt.err_buf = ptx.err_buf;
-            receipt.logs = ptx.logs;
-            if receipt.outcome.reverted() {
-                receipt.ret_buf.clear();
-                receipt.logs.clear();
-            } else {
-                self.state = ptx.state;
-            }
-            self.completed_transactions.push(receipt);
+        receipt.outcome = pending_transaction.outcome;
+        receipt.output = pending_transaction.output;
+        if blockchain_traits::Receipt::reverted(&receipt) {
+            receipt.events.clear();
+        } else {
+            self.state = pending_transaction.state;
+            receipt.events.append(&mut pending_transaction.events);
         }
+        self.completed_transactions.push(receipt.clone());
+        box receipt
     }
 
-    fn fetch_input(&self) -> Vec<u8> {
-        self.pending_transaction()
-            .map(|tx| tx.input().clone())
-            .unwrap_or_default()
+    fn code_at(&self, addr: &Self::Address) -> Option<&[u8]> {
+        self.state.get(addr).map(|acct| acct.code.as_ref())
     }
 
-    fn input_len(&self) -> u32 {
-        self.pending_transaction()
-            .map(|tx| tx.input().len() as u32)
-            .unwrap_or_default()
-    }
-
-    fn ret(&mut self, data: Vec<u8>) {
-        if let Some(tx) = self.pending_transaction_mut() {
-            tx.ret_buf = data
-        }
-    }
-
-    fn err(&mut self, data: Vec<u8>) {
-        if let Some(tx) = self.pending_transaction_mut() {
-            tx.err_buf = data
-        }
-    }
-
-    fn fetch_ret(&self) -> Vec<u8> {
-        match &self.pending_transaction {
-            Some(ptx) => ptx.ret_buf.to_vec(),
-            None => self
-                .completed_transactions
-                .last()
-                .map(|tx| tx.ret_buf.clone())
-                .unwrap_or_default(),
-        }
-    }
-
-    fn ret_len(&self) -> u32 {
-        self.fetch_ret().len() as u32
-    }
-
-    fn fetch_err(&self) -> Vec<u8> {
-        match &self.pending_transaction {
-            Some(ptx) => ptx.err_buf.to_vec(),
-            None => self
-                .completed_transactions
-                .last()
-                .map(|tx| tx.err_buf.clone())
-                .unwrap_or_default(),
-        }
-    }
-
-    fn err_len(&self) -> u32 {
-        self.fetch_err().len() as u32
-    }
-
-    fn emit(&mut self, topics: Vec<[u8; 32]>, data: Vec<u8>) {
-        if let Some(tx) = self.pending_transaction_mut() {
-            tx.logs.push(Log { topics, data })
-        }
-    }
-
-    fn code_at(&self, addr: &Address) -> Option<&[u8]> {
-        self.current_state()
-            .get(&addr)
-            .map(|acct| acct.code.as_slice())
-    }
-
-    fn code_len(&self, addr: &Address) -> u32 {
-        self.current_state()
-            .get(&addr)
-            .map(|acct| acct.code.len() as u32)
-            .unwrap_or_default()
-    }
-
-    fn metadata_at(&self, addr: &Address) -> Option<AccountMetadata> {
-        self.current_state().get(&addr).map(|acct| AccountMetadata {
+    fn account_meta_at(&self, addr: &Self::Address) -> Option<Self::AccountMeta> {
+        self.state.get(addr).map(|acct| AccountMeta {
             balance: acct.balance,
             expiry: acct.expiry,
         })
     }
 
-    fn value(&self) -> u64 {
-        self.pending_transaction()
-            .map(|tx| tx.call_stack.last().unwrap().value)
-            .expect("No pending transaction.")
+    fn state_at(&self, addr: &Self::Address) -> Option<&dyn blockchain_traits::KVStore> {
+        self.state.get(addr).map(|acct| &**acct as _)
     }
 
-    fn gas(&self) -> u64 {
-        self.pending_transaction()
-            .map(|tx| tx.call_stack.last().unwrap().gas)
-            .expect("No pending transaction.")
+    fn events(&self) -> Vec<&dyn blockchain_traits::Event<Address = Self::Address>> {
+        self.completed_transactions
+            .iter()
+            .flat_map(|r| blockchain_traits::Receipt::events(r))
+            .collect()
     }
 
-    fn sender(&self) -> &Address {
-        self.pending_transaction()
-            .map(|tx| &tx.call_stack.last().unwrap().caller)
-            .expect("No pending transaction.")
+    fn receipts(&self) -> Vec<&dyn blockchain_traits::Receipt<Address = Self::Address>> {
+        self.completed_transactions.iter().map(|r| r as _).collect()
     }
 }

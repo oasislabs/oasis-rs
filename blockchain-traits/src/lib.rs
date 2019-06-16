@@ -88,7 +88,7 @@ pub trait PendingTransaction {
     fn value(&self) -> u64;
 
     /// Returns the input provided by the calling context.
-    fn input(&self) -> Vec<u8>;
+    fn input(&self) -> &[u8];
 
     /// Executes a balance-transferring RPC to `callee` with provided input and value.
     /// The new transaction will inherit the gas parameters and gas payer of the top level
@@ -161,7 +161,7 @@ pub trait Receipt {
     fn outcome(&self) -> TransactionOutcome;
 
     /// Returns the output of the transaction.
-    fn output(&self) -> Vec<u8>;
+    fn output(&self) -> &[u8];
 }
 
 pub trait Event {
@@ -170,9 +170,9 @@ pub trait Event {
     /// The address of the contract that emitted this event.
     fn emitter(&self) -> &Self::Address;
 
-    fn topics(&self) -> Vec<Vec<u8>>;
+    fn topics(&self) -> Vec<&[u8]>;
 
-    fn data(&self) -> Vec<u8>;
+    fn data(&self) -> &[u8];
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

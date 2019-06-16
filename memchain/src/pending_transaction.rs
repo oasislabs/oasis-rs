@@ -36,8 +36,8 @@ impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
         self.value
     }
 
-    fn input(&self) -> Vec<u8> {
-        self.input.clone()
+    fn input(&self) -> &[u8] {
+        self.input.as_slice()
     }
 
     fn transact(

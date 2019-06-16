@@ -548,7 +548,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
 
         let nbytes = match &file.kind {
             FileKind::Stdout | FileKind::Stderr | FileKind::Log => return Err(ErrNo::Inval),
-            FileKind::Stdin => ptx.input().as_slice().read_vectored(bufs)?,
+            FileKind::Stdin => ptx.input().read_vectored(bufs)?,
             FileKind::Bytecode {
                 addr: crate::AnyAddress::Native(addr),
             } => match ptx.code_at(addr) {
@@ -568,9 +568,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
                 };
                 bytes.read_vectored(bufs)?
             }
-            FileKind::ServiceSock { receipt, .. } => {
-                receipt.output().as_slice().read_vectored(bufs)?
-            }
+            FileKind::ServiceSock { receipt, .. } => receipt.output().read_vectored(bufs)?,
             _ => return Err(ErrNo::Fault),
         };
 

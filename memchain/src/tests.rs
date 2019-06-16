@@ -28,7 +28,7 @@ extern "C" fn simple_main(
 
     ptx.emit(vec![[42u8; 32].as_ref()].as_slice(), &[0u8; 3]);
 
-    let mut rv = ptx.input();
+    let mut rv = ptx.input().to_vec();
     rv.push(4);
     ptx.ret(&rv);
 
@@ -47,7 +47,7 @@ extern "C" fn subtx_main(
     ptx: *const *mut dyn PendingTransaction<Address = Address, AccountMeta = AccountMeta>,
 ) -> u16 {
     let ptx = unsafe { &mut **ptx };
-    let subtx = ptx.transact(ADDR_1, 0 /* value */, &ptx.input());
+    let subtx = ptx.transact(ADDR_1, 0 /* value */, &ptx.input().to_vec());
 
     if subtx.reverted() {
         dbg!(subtx.outcome());
@@ -57,7 +57,7 @@ extern "C" fn subtx_main(
 
     ptx.state_mut().set(b"common_key", b"uncommon_value");
 
-    let mut rv = subtx.output();
+    let mut rv = subtx.output().to_vec();
     rv.push(5);
     ptx.ret(&rv);
     0
@@ -180,7 +180,7 @@ fn simple_tx() {
         .transact(ADDR_2, ADDR_1, ADDR_1, 50, &[1u8, 2, 3], BASE_GAS, 0);
     assert_eq!(
         bc.last_block().receipts().last().unwrap().output(),
-        vec![1u8, 2, 3, 4]
+        &[1u8, 2, 3, 4]
     );
 }
 
@@ -213,13 +213,13 @@ fn subtx_ok() {
 
     assert_eq!(
         bc.last_block().receipts().last().unwrap().output(),
-        vec![1, 2, 3, 4, 5]
+        &[1, 2, 3, 4, 5]
     );
 
     let events = bc.last_block().events();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].topics(), vec![[42u8; 32]]);
-    assert_eq!(events[0].data(), vec![0u8; 3]);
+    assert_eq!(events[0].data(), &[0, 0, 0]);
 
     assert_eq!(
         bc.last_block()

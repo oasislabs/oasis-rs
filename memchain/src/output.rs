@@ -38,8 +38,8 @@ impl blockchain_traits::Receipt for Receipt {
         }
     }
 
-    fn output(&self) -> Vec<u8> {
-        self.output.clone()
+    fn output(&self) -> &[u8] {
+        self.output.as_slice()
     }
 
     fn outcome(&self) -> TransactionOutcome {
@@ -61,11 +61,11 @@ impl blockchain_traits::Event for Event {
         &self.emitter
     }
 
-    fn topics(&self) -> Vec<Vec<u8>> {
-        self.topics.iter().map(|h| h.to_vec()).collect()
+    fn topics(&self) -> Vec<&[u8]> {
+        self.topics.iter().map(AsRef::as_ref).collect()
     }
 
-    fn data(&self) -> Vec<u8> {
-        self.data.clone()
+    fn data(&self) -> &[u8] {
+        self.data.as_slice()
     }
 }

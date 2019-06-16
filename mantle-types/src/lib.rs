@@ -88,11 +88,11 @@ impl blockchain_traits::Event for Event {
         &self.emitter
     }
 
-    fn topics(&self) -> Vec<Vec<u8>> {
-        self.topics.clone()
+    fn topics(&self) -> Vec<&[u8]> {
+        self.topics.iter().map(Vec::as_slice).collect()
     }
 
-    fn data(&self) -> Vec<u8> {
-        self.data.clone()
+    fn data(&self) -> &[u8] {
+        self.data.as_slice()
     }
 }

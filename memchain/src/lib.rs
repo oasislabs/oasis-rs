@@ -16,12 +16,11 @@ use block::Block;
 
 type State<'bc> = HashMap<Address, Cow<'bc, Account>>;
 
-pub type EntryFn = extern "C" fn(
-    *const *mut dyn blockchain_traits::PendingTransaction<
-        Address = Address,
-        AccountMeta = AccountMeta,
-    >,
-) -> u16;
+pub type PtxPtr = *const *mut dyn blockchain_traits::PendingTransaction<
+    Address = Address,
+    AccountMeta = AccountMeta,
+>;
+pub type AccountMain = extern "C" fn(PtxPtr) -> u16;
 
 #[derive(Debug)]
 pub struct Memchain<'bc> {
@@ -103,7 +102,7 @@ pub struct Account {
     /// `Blockchain` trait object which can be used via FFI bindings
     /// to interact with the memchain. Returns nonzero to revert transaction.
     /// This pointer is not valid after the call to `main` has returned.
-    pub main: Option<EntryFn>,
+    pub main: Option<AccountMain>,
 }
 
 impl blockchain_traits::KVStore for Account {

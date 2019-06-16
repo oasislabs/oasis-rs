@@ -60,7 +60,7 @@ pub struct ExtStatusCode(pub u32);
 impl ExtStatusCode {
     pub const Success: ExtStatusCode = ExtStatusCode(0);
     pub const InsufficientFunds: ExtStatusCode = ExtStatusCode(1);
-    pub const OutOfGas: ExtStatusCode = ExtStatusCode(2);
+    pub const InvalidInput: ExtStatusCode = ExtStatusCode(2);
     pub const NoAccount: ExtStatusCode = ExtStatusCode(3);
 }
 

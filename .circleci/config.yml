@@ -114,6 +114,10 @@ jobs:
           name: Test auctions example
           working_directory: examples/sealed-auctions
           command: cargo test
+      - run:
+          name: Test ERC20 example
+          working_directory: examples/erc20
+          command: cargo test --tests -- --test-threads 1
 
   test_idl:
     docker:

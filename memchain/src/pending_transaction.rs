@@ -51,7 +51,7 @@ impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
             caller,
             callee,
             value,
-            gas_used: 42, // TODO
+            gas_used: 0, // TODO(#116)
             output: Vec::new(),
             events: Vec::new(),
             outcome: TransactionOutcome::Success,

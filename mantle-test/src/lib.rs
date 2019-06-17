@@ -1,7 +1,6 @@
 mod ext;
 
 use std::cell::RefCell;
-// use std::collections::HashMap;
 
 use blockchain_traits::Blockchain as _;
 use mantle_types::Address;
@@ -41,12 +40,13 @@ pub fn create_account(initial_balance: u64) -> Address {
             }
         });
 
+        // TODO(#77)
         memchain.last_block_mut().transact(
             SEED_ADDR,
             new_addr,
             SEED_ADDR,
             initial_balance,
-            &[],
+            &[], /* input */
             BASE_GAS,
             0, /* gas price */
         );

@@ -31,13 +31,6 @@ impl blockchain_traits::Receipt for Receipt {
         self.events.iter().map(|e| e as _).collect()
     }
 
-    fn reverted(&self) -> bool {
-        match self.outcome {
-            TransactionOutcome::Success => false,
-            _ => true,
-        }
-    }
-
     fn output(&self) -> &[u8] {
         self.output.as_slice()
     }

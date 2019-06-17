@@ -154,14 +154,19 @@ pub trait Receipt {
     /// Returns the events emitted during the transaction.
     fn events(&self) -> Vec<&dyn Event<Address = Self::Address>>;
 
-    /// Returns whether the transaction that produced this receipt was reverted.
-    fn reverted(&self) -> bool;
-
     /// Returns the outcome of this transaction.
     fn outcome(&self) -> TransactionOutcome;
 
     /// Returns the output of the transaction.
     fn output(&self) -> &[u8];
+
+    /// Returns whether the transaction that produced this receipt was reverted.
+    fn reverted(&self) -> bool {
+        match self.outcome() {
+            TransactionOutcome::Success => false,
+            _ => true,
+        }
+    }
 }
 
 pub trait Event {

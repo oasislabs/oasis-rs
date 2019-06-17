@@ -210,6 +210,10 @@ impl MessageBoard {
     }
 }
 
+fn main() {
+    mantle::service!(MessageBoard);
+}
+
 #[cfg(test)]
 mod tests {
     extern crate mantle_test;

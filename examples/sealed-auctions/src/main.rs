@@ -1,13 +1,13 @@
+extern crate chrono;
 #[macro_use]
 extern crate serde; // Provides `Serialize` and `Deserialize`.
-extern crate chrono;
 
 pub mod types;
 
-use mantle::{Context, Event, Service};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use chrono::Utc;
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use mantle::{Context, Event, Service};
 
 use crate::types::*;
 
@@ -83,15 +83,11 @@ impl AuctionMarket {
     /// Get an artifact by item_id
     pub fn get_artifact(&mut self, _ctx: &Context, item_id: ItemId) -> Result<Artifact> {
         if !self.artifacts.contains_key(&item_id) {
-            return Err(Error::InvalidItem {
-                item_id,
-            });
+            return Err(Error::InvalidItem { item_id });
         }
         // If the item is currently in auction then you cannot get it
         if self.auctions.contains_key(&item_id) {
-            return Err(Error::ItemInLiveAuction {
-                item_id,
-            });
+            return Err(Error::ItemInLiveAuction { item_id });
         }
         let artifact = self.artifacts.get(&item_id).unwrap();
         Ok(artifact.clone())
@@ -113,21 +109,15 @@ impl AuctionMarket {
     ) -> Result<Auction> {
         // check that the item is owned by the person who wants to start the auction
         let artifact = match self.artifacts.entry(item_id) {
-            Entry::Vacant(ve) => return Err(Error::InvalidItem {
-                item_id: *ve.key(),
-            }),
+            Entry::Vacant(ve) => return Err(Error::InvalidItem { item_id: *ve.key() }),
             Entry::Occupied(oe) => oe.into_mut(),
         };
         if artifact.owner != ctx.sender() {
-            return Err(Error::InvalidOwner {
-                item_id,
-            });
+            return Err(Error::InvalidOwner { item_id });
         }
         // if the item is already being auctioned then err
         if self.auctions.contains_key(&item_id) {
-            return Err(Error::ItemInLiveAuction {
-                item_id,
-            });
+            return Err(Error::ItemInLiveAuction { item_id });
         }
 
         // build a new auction object
@@ -150,11 +140,7 @@ impl AuctionMarket {
     /// on the blacklist
     pub fn place_bid(&mut self, ctx: &Context, item_id: ItemId, value: u64) -> Result<()> {
         let auction = match self.auctions.entry(item_id) {
-            Entry::Vacant(ve) => {
-                return Err(Error::ItemNotActive {
-                    item_id: *ve.key(),
-                })
-            }
+            Entry::Vacant(ve) => return Err(Error::ItemNotActive { item_id: *ve.key() }),
             Entry::Occupied(oe) => oe.into_mut(),
         };
         if auction.seller == ctx.sender() {
@@ -201,20 +187,14 @@ impl AuctionMarket {
     /// Only the seller can close an auction
     pub fn close_auction(&mut self, ctx: &Context, item_id: ItemId) -> Result<Auction> {
         let mut auction = match self.auctions.entry(item_id) {
-            Entry::Vacant(ve) => {
-                return Err(Error::ItemNotActive {
-                    item_id: *ve.key(),
-                })
-            }
+            Entry::Vacant(ve) => return Err(Error::ItemNotActive { item_id: *ve.key() }),
             Entry::Occupied(_) => self.auctions.remove(&item_id).unwrap(),
         };
         if auction.seller != ctx.sender() {
             return Err(Error::InvalidCloseRequest);
         }
         if auction.bids.keys().len() == 0 {
-            return Err(Error::InsufficientBids {
-                item_id,
-            });
+            return Err(Error::InsufficientBids { item_id });
         }
 
         // get artifact
@@ -248,11 +228,17 @@ impl AuctionMarket {
     }
 }
 
+fn main() {
+    mantle::service!(AuctionMarket);
+}
+
 #[cfg(test)]
 mod tests {
+    extern crate mantle_test;
+
     use super::*;
-    use std::time::Duration;
     use mantle::{Address, Context};
+    use std::time::Duration;
 
     /// Creates a new account and a `Context` with the new account as the sender.
     fn create_account() -> (Address, Context) {
@@ -274,35 +260,24 @@ mod tests {
         let artifact = am
             .add_item(&fctx, 100, "Roman Leewen Pugio Dagger".to_string())
             .unwrap();
-        std::eprintln!("{:?}", artifact);
+        eprintln!("{:?}", artifact);
         assert_eq!(artifact.base.item_id, 0);
         assert_eq!(artifact.base.description, "Roman Leewen Pugio Dagger");
         assert_eq!(artifact.value, 100);
 
         // He then starts an auction for his item
         let auction = am.start_auction(&fctx, artifact.base.item_id, 100).unwrap();
-        std::eprintln!("Auction start state: {:?}", auction);
+        eprintln!("Auction start state: {:?}", auction);
 
         // Caesar bids
-        match am.place_bid(&cctx, artifact.base.item_id, 200) {
-            Ok(_) => assert!(true),
-            Err(e) => {
-                std::println!("ERROR: {}", e);
-                assert!(false);
-            }
-        };
+        am.place_bid(&cctx, artifact.base.item_id, 200).unwrap();
+
         // Brutus bids to which Caesar remarks "Et tu, Brute?"
-        match am.place_bid(&bctx, artifact.base.item_id, 400) {
-            Ok(_) => assert!(true),
-            Err(e) => {
-                std::println!("ERROR: {}", e);
-                assert!(false);
-            }
-        }
+        am.place_bid(&bctx, artifact.base.item_id, 400).unwrap();
 
         // Fulliautomatix, tired of living under the Roman yoke, closes the auction
         let closed_auction = am.close_auction(&fctx, artifact.base.item_id).unwrap();
-        std::eprintln!("Auction close state: {:?}", closed_auction);
+        eprintln!("Auction close state: {:?}", closed_auction);
 
         assert_eq!(closed_auction.buyer, _brutus);
         assert_eq!(closed_auction.realized, 200);
@@ -323,55 +298,27 @@ mod tests {
         let artifact = am
             .add_item(&fctx, 100, "Roman Leewen Pugio Dagger".to_string())
             .unwrap();
-        std::eprintln!("{:?}", artifact);
+        eprintln!("{:?}", artifact);
 
         // Someone other than fulliautomatix attempts to start the auction
-        match am.start_auction(&bctx, artifact.base.item_id, 100) {
-            Ok(_) => assert!(false),
-            Err(e) => {
-                std::eprintln!("ERROR: {}", e);
-                assert!(true);
-            }
-        };
+        am.start_auction(&bctx, artifact.base.item_id, 100)
+            .unwrap_err();
 
         // fulliautomatix starts the auction
         let auction = am.start_auction(&fctx, artifact.base.item_id, 100).unwrap();
-        std::eprintln!("Auction start state: {:?}", auction);
+        eprintln!("Auction start state: {:?}", auction);
 
         // Parsimonious Caesar bids
-        match am.place_bid(&cctx, artifact.base.item_id, 10) {
-            Ok(_) => assert!(false),
-            Err(e) => {
-                std::eprintln!("ERROR: {}", e);
-                assert!(true);
-            }
-        }
+        am.place_bid(&cctx, artifact.base.item_id, 10).unwrap_err();
 
         // Caesar revises his bid
-        match am.place_bid(&cctx, artifact.base.item_id, 300) {
-            Ok(_) => assert!(true),
-            Err(e) => {
-                std::println!("ERROR: {}", e);
-                assert!(false);
-            }
-        };
+        am.place_bid(&cctx, artifact.base.item_id, 300).unwrap();
+
         // Brutus thinks he knows the mind of Caesar, the son of a she-wolf
-        match am.place_bid(&bctx, artifact.base.item_id, 200) {
-            Ok(_) => assert!(false),
-            Err(e) => {
-                std::println!("ERROR: {}", e);
-                assert!(true);
-            }
-        }
+        am.place_bid(&bctx, artifact.base.item_id, 200).unwrap_err();
 
         // Brutus quickly re-bids lest he loses his precious cargo
-        match am.place_bid(&bctx, artifact.base.item_id, 400) {
-            Ok(_) => assert!(true),
-            Err(e) => {
-                std::println!("ERROR: {}", e);
-                assert!(false);
-            }
-        }
+        am.place_bid(&bctx, artifact.base.item_id, 400).unwrap();
 
         let two_seconds = Duration::new(2, 0);
         std::thread::sleep(two_seconds);
@@ -379,18 +326,15 @@ mod tests {
         // Fulliautomatix, tired of living under the Roman yoke, siezes the opportunity and
         // closes the auction
         let closed_auction = am.close_auction(&fctx, artifact.base.item_id).unwrap();
-        std::eprintln!("Auction close state: {:?}", closed_auction);
+        eprintln!("Auction close state: {:?}", closed_auction);
 
         assert_eq!(closed_auction.buyer, _brutus);
         assert_eq!(closed_auction.realized, 300);
 
-        std::eprintln!(
+        eprintln!(
             "{:?}",
             am.get_artifact(&fctx, artifact.base.item_id).unwrap()
         );
-        std::eprintln!(
-            "Market size = {:?}",
-            am.get_market_size(&fctx).unwrap()
-        );
+        eprintln!("Market size = {:?}", am.get_market_size(&fctx).unwrap());
     }
 }

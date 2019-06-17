@@ -72,12 +72,13 @@ fn generate_rpc_dispatcher(service_name: Symbol, rpcs: &[(Symbol, MethodSig)]) -
         .collect::<String>();
 
     parse!(format!(r#"{{
+        #[allow(warnings)]
+        {{
             use mantle::reexports::serde::{{Serialize, Deserialize}};
             use mantle::Service as _;
 
             #[derive(Serialize, Deserialize)]
             #[serde(tag = "method", content = "payload")]
-            #[allow(non_camel_case_types)]
             enum RpcPayload {{
                 {rpc_payload_variants}
             }}
@@ -93,6 +94,7 @@ fn generate_rpc_dispatcher(service_name: Symbol, rpcs: &[(Symbol, MethodSig)]) -
                 Ok(output) => mantle::backend::ret(&output),
                 Err(err) => mantle::backend::err(&format!("{{:#?}}", err).into_bytes()),
             }}
+        }}
         }}"#,
         rpc_payload_variants = rpc_payload_variants,
         service_ident = service_name.as_str().get(),
@@ -117,6 +119,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
         String::new()
     };
     parse!(format!(r#"
+            #[allow(warnings)]
             #[no_mangle]
             extern "C" fn _mantle_deploy() -> u8 {{
                 use mantle::Service as _;

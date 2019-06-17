@@ -39,6 +39,7 @@ jobs:
         environment:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
           LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
+          MANTLE_BLOCKCHAIN_NAME: oasis
     steps:
       - checkout
       - restore_cache:
@@ -46,14 +47,15 @@ jobs:
             - mantle-build-{{ .Revision }}
       - run:
           name: Unit tests
-          command: cargo test --tests
+          command: cargo test
 
-  test_examples:
+  test_ballot_example:
     docker:
       - image: nhdh/rust:latest
         environment:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
           LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
+          MANTLE_BLOCKCHAIN_NAME: oasis
     resource_class: xlarge
     steps:
       - checkout
@@ -61,17 +63,56 @@ jobs:
           keys:
             - mantle-build-{{ .Revision }}
       - run:
+          name: Build ballot example
+          command: cargo build --target wasm32-wasi
+      - run:
           name: Test ballot example
           working_directory: examples/ballot
-          command: cargo test --tests
+          command: cargo test
+
+  test_messaging_example:
+    docker:
+      - image: nhdh/rust:latest
+        environment:
+          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
+          MANTLE_BLOCKCHAIN_NAME: oasis
+    resource_class: xlarge
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - mantle-build-{{ .Revision }}
+      - run:
+          name: Build messaging example
+          working_directory: examples/messaging
+          command: cargo build --target wasm32-wasi
       - run:
           name: Test messaging example
           working_directory: examples/messaging
-          command: cargo test --tests
+          command: cargo test
+
+  test_auctions_example:
+    docker:
+      - image: nhdh/rust:latest
+        environment:
+          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
+          MANTLE_BLOCKCHAIN_NAME: oasis
+    resource_class: xlarge
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - mantle-build-{{ .Revision }}
       - run:
-          name: Test auction example
+          name: Build auctions example
           working_directory: examples/sealed-auctions
-          command: cargo test --tests -- --test-threads 1
+          command: cargo build --target wasm32-wasi
+      - run:
+          name: Test auctions example
+          working_directory: examples/sealed-auctions
+          command: cargo test
 
   test_idl:
     docker:
@@ -79,6 +120,7 @@ jobs:
         environment:
           PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
           LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
+          MANTLE_BLOCKCHAIN_NAME: oasis
     resource_class: xlarge
     steps:
       - checkout
@@ -88,7 +130,7 @@ jobs:
       - run:
           name: Test IDL generation
           working_directory: tests/idl_gen
-          command: cargo test --tests --features mantle-build-test
+          command: cargo test --features mantle-build-test
 
 workflows:
   version: 2
@@ -98,12 +140,18 @@ workflows:
       - unit_test:
           requires:
             - init
+      - wasm_build:
+          requires:
+            - init
       - test_idl:
           requires:
             - init
-      - test_examples:
+      - test_ballot_example:
           requires:
             - init
-      - wasm_build:
+      - test_messaging_example:
+          requires:
+            - init
+      - test_auctions_example:
           requires:
             - init

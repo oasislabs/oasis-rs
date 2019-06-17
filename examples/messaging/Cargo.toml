@@ -14,7 +14,3 @@ serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
 mantle-test = { git = "https://github.com/oasislabs/mantle" }
-
-[patch."https://github.com/oasislabs/mantle"]
-mantle = { path = "../../mantle" }
-mantle-test = { path = "../../mantle-test" }

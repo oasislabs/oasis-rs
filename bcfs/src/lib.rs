@@ -1,8 +1,5 @@
 #![feature(bind_by_move_pattern_guards, cell_update)]
 
-// #[cfg(feature = "ffi")]
-// pub mod ffi;
-
 type Result<T> = std::result::Result<T, wasi_types::ErrNo>;
 
 mod bcfs;

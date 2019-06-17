@@ -2,8 +2,6 @@
 #![feature(box_syntax)]
 
 mod block;
-// #[cfg(features = "ffi")]
-// pub mod ffi;
 mod output;
 mod pending_transaction;
 

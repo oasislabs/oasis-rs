@@ -1,10 +1,11 @@
 #![feature(bind_by_move_pattern_guards, linkage, non_exhaustive, trait_alias)]
+#![cfg_attr(target_os = "wasi", feature(wasi_ext))]
 
 extern crate mantle_macros;
 
+pub mod backend;
 pub mod error;
 pub mod exe;
-pub mod ext;
 
 pub mod reexports {
     pub use serde;
@@ -15,7 +16,7 @@ pub mod reexports {
 pub use mantle_macros::{Event, Service};
 pub use mantle_types::Address;
 
-pub use crate::exe::*;
+pub use crate::{error::Error, exe::*};
 
 /// This macro is used to define the "main" service.
 ///
@@ -32,17 +33,23 @@ macro_rules! service {
 }
 
 pub trait AddressExt {
-    fn transfer<'a>(&self, value: u64) -> Result<(), crate::error::Error>;
+    fn transfer(&self, value: u64) -> Result<(), crate::error::Error>;
 
     fn balance(&self) -> u64;
+
+    fn code(&self) -> Vec<u8>;
 }
 
 impl AddressExt for Address {
-    fn transfer<'a>(&self, value: u64) -> Result<(), crate::error::Error> {
-        crate::ext::transfer(self, value)
+    fn transfer(&self, value: u64) -> Result<(), crate::error::Error> {
+        crate::backend::transact(self, value, &[]).map(|_| ())
     }
 
     fn balance(&self) -> u64 {
-        crate::ext::balance(self).unwrap()
+        crate::backend::balance(self).unwrap()
+    }
+
+    fn code(&self) -> Vec<u8> {
+        crate::backend::code(self).unwrap()
     }
 }

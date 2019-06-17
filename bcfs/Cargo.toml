@@ -20,7 +20,6 @@ wasi-types = "0.1"
 [dev-dependencies]
 hex = "0.3"
 memchain = { version = "0.1", path = "../memchain" }
-proptest = "0.9"
 
 [features]
 ffi = []

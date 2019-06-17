@@ -60,6 +60,39 @@ pub struct ExtStatusCode(pub u32);
 impl ExtStatusCode {
     pub const Success: ExtStatusCode = ExtStatusCode(0);
     pub const InsufficientFunds: ExtStatusCode = ExtStatusCode(1);
-    pub const OutOfGas: ExtStatusCode = ExtStatusCode(2);
+    pub const InvalidInput: ExtStatusCode = ExtStatusCode(2);
     pub const NoAccount: ExtStatusCode = ExtStatusCode(3);
+}
+
+pub struct AccountMeta {
+    pub balance: u64,
+    pub expiry: Option<std::time::Duration>,
+}
+
+impl blockchain_traits::AccountMeta for AccountMeta {
+    fn balance(&self) -> u64 {
+        self.balance
+    }
+}
+
+pub struct Event {
+    pub emitter: Address,
+    pub topics: Vec<Vec<u8>>,
+    pub data: Vec<u8>,
+}
+
+impl blockchain_traits::Event for Event {
+    type Address = Address;
+
+    fn emitter(&self) -> &Self::Address {
+        &self.emitter
+    }
+
+    fn topics(&self) -> Vec<&[u8]> {
+        self.topics.iter().map(Vec::as_slice).collect()
+    }
+
+    fn data(&self) -> &[u8] {
+        self.data.as_slice()
+    }
 }

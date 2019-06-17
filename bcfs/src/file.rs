@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use blockchain_traits::Address;
+use blockchain_traits::{Address, Receipt};
 use wasi_types::{FdFlags, FileStat};
 
 use crate::AnyAddress;
@@ -24,10 +24,19 @@ pub enum FileKind<A: Address> {
     Stdout,
     Stderr,
     Log,
-    Regular { key: Vec<u8> },
-    ServiceSock { addr: AnyAddress<A> },
-    Bytecode { addr: AnyAddress<A> },
-    Balance { addr: AnyAddress<A> },
+    Regular {
+        key: Vec<u8>,
+    },
+    ServiceSock {
+        addr: AnyAddress<A>,
+        receipt: Box<dyn Receipt<Address = A>>,
+    },
+    Bytecode {
+        addr: AnyAddress<A>,
+    },
+    Balance {
+        addr: AnyAddress<A>,
+    },
 }
 
 #[derive(Clone, Copy, Debug)]

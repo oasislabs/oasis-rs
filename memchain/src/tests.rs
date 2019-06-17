@@ -1,64 +1,76 @@
 #![cfg(test)]
 
+use blockchain_traits::PendingTransaction;
+
 use crate::*;
 
 const ADDR_1: Address = Address([1u8; 20]);
 const ADDR_2: Address = Address([2u8; 20]);
 
+const BASE_GAS: u64 = 2100;
+
 fn giga(num: u64) -> u64 {
     num * 1_000_000_000
 }
 
-extern "C" fn nop_main(_bc: *const *mut dyn Blockchain<Address = Address>) -> u16 {
+extern "C" fn nop_main(
+    _ptx: *const *mut dyn PendingTransaction<Address = Address, AccountMeta = AccountMeta>,
+) -> u16 {
     0
 }
 
-extern "C" fn simple_main(bc: *const *mut dyn Blockchain<Address = Address>) -> u16 {
-    let bc = unsafe { &mut **bc };
+extern "C" fn simple_main(
+    ptx: *const *mut dyn PendingTransaction<Address = Address, AccountMeta = AccountMeta>,
+) -> u16 {
+    let ptx = unsafe { &mut **ptx };
 
-    assert_eq!(bc.sender(), &ADDR_2);
+    assert_eq!(ptx.sender(), &ADDR_2);
 
-    bc.emit(vec![[42u8; 32]], vec![0u8; 3]);
+    ptx.emit(vec![[42u8; 32].as_ref()].as_slice(), &[0u8; 3]);
 
-    let mut rv = bc.fetch_input();
+    let mut rv = ptx.input().to_vec();
     rv.push(4);
-    bc.ret(rv);
+    ptx.ret(&rv);
 
     0
 }
 
-extern "C" fn fail_main(bc: *const *mut dyn Blockchain<Address = Address>) -> u16 {
-    let bc = unsafe { &mut **bc };
-    bc.err(r"¯\_(ツ)_/¯".as_bytes().to_vec());
+extern "C" fn fail_main(
+    ptx: *const *mut dyn PendingTransaction<Address = Address, AccountMeta = AccountMeta>,
+) -> u16 {
+    let ptx = unsafe { &mut **ptx };
+    ptx.err(r"¯\_(ツ)_/¯".as_bytes());
     1
 }
 
-extern "C" fn subtx_main(bc: *const *mut dyn Blockchain<Address = Address>) -> u16 {
-    let bc = unsafe { &mut **bc };
-    bc.transact(
-        Address::default(), /* caller */
-        ADDR_1,             /* callee */
-        0,
-        bc.fetch_input(),
-        1_000_000,
-        0,
-    );
+extern "C" fn subtx_main(
+    ptx: *const *mut dyn PendingTransaction<Address = Address, AccountMeta = AccountMeta>,
+) -> u16 {
+    let ptx = unsafe { &mut **ptx };
+    let subtx = ptx.transact(ADDR_1, 0 /* value */, &ptx.input().to_vec());
 
-    bc.set(
-        &Address::default(),
-        b"common_key".to_vec(),
-        b"uncommon_value".to_vec(),
-    )
-    .unwrap();
+    if subtx.reverted() {
+        dbg!(subtx.outcome());
+        ptx.ret(b"error");
+        return 1;
+    }
 
-    let mut rv = bc.fetch_ret();
+    ptx.state_mut().set(b"common_key", b"uncommon_value");
+
+    let mut rv = subtx.output().to_vec();
     rv.push(5);
-    bc.ret(rv);
+    ptx.ret(&rv);
     0
 }
 
 fn create_bc<'bc>(
-    mains: Vec<Option<extern "C" fn(*const *mut dyn Blockchain<Address = Address>) -> u16>>,
+    mains: Vec<
+        Option<
+            extern "C" fn(
+                *const *mut dyn PendingTransaction<Address = Address, AccountMeta = AccountMeta>,
+            ) -> u16,
+        >,
+    >,
 ) -> Memchain<'bc> {
     let genesis_state = mains
         .into_iter()
@@ -89,21 +101,31 @@ fn create_bc<'bc>(
         })
         .collect();
 
-    Memchain::new("memchain".to_string(), genesis_state)
+    Memchain::new("memchain".to_string(), genesis_state, BASE_GAS)
 }
 
 #[test]
 fn transfer() {
     let mut bc = create_bc(vec![None, Some(nop_main)]);
-    assert_eq!(bc.metadata_at(&ADDR_1).unwrap().balance, giga(1));
-    assert_eq!(bc.metadata_at(&ADDR_2).unwrap().balance, giga(2));
-    let value = 50;
-    bc.transact(ADDR_1, ADDR_2, value, Vec::new(), BASE_GAS, 1);
     assert_eq!(
-        bc.metadata_at(&ADDR_1).unwrap().balance,
+        bc.last_block().account_meta_at(&ADDR_1).unwrap().balance,
+        giga(1)
+    );
+    assert_eq!(
+        bc.last_block().account_meta_at(&ADDR_2).unwrap().balance,
+        giga(2)
+    );
+    let value = 50;
+    bc.last_block_mut()
+        .transact(ADDR_1, ADDR_2, ADDR_1, value, &Vec::new(), BASE_GAS, 1);
+    assert_eq!(
+        bc.last_block().account_meta_at(&ADDR_1).unwrap().balance,
         giga(1) - BASE_GAS - value,
     );
-    assert_eq!(bc.metadata_at(&ADDR_2).unwrap().balance, giga(2) + value,);
+    assert_eq!(
+        bc.last_block().account_meta_at(&ADDR_2).unwrap().balance,
+        giga(2) + value,
+    );
 }
 
 #[test]
@@ -112,77 +134,117 @@ fn static_account() {
 
     bc.create_block(); // should take state from prev block
 
-    let addr1 = ADDR_1;
-    let addr2 = ADDR_2;
+    assert_eq!(
+        bc.last_block().account_meta_at(&ADDR_1).unwrap().balance,
+        giga(1),
+    );
 
-    assert_eq!(bc.metadata_at(&addr1).unwrap().balance, giga(1),);
-
-    assert_eq!(bc.metadata_at(&addr2).unwrap().balance, giga(2),);
+    assert_eq!(
+        bc.last_block().account_meta_at(&ADDR_2).unwrap().balance,
+        giga(2),
+    );
 
     let code2 = "\0asm not wasm 2".as_bytes();
-    assert_eq!(bc.code_at(&addr2).unwrap(), code2);
-    assert_eq!(bc.code_len(&addr2), code2.len() as u32);
+    assert_eq!(bc.last_block().code_at(&ADDR_2).unwrap(), code2);
 
     let common_key = b"common_key".as_ref();
     assert_eq!(
-        bc.get(&addr1, common_key),
-        Ok(Some(b"common_value".as_ref()))
+        bc.last_block().state_at(&ADDR_1).unwrap().get(common_key),
+        Some(b"common_value".as_ref())
     );
     assert_eq!(
-        bc.get(&addr2, common_key),
-        Ok(Some(b"common_value".as_ref()))
+        bc.last_block().state_at(&ADDR_2).unwrap().get(common_key),
+        Some(b"common_value".as_ref())
     );
-
-    assert_eq!(bc.get(&addr1, b"key_1"), Ok(Some(b"value_1".as_ref())));
 
     assert_eq!(
-        bc.get(&Address::default(), common_key),
-        Err(KVError::NoAccount)
+        bc.block(1)
+            .unwrap()
+            .state_at(&ADDR_1)
+            .unwrap()
+            .get(b"key_1"),
+        Some(b"value_1".as_ref())
     );
-    assert!(bc.get(&addr1, &Vec::new()).unwrap().is_none());
+
+    assert!(bc.last_block().state_at(&Address::default()).is_none());
+    assert_eq!(
+        bc.last_block().state_at(&ADDR_1).unwrap().get(&Vec::new()),
+        None
+    );
 }
 
 #[test]
 fn simple_tx() {
     let mut bc = create_bc(vec![Some(simple_main), None]);
-    bc.transact(ADDR_2, ADDR_1, 50, vec![1, 2, 3], BASE_GAS, 0);
-    assert_eq!(bc.fetch_ret(), vec![1, 2, 3, 4]);
+    bc.last_block_mut()
+        .transact(ADDR_2, ADDR_1, ADDR_1, 50, &[1u8, 2, 3], BASE_GAS, 0);
+    assert_eq!(
+        bc.last_block().receipts().last().unwrap().output(),
+        &[1u8, 2, 3, 4]
+    );
 }
 
 #[test]
 fn revert_tx() {
     let mut bc = create_bc(vec![None, Some(fail_main)]);
-    bc.transact(ADDR_1, ADDR_2, 10_000, Vec::new(), BASE_GAS, 1);
-    assert_eq!(bc.metadata_at(&ADDR_1).unwrap().balance, giga(1) - BASE_GAS,);
-    assert_eq!(bc.metadata_at(&ADDR_2).unwrap().balance, giga(2),);
+    bc.last_block_mut()
+        .transact(ADDR_1, ADDR_2, ADDR_2, 10_000, &Vec::new(), BASE_GAS, 1);
+    assert_eq!(
+        bc.last_block().account_meta_at(&ADDR_2).unwrap().balance,
+        giga(2) - BASE_GAS,
+    );
+    assert_eq!(
+        bc.last_block().account_meta_at(&ADDR_1).unwrap().balance,
+        giga(1),
+    );
 }
 
 #[test]
 fn subtx_ok() {
     let mut bc = create_bc(vec![Some(simple_main), Some(subtx_main)]);
-    bc.transact(ADDR_1, ADDR_2, 1000, vec![1, 2, 3], BASE_GAS, 0);
-
-    assert_eq!(bc.fetch_ret(), vec![1, 2, 3, 4, 5]);
-
-    let logs = bc.last_block().logs();
-    assert_eq!(logs.len(), 1);
-    assert_eq!(logs[0].topics, vec![[42u8; 32]]);
-    assert_eq!(logs[0].data, vec![0u8; 3]);
+    let receipt =
+        bc.last_block_mut()
+            .transact(ADDR_1, ADDR_2, ADDR_2, 1000, &[1, 2, 3], BASE_GAS * 2, 0);
 
     assert_eq!(
-        bc.get(&ADDR_2, b"common_key"),
-        Ok(Some(b"uncommon_value".as_ref()))
+        receipt.outcome(),
+        blockchain_traits::TransactionOutcome::Success
+    );
+
+    assert_eq!(
+        bc.last_block().receipts().last().unwrap().output(),
+        &[1, 2, 3, 4, 5]
+    );
+
+    let events = bc.last_block().events();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].topics(), vec![[42u8; 32]]);
+    assert_eq!(events[0].data(), &[0, 0, 0]);
+
+    assert_eq!(
+        bc.last_block()
+            .state_at(&ADDR_2)
+            .unwrap()
+            .get(b"common_key"),
+        Some(b"uncommon_value".as_ref())
     );
 }
 
 #[test]
 fn subtx_revert() {
     let mut bc = create_bc(vec![Some(fail_main), Some(subtx_main)]);
-    bc.transact(ADDR_1, ADDR_2, 0, vec![1, 2, 3], BASE_GAS, 0);
-    assert_eq!(bc.fetch_ret(), vec![]);
-    assert!(bc.last_block().logs().is_empty());
+    bc.last_block_mut()
+        .transact(ADDR_1, ADDR_2, ADDR_2, 0, &[1, 2, 3], BASE_GAS, 0);
     assert_eq!(
-        bc.get(&ADDR_2, b"common_key"),
-        Ok(Some(b"common_value".as_ref()))
+        bc.last_block().receipts().last().unwrap().output(),
+        b"error"
+    );
+    assert!(bc.last_block().events().is_empty());
+    assert_eq!(
+        bc.last_block()
+            .state_at(&ADDR_2)
+            .unwrap()
+            .get(b"common_key"),
+        Some(b"common_value".as_ref())
     );
 }

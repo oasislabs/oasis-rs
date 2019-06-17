@@ -12,6 +12,13 @@ jobs:
       - run:
           name: Checkstyle
           command: cargo fmt -- --check
+      - run:
+          name: Install mantle-build
+          command: cargo install --path mantle-build
+      - save_cache:
+          key: mantle-build-{{ .Revision }}
+          paths:
+            - /root/.cargo/bin/mantle-build
 
   wasm_build:
     docker:
@@ -34,9 +41,9 @@ jobs:
           LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
     steps:
       - checkout
-      - run:
-          name: Install mantle-build
-          command: cargo install --path mantle-build
+      - restore_cache:
+          keys:
+            - mantle-build-{{ .Revision }}
       - run:
           name: Unit tests
           command: cargo test --tests
@@ -50,9 +57,9 @@ jobs:
     resource_class: xlarge
     steps:
       - checkout
-      - run:
-          name: Install mantle-build
-          command: cargo install --path mantle-build
+      - restore_cache:
+          keys:
+            - mantle-build-{{ .Revision }}
       - run:
           name: Test ballot example
           working_directory: examples/ballot
@@ -75,9 +82,9 @@ jobs:
     resource_class: xlarge
     steps:
       - checkout
-      - run:
-          name: Install mantle-build
-          command: cargo install --path mantle-build
+      - restore_cache:
+          keys:
+            - mantle-build-{{ .Revision }}
       - run:
           name: Test IDL generation
           working_directory: tests/idl_gen

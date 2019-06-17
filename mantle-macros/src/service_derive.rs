@@ -98,13 +98,13 @@ fn get_type_serde(
         Paren(p) => get_type_serde(&*p.elem, struct_idx, key),
         Array(_) | Tuple(_) | Path(_) => (
             quote! {
-                mantle::ext::write(
+                mantle::backend::write(
                     &#key,
-                    mantle::reexports::serde_cbor::to_vec(&service.#struct_idx).unwrap()
+                    &mantle::reexports::serde_cbor::to_vec(&service.#struct_idx).unwrap()
                 )
             },
             quote! {
-                mantle::reexports::serde_cbor::from_slice(&mantle::ext::read(&#key)).unwrap()
+                mantle::reexports::serde_cbor::from_slice(&mantle::backend::read(&#key)).unwrap()
             },
         ),
         ty => {

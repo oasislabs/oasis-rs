@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use blockchain_traits::{Address, Blockchain};
+use blockchain_traits::{AccountMeta, Address, PendingTransaction, TransactionOutcome};
 use wasi_types::{
     ErrNo, Fd, FdFlags, FdStat, FileDelta, FileSize, FileStat, FileType, Inode, OpenFlags, Rights,
     Whence,
@@ -16,19 +16,23 @@ use crate::{
     AnyAddress, Result,
 };
 
-pub struct BCFS<A: Address> {
+pub struct BCFS<A: Address, M: AccountMeta> {
     files: Vec<Option<Filelike<A>>>,
-    context_addr: A,
+    blockchain_name: String,
     home_dir: PathBuf,
+    _account_meta: std::marker::PhantomData<M>,
 }
 
-impl<A: Address> BCFS<A> {
-    /// Creates a new Blockchain FS with a backing `Blockchain` and hex stringified
+impl<A: Address, M: AccountMeta> BCFS<A, M> {
+    /// Creates a new ptx FS with a backing `ptx` and hex stringified
     /// owner address.
-    pub fn new(blockchain: &mut dyn Blockchain<Address = A>, context_addr: A) -> Self {
+    pub fn new<S: AsRef<str>>(
+        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        blockchain_name: S,
+    ) -> Self {
         let mut home_dir = PathBuf::from("/opt");
-        home_dir.push(blockchain.name());
-        home_dir.push(context_addr.path_repr());
+        home_dir.push(blockchain_name.as_ref());
+        home_dir.push(ptx.address().path_repr());
 
         Self {
             files: vec![
@@ -37,14 +41,15 @@ impl<A: Address> BCFS<A> {
                 Some(Filelike::File(File::stderr())),
                 Some(Filelike::File(File::log())),
             ],
+            blockchain_name: blockchain_name.as_ref().to_string(),
             home_dir,
-            context_addr,
+            _account_meta: std::marker::PhantomData,
         }
     }
 
     pub fn open(
         &mut self,
-        blockchain: &mut dyn Blockchain<Address = A>,
+        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
         curdir: Option<Fd>,
         path: &Path,
         open_flags: OpenFlags,
@@ -69,7 +74,7 @@ impl<A: Address> BCFS<A> {
 
         let rel_path = path.strip_prefix(&self.home_dir).unwrap_or(path);
 
-        if let Some(svc_file_kind) = self.is_service_path(blockchain, rel_path) {
+        if let Some(svc_file_kind) = self.is_service_path(ptx, rel_path) {
             if open_flags.intersects(OpenFlags::CREATE | OpenFlags::EXCL) {
                 return Err(ErrNo::Exist);
             }
@@ -96,9 +101,7 @@ impl<A: Address> BCFS<A> {
         }
 
         let key = Self::key_for_path(rel_path)?;
-        let file_exists = blockchain
-            .contains(&self.context_addr, &key)
-            .map_err(kverror_to_errno)?;
+        let file_exists = ptx.state().contains(&key);
 
         if file_exists && open_flags.contains(OpenFlags::EXCL) {
             return Err(ErrNo::Exist);
@@ -122,9 +125,7 @@ impl<A: Address> BCFS<A> {
             metadata: Cell::new(if file_exists {
                 None
             } else {
-                blockchain
-                    .set(&self.context_addr, key.to_vec(), Vec::new())
-                    .map_err(kverror_to_errno)?;
+                ptx.state_mut().set(key, &Vec::new());
                 Some(FileStat {
                     device: 0u64.into(),
                     inode: 0u32.into(),
@@ -140,7 +141,45 @@ impl<A: Address> BCFS<A> {
         Ok(fd)
     }
 
-    pub fn close(&mut self, _blockchain: &mut dyn Blockchain<Address = A>, fd: Fd) -> Result<()> {
+    pub fn open_service_sock(
+        &mut self,
+        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        addr: A,
+        value: u64,
+        input: &[u8],
+    ) -> Result<Fd> {
+        let receipt = ptx.transact(addr, value, &input);
+        match receipt.outcome() {
+            TransactionOutcome::Success => (),
+            err => return Err(tx_err_to_errno(err)),
+        }
+        let fd = self.alloc_fd()?;
+        self.files.push(Some(Filelike::File(File {
+            kind: FileKind::ServiceSock {
+                addr: AnyAddress::Native(addr),
+                receipt,
+            },
+            offset: FileOffset::Stream,
+            flags: FdFlags::SYNC,
+            metadata: Cell::new(Some(FileStat {
+                device: 0u64.into(),
+                inode: 0u32.into(),
+                file_type: FileType::SocketStream,
+                num_links: 0,
+                file_size: 0,
+                atime: 0u64.into(),
+                mtime: 0u64.into(),
+                ctime: 0u64.into(),
+            })),
+        })));
+        Ok(fd)
+    }
+
+    pub fn close(
+        &mut self,
+        _ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        fd: Fd,
+    ) -> Result<()> {
         match self.files.get_mut(u32::from(fd) as usize) {
             Some(f) if f.is_some() => {
                 *f = None;
@@ -152,7 +191,7 @@ impl<A: Address> BCFS<A> {
 
     pub fn seek(
         &mut self,
-        blockchain: &mut dyn Blockchain<Address = A>,
+        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
         fd: Fd,
         offset: FileDelta,
         whence: Whence,
@@ -171,7 +210,7 @@ impl<A: Address> BCFS<A> {
                     Ok(new_offset as u64)
                 }
                 FileOffset::FromEnd(end_offset) => {
-                    let filesize = self.filestat(blockchain, fd)?.file_size;
+                    let filesize = self.filestat(ptx, fd)?.file_size;
                     let abs_offset = Self::checked_offset(
                         filesize,
                         end_offset.checked_add(offset).ok_or(ErrNo::Inval)?,
@@ -192,7 +231,7 @@ impl<A: Address> BCFS<A> {
                 Ok(offset as u64)
             }
             Whence::End => {
-                let filesize = self.filestat(blockchain, fd)?.file_size;
+                let filesize = self.filestat(ptx, fd)?.file_size;
                 let new_offset = Self::checked_offset(filesize, offset).ok_or(ErrNo::Inval)?;
                 let mut file = self.file_mut(fd)?;
                 file.offset = FileOffset::FromStart(new_offset as u64);
@@ -201,7 +240,11 @@ impl<A: Address> BCFS<A> {
         }
     }
 
-    pub fn fdstat(&self, _blockchain: &mut dyn Blockchain<Address = A>, fd: Fd) -> Result<FdStat> {
+    pub fn fdstat(
+        &self,
+        _ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        fd: Fd,
+    ) -> Result<FdStat> {
         let file = self.file(fd)?;
         Ok(FdStat {
             file_type: FileType::RegularFile,
@@ -211,33 +254,52 @@ impl<A: Address> BCFS<A> {
         })
     }
 
-    pub fn filestat(&self, blockchain: &dyn Blockchain<Address = A>, fd: Fd) -> Result<FileStat> {
+    pub fn filestat(
+        &self,
+        ptx: &dyn PendingTransaction<Address = A, AccountMeta = M>,
+        fd: Fd,
+    ) -> Result<FileStat> {
         let file = self.file(fd)?;
         if let Some(meta) = file.metadata.get() {
             return Ok(meta);
         }
-        let (file_size, inode) = match &file.kind {
-            FileKind::Stdin => (blockchain.input_len() as u64, u32::from(fd).into()),
+        let (file_size, file_type, inode) = match &file.kind {
+            FileKind::Stdin => (
+                ptx.input().len() as u64,
+                FileType::RegularFile,
+                u32::from(fd).into(),
+            ),
             FileKind::Stdout | FileKind::Stderr | FileKind::Log => return Err(ErrNo::Inval),
             FileKind::Bytecode {
                 addr: AnyAddress::Native(addr),
             } => (
-                blockchain.code_len(addr) as u64,
+                ptx.code_at(addr)
+                    .map(|v| v.len() as u64)
+                    .unwrap_or_default() as u64,
+                FileType::RegularFile,
                 Self::hash_inode(addr.as_ref(), "bytecode"),
             ),
             FileKind::Balance {
                 addr: AnyAddress::Native(addr),
             } => (
                 std::mem::size_of::<u64>() as u64,
+                FileType::RegularFile,
                 Self::hash_inode(addr.as_ref(), "balance"),
             ),
             FileKind::ServiceSock {
                 addr: AnyAddress::Native(addr),
-            } => (0, Self::hash_inode(addr.as_ref(), "sock")),
+                ..
+            } => (
+                0,
+                FileType::SocketStream,
+                Self::hash_inode(&addr.as_ref(), "sock"),
+            ),
             FileKind::Regular { key } => (
-                blockchain
-                    .size(&self.context_addr, key)
-                    .map_err(kverror_to_errno)?,
+                ptx.state()
+                    .get(key)
+                    .map(|v| v.len() as u64)
+                    .unwrap_or_default(),
+                FileType::RegularFile,
                 Self::hash_inode(key, ""),
             ),
             _ => return Err(ErrNo::Fault),
@@ -245,7 +307,7 @@ impl<A: Address> BCFS<A> {
         let meta = FileStat {
             device: 0u64.into(),
             inode, // TODO(#80)
-            file_type: FileType::RegularFile,
+            file_type,
             num_links: 0,
             file_size,
             atime: 0u64.into(), // TODO(#81)
@@ -256,12 +318,16 @@ impl<A: Address> BCFS<A> {
         Ok(meta)
     }
 
-    pub fn tell(&self, blockchain: &mut dyn Blockchain<Address = A>, fd: Fd) -> Result<FileSize> {
+    pub fn tell(
+        &self,
+        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        fd: Fd,
+    ) -> Result<FileSize> {
         let file = self.file(fd)?;
         match file.offset {
             FileOffset::FromStart(o) => Ok(o),
             FileOffset::FromEnd(o) => {
-                let filesize = self.filestat(blockchain, fd)?.file_size;
+                let filesize = self.filestat(ptx, fd)?.file_size;
                 Ok(Self::checked_offset(filesize, o).ok_or(ErrNo::Inval)?)
             }
             FileOffset::Stream => Err(ErrNo::SPipe),
@@ -270,11 +336,11 @@ impl<A: Address> BCFS<A> {
 
     pub fn read_vectored(
         &mut self,
-        blockchain: &mut dyn Blockchain<Address = A>,
+        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
         fd: Fd,
         bufs: &mut [IoSliceMut],
     ) -> Result<usize> {
-        let (nbytes, offset) = self.do_pread_vectored(blockchain, fd, bufs, None)?;
+        let (nbytes, offset) = self.do_pread_vectored(ptx, fd, bufs, None)?;
         let mut file = self.file_mut(fd)?;
         file.offset = offset;
         Ok(nbytes)
@@ -282,22 +348,22 @@ impl<A: Address> BCFS<A> {
 
     pub fn pread_vectored(
         &self,
-        blockchain: &mut dyn Blockchain<Address = A>,
+        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
         fd: Fd,
         bufs: &mut [IoSliceMut],
         offset: FileSize,
     ) -> Result<usize> {
-        self.do_pread_vectored(blockchain, fd, bufs, Some(FileOffset::FromStart(offset)))
+        self.do_pread_vectored(ptx, fd, bufs, Some(FileOffset::FromStart(offset)))
             .map(|(nbytes, _offset)| nbytes)
     }
 
     pub fn write_vectored(
         &mut self,
-        blockchain: &mut dyn Blockchain<Address = A>,
+        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
         fd: Fd,
         bufs: &[IoSlice],
     ) -> Result<usize> {
-        let (nbytes, offset) = self.do_pwrite_vectored(blockchain, fd, bufs, None)?;
+        let (nbytes, offset) = self.do_pwrite_vectored(ptx, fd, bufs, None)?;
         let mut file = self.file_mut(fd)?;
         file.offset = offset;
         Ok(nbytes)
@@ -305,18 +371,18 @@ impl<A: Address> BCFS<A> {
 
     pub fn pwrite_vectored(
         &mut self,
-        blockchain: &mut dyn Blockchain<Address = A>,
+        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
         fd: Fd,
         bufs: &[IoSlice],
         offset: FileSize,
     ) -> Result<usize> {
-        self.do_pwrite_vectored(blockchain, fd, bufs, Some(FileOffset::FromStart(offset)))
+        self.do_pwrite_vectored(ptx, fd, bufs, Some(FileOffset::FromStart(offset)))
             .map(|(nbytes, _offset)| nbytes)
     }
 
     pub fn renumber(
         &mut self,
-        _blockchain: &mut dyn Blockchain<Address = A>,
+        _ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
         fd: Fd,
         new_fd: Fd,
     ) -> Result<()> {
@@ -334,7 +400,19 @@ fn fd_usize(fd: Fd) -> usize {
     usize::try_from(u32::from(fd)).unwrap() // can't fail because usize is at least 32 bits
 }
 
-impl<A: Address> BCFS<A> {
+fn tx_err_to_errno(tx_err: TransactionOutcome) -> ErrNo {
+    match tx_err {
+        TransactionOutcome::Success => ErrNo::Success,
+        TransactionOutcome::InsufficientFunds => ErrNo::BadMsg,
+        TransactionOutcome::InsufficientGas => ErrNo::DQuot,
+        TransactionOutcome::InvalidInput => ErrNo::Inval,
+        TransactionOutcome::NoAccount => ErrNo::AddrNotAvail,
+        TransactionOutcome::Aborted => ErrNo::Canceled,
+        _ => ErrNo::Io,
+    }
+}
+
+impl<A: Address, M: AccountMeta> BCFS<A, M> {
     fn has_fd(&self, fd: Fd) -> bool {
         match self.files.get(fd_usize(fd)) {
             Some(Some(_)) => true,
@@ -361,23 +439,18 @@ impl<A: Address> BCFS<A> {
 
     fn is_service_path(
         &self,
-        blockchain: &dyn Blockchain<Address = A>,
+        ptx: &dyn PendingTransaction<Address = A, AccountMeta = M>,
         path: &Path,
     ) -> Option<FileKind<A>> {
         use std::path::Component;
 
         if path == Path::new("code") {
             return Some(FileKind::Bytecode {
-                addr: AnyAddress::Native(self.context_addr),
+                addr: AnyAddress::Native(*ptx.address()),
             });
         } else if path == Path::new("balance") {
             return Some(FileKind::Balance {
-                addr: AnyAddress::Native(self.context_addr),
-            });
-        } else if path == Path::new("sock") {
-            // why would a service call itself?
-            return Some(FileKind::ServiceSock {
-                addr: AnyAddress::Native(self.context_addr),
+                addr: AnyAddress::Native(*ptx.address()),
             });
         }
 
@@ -394,7 +467,7 @@ impl<A: Address> BCFS<A> {
         }
 
         match comps.next() {
-            Some(Component::Normal(c)) if c == blockchain.name() => (),
+            Some(Component::Normal(c)) if *c == self.blockchain_name.as_ref() => (),
             _ => return None,
         }
 
@@ -410,7 +483,6 @@ impl<A: Address> BCFS<A> {
         let svc_file_kind = match comps.next() {
             Some(Component::Normal(c)) if c == "code" => FileKind::Bytecode { addr },
             Some(Component::Normal(c)) if c == "balance" => FileKind::Balance { addr },
-            Some(Component::Normal(c)) if c == "sock" => FileKind::ServiceSock { addr },
             _ => return None,
         };
 
@@ -450,7 +522,7 @@ impl<A: Address> BCFS<A> {
     /// Returns (bytes_read, new_offset).
     fn do_pread_vectored(
         &self,
-        blockchain: &mut dyn Blockchain<Address = A>,
+        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
         fd: Fd,
         bufs: &mut [IoSliceMut],
         offset: Option<FileOffset>,
@@ -465,7 +537,7 @@ impl<A: Address> BCFS<A> {
         }
 
         let read_offset = offset.unwrap_or(file.offset);
-        let filesize = self.filestat(blockchain, fd)?.file_size;
+        let filesize = self.filestat(ptx, fd)?.file_size;
         match read_offset {
             FileOffset::FromStart(o) if o == 0 => (),
             FileOffset::FromEnd(o) if o == -(filesize as i64) => (),
@@ -476,29 +548,27 @@ impl<A: Address> BCFS<A> {
 
         let nbytes = match &file.kind {
             FileKind::Stdout | FileKind::Stderr | FileKind::Log => return Err(ErrNo::Inval),
-            FileKind::Stdin => blockchain.fetch_input().as_slice().read_vectored(bufs)?,
+            FileKind::Stdin => ptx.input().read_vectored(bufs)?,
             FileKind::Bytecode {
                 addr: crate::AnyAddress::Native(addr),
-            } => match blockchain.code_at(addr) {
+            } => match ptx.code_at(addr) {
                 Some(code) => code.to_vec().as_slice().read_vectored(bufs)?,
                 None => return Err(ErrNo::NoEnt),
             },
             FileKind::Balance {
                 addr: crate::AnyAddress::Native(addr),
-            } => match blockchain.metadata_at(addr) {
-                Some(meta) => meta.balance.to_le_bytes().as_ref().read_vectored(bufs)?,
+            } => match ptx.account_meta_at(addr) {
+                Some(meta) => meta.balance().to_le_bytes().as_ref().read_vectored(bufs)?,
                 None => return Err(ErrNo::NoEnt),
             },
             FileKind::Regular { key } => {
-                let mut bytes = match blockchain
-                    .get(&self.context_addr, key)
-                    .map_err(kverror_to_errno)?
-                {
+                let mut bytes = match ptx.state().get(key) {
                     Some(bytes) => bytes,
                     None => return Err(ErrNo::NoEnt),
                 };
                 bytes.read_vectored(bufs)?
             }
+            FileKind::ServiceSock { receipt, .. } => receipt.output().read_vectored(bufs)?,
             _ => return Err(ErrNo::Fault),
         };
 
@@ -513,7 +583,7 @@ impl<A: Address> BCFS<A> {
     /// Returns (bytes_written, new_offset).
     fn do_pwrite_vectored(
         &mut self,
-        blockchain: &mut dyn Blockchain<Address = A>,
+        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
         fd: Fd,
         bufs: &[IoSlice],
         offset: Option<FileOffset>,
@@ -521,12 +591,10 @@ impl<A: Address> BCFS<A> {
         let file = self.file(fd)?;
         let write_offset = offset.unwrap_or(file.offset);
         match file.kind {
-            FileKind::ServiceSock {
-                addr: AnyAddress::Foreign(_),
-            } => return Err(ErrNo::NotSup),
-            FileKind::Stdin | FileKind::Bytecode { .. } | FileKind::Balance { .. } => {
-                return Err(ErrNo::Inval)
-            }
+            FileKind::Stdin
+            | FileKind::Bytecode { .. }
+            | FileKind::Balance { .. }
+            | FileKind::ServiceSock { .. } => return Err(ErrNo::Inval),
             _ => (),
         };
 
@@ -535,11 +603,11 @@ impl<A: Address> BCFS<A> {
 
         let new_offset = match &file.kind {
             FileKind::Stdout => {
-                blockchain.ret(cat_buf);
+                ptx.ret(&cat_buf);
                 FileOffset::FromEnd(0)
             }
             FileKind::Stderr => {
-                blockchain.err(cat_buf);
+                ptx.err(&cat_buf);
                 FileOffset::FromEnd(0)
             }
             FileKind::Log => {
@@ -555,21 +623,22 @@ impl<A: Address> BCFS<A> {
                         arr.copy_from_slice(c);
                         arr
                     })
-                    .collect();
-                blockchain.emit(topics, data);
+                    .collect::<Vec<[u8; 32]>>();
+                ptx.emit(
+                    &topics.iter().map(<[u8; 32]>::as_ref).collect::<Vec<_>>(),
+                    &data,
+                );
                 FileOffset::FromEnd(0)
             }
             FileKind::Regular { key } => {
-                let filesize = self.filestat(blockchain, fd)?.file_size;
+                let filesize = self.filestat(ptx, fd)?.file_size;
                 match write_offset {
                     FileOffset::FromStart(0) => (),
                     FileOffset::FromEnd(o) if o == -(filesize as i64) => (),
                     _ => return Err(ErrNo::NotSup),
                 }
                 let nbytes = cat_buf.len();
-                blockchain
-                    .set(&self.context_addr, key.to_vec(), cat_buf)
-                    .map_err(kverror_to_errno)?;
+                ptx.state_mut().set(key, &cat_buf);
                 file.metadata.update(|mm| {
                     mm.map(|mut m| {
                         m.file_size = nbytes as u64;
@@ -584,31 +653,9 @@ impl<A: Address> BCFS<A> {
                     FileOffset::Stream => FileOffset::Stream,
                 }
             }
-            FileKind::ServiceSock {
-                addr: AnyAddress::Native(callee),
-            } => {
-                // TODO(#83)
-                blockchain.transact(
-                    self.context_addr,
-                    *callee,
-                    0,       /* value */
-                    cat_buf, /* input */
-                    0,       /* gas */
-                    0,       /* gas_price */
-                );
-                FileOffset::Stream
-            }
             _ => unreachable!("checked above"),
         };
 
         Ok((nbytes, new_offset))
-    }
-}
-
-fn kverror_to_errno(kverr: blockchain_traits::KVError) -> ErrNo {
-    match kverr {
-        blockchain_traits::KVError::NoAccount => ErrNo::Fault,
-        blockchain_traits::KVError::NoPermission => ErrNo::Access,
-        blockchain_traits::KVError::InvalidState => ErrNo::NotRecoverable,
     }
 }

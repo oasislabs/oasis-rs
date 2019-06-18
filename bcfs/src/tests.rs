@@ -237,6 +237,48 @@ testcase!(
 );
 
 testcase!(
+    fn write_consecutive(ptx: &mut dyn PendingTransaction) -> u16 {
+        let mut bcfs = BCFS::new(ptx, CHAIN_NAME);
+
+        let path = PathBuf::from("somefile");
+
+        let fd = bcfs
+            .open(ptx, None, &path, OpenFlags::CREATE, FdFlags::empty())
+            .unwrap();
+
+        let write_bufs: &[&[u8]] = &[b"hello", b" world"];
+
+        let nbytes = write_bufs.iter().map(|buf| buf.len()).sum();
+
+        let mut read_buf = vec![0u8; nbytes];
+
+        for wb in write_bufs {
+            assert_eq!(
+                bcfs.write_vectored(ptx, fd, &[IoSlice::new(wb)]),
+                Ok(wb.len())
+            );
+        }
+
+        assert_eq!(bcfs.seek(ptx, fd, 0, Whence::Start), Ok(0));
+
+        assert_eq!(
+            bcfs.read_vectored(ptx, fd, &mut [IoSliceMut::new(&mut read_buf)]),
+            Ok(nbytes)
+        );
+
+        assert_eq!(
+            read_buf,
+            write_bufs
+                .iter()
+                .flat_map(|buf| buf.iter().cloned())
+                .collect::<Vec<u8>>()
+        );
+
+        0
+    }
+);
+
+testcase!(
     fn read_write_aliased(ptx: &mut dyn PendingTransaction) -> u16 {
         let mut bcfs = BCFS::new(ptx, CHAIN_NAME);
 
@@ -268,6 +310,7 @@ testcase!(
             ),
             Ok(nbytes)
         );
+        bcfs.flush(ptx, abs_fd).unwrap();
         assert_eq!(
             bcfs.read_vectored(
                 ptx,

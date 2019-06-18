@@ -1,18 +1,17 @@
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     convert::TryFrom,
-    io::{IoSlice, IoSliceMut, Read, Write},
+    io::{Cursor, IoSlice, IoSliceMut, Read, Seek as _, SeekFrom, Write},
     path::{Path, PathBuf},
 };
 
-use blockchain_traits::{AccountMeta, Address, PendingTransaction, TransactionOutcome};
+use blockchain_traits::{AccountMeta, Address, PendingTransaction};
 use wasi_types::{
-    ErrNo, Fd, FdFlags, FdStat, FileDelta, FileSize, FileStat, FileType, Inode, OpenFlags, Rights,
-    Whence,
+    ErrNo, Fd, FdFlags, FdStat, FileDelta, FileSize, FileStat, FileType, OpenFlags, Rights, Whence,
 };
 
 use crate::{
-    file::{File, FileKind, FileOffset, Filelike},
+    file::{File, FileCache, FileKind, Filelike},
     AnyAddress, Result,
 };
 
@@ -86,9 +85,10 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
             let fd = self.alloc_fd()?;
             self.files.push(Some(Filelike::File(File {
                 kind: svc_file_kind,
-                offset: FileOffset::FromStart(0),
                 flags: fd_flags,
                 metadata: Cell::new(None),
+                buf: RefCell::new(FileCache::Absent(SeekFrom::Start(0))),
+                dirty: Cell::new(false),
             })));
             return Ok(fd);
         }
@@ -109,23 +109,15 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
             return Err(ErrNo::NoEnt);
         }
 
-        let offset = if open_flags.contains(OpenFlags::TRUNC) {
-            FileOffset::FromStart(0)
-        } else if fd_flags.contains(FdFlags::APPEND) {
-            FileOffset::FromEnd(0)
-        } else {
-            FileOffset::FromStart(0)
-        };
-
         let fd = self.alloc_fd()?;
         self.files.push(Some(Filelike::File(File {
             kind: FileKind::Regular { key: key.to_vec() },
-            offset,
             flags: fd_flags,
             metadata: Cell::new(if file_exists {
                 None
             } else {
                 ptx.state_mut().set(key, &Vec::new());
+                // ^ This must be done eagerly to match POSIX which immediately creates the file.
                 Some(FileStat {
                     device: 0u64.into(),
                     inode: 0u32.into(),
@@ -137,49 +129,54 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
                     ctime: 0u64.into(),
                 })
             }),
+            buf: RefCell::new(if file_exists {
+                FileCache::Absent(SeekFrom::Start(0))
+            } else {
+                FileCache::Present(Cursor::new(Vec::new()))
+            }),
+            dirty: Cell::new(false),
         })));
         Ok(fd)
     }
 
-    pub fn open_service_sock(
+    pub fn flush(
         &mut self,
         ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
-        addr: A,
-        value: u64,
-        input: &[u8],
-    ) -> Result<Fd> {
-        let receipt = ptx.transact(addr, value, &input);
-        match receipt.outcome() {
-            TransactionOutcome::Success => (),
-            err => return Err(tx_err_to_errno(err)),
+        fd: Fd,
+    ) -> Result<()> {
+        let file = self.file(fd)?;
+        if !file.dirty.get() {
+            return Ok(());
         }
-        let fd = self.alloc_fd()?;
-        self.files.push(Some(Filelike::File(File {
-            kind: FileKind::ServiceSock {
-                addr: AnyAddress::Native(addr),
-                receipt,
-            },
-            offset: FileOffset::Stream,
-            flags: FdFlags::SYNC,
-            metadata: Cell::new(Some(FileStat {
-                device: 0u64.into(),
-                inode: 0u32.into(),
-                file_type: FileType::SocketStream,
-                num_links: 0,
-                file_size: 0,
-                atime: 0u64.into(),
-                mtime: 0u64.into(),
-                ctime: 0u64.into(),
-            })),
-        })));
-        Ok(fd)
+        let maybe_cursor = file.buf.borrow();
+        let buf = match &*maybe_cursor {
+            FileCache::Present(cursor) => cursor.get_ref(),
+            FileCache::Absent(_) => return Ok(()),
+        };
+        match &file.kind {
+            FileKind::Stdin | FileKind::Bytecode { .. } | FileKind::Balance { .. } => (),
+            FileKind::Stdout => ptx.ret(buf),
+            FileKind::Stderr => ptx.err(buf),
+            FileKind::Log => {
+                // NOTE: topics must be written as a block of TOPIC_SIZE * MAX_TOPICS bytes.
+                // Space for unused topics should be set to zero.
+                const TOPIC_SIZE: usize = 32; // 256 bits
+                const MAX_TOPICS: usize = 4;
+                let (cat_topics, data) = buf.split_at(TOPIC_SIZE * MAX_TOPICS);
+                let topics = cat_topics.chunks_exact(TOPIC_SIZE).collect::<Vec<&[u8]>>();
+                ptx.emit(&topics, &data);
+            }
+            FileKind::Regular { key } => ptx.state_mut().set(&key, &buf),
+        }
+        Ok(())
     }
 
     pub fn close(
         &mut self,
-        _ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
         fd: Fd,
     ) -> Result<()> {
+        self.flush(ptx, fd)?;
         match self.files.get_mut(u32::from(fd) as usize) {
             Some(f) if f.is_some() => {
                 *f = None;
@@ -196,47 +193,38 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         offset: FileDelta,
         whence: Whence,
     ) -> Result<FileSize> {
-        let cur_offset = self.file_mut(fd)?.offset;
-        if let FileOffset::Stream = cur_offset {
-            return Err(ErrNo::SPipe);
+        let file = self.file_mut(fd)?;
+
+        let mut buf = file.buf.borrow_mut();
+
+        if Whence::End == whence
+            || match &*buf {
+                FileCache::Absent(SeekFrom::End(_)) => true,
+                _ => false,
+            }
+        {
+            Self::populate_file(ptx, &file, &mut *buf)?;
         }
-        match whence {
-            Whence::Current => match cur_offset {
-                FileOffset::FromStart(start_offset) => {
-                    let new_offset =
-                        Self::checked_offset(start_offset, offset).ok_or(ErrNo::Inval)?;
-                    let mut file = self.file_mut(fd)?;
-                    file.offset = FileOffset::FromStart(new_offset as u64);
-                    Ok(new_offset as u64)
+
+        match &mut *buf {
+            FileCache::Present(ref mut cursor) => {
+                Ok(cursor.seek(seekfrom_from_offset_whence(offset, whence)?)?)
+            }
+            FileCache::Absent(ref mut seek) => match whence {
+                Whence::End => unreachable!("file was just populated"),
+                Whence::Start => {
+                    *seek = seekfrom_from_offset_whence(offset, whence)?;
+                    Ok(offset as u64)
                 }
-                FileOffset::FromEnd(end_offset) => {
-                    let filesize = self.filestat(ptx, fd)?.file_size;
-                    let abs_offset = Self::checked_offset(
-                        filesize,
-                        end_offset.checked_add(offset).ok_or(ErrNo::Inval)?,
-                    )
-                    .ok_or(ErrNo::Inval)? as u64;
-                    let mut file = self.file_mut(fd)?;
-                    file.offset = FileOffset::FromStart(abs_offset);
-                    Ok(abs_offset)
-                }
-                _ => unreachable!("Checked above"),
+                Whence::Current => match seek {
+                    SeekFrom::Start(cur_offset) => {
+                        let new_offset = Self::checked_offset(*cur_offset, offset)?;
+                        *seek = SeekFrom::Start(new_offset);
+                        Ok(new_offset as u64)
+                    }
+                    _ => unreachable!("handled above"),
+                },
             },
-            Whence::Start => {
-                if offset < 0 {
-                    return Err(ErrNo::Inval);
-                }
-                let mut file = self.file_mut(fd)?;
-                file.offset = FileOffset::FromStart(offset as u64);
-                Ok(offset as u64)
-            }
-            Whence::End => {
-                let filesize = self.filestat(ptx, fd)?.file_size;
-                let new_offset = Self::checked_offset(filesize, offset).ok_or(ErrNo::Inval)?;
-                let mut file = self.file_mut(fd)?;
-                file.offset = FileOffset::FromStart(new_offset as u64);
-                Ok(new_offset as u64)
-            }
         }
     }
 
@@ -260,62 +248,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         fd: Fd,
     ) -> Result<FileStat> {
         let file = self.file(fd)?;
-        if let Some(meta) = file.metadata.get() {
-            return Ok(meta);
-        }
-        let (file_size, file_type, inode) = match &file.kind {
-            FileKind::Stdin => (
-                ptx.input().len() as u64,
-                FileType::RegularFile,
-                u32::from(fd).into(),
-            ),
-            FileKind::Stdout | FileKind::Stderr | FileKind::Log => return Err(ErrNo::Inval),
-            FileKind::Bytecode {
-                addr: AnyAddress::Native(addr),
-            } => (
-                ptx.code_at(addr)
-                    .map(|v| v.len() as u64)
-                    .unwrap_or_default() as u64,
-                FileType::RegularFile,
-                Self::hash_inode(addr.as_ref(), "bytecode"),
-            ),
-            FileKind::Balance {
-                addr: AnyAddress::Native(addr),
-            } => (
-                std::mem::size_of::<u64>() as u64,
-                FileType::RegularFile,
-                Self::hash_inode(addr.as_ref(), "balance"),
-            ),
-            FileKind::ServiceSock {
-                addr: AnyAddress::Native(addr),
-                ..
-            } => (
-                0,
-                FileType::SocketStream,
-                Self::hash_inode(&addr.as_ref(), "sock"),
-            ),
-            FileKind::Regular { key } => (
-                ptx.state()
-                    .get(key)
-                    .map(|v| v.len() as u64)
-                    .unwrap_or_default(),
-                FileType::RegularFile,
-                Self::hash_inode(key, ""),
-            ),
-            _ => return Err(ErrNo::Fault),
-        };
-        let meta = FileStat {
-            device: 0u64.into(),
-            inode, // TODO(#80)
-            file_type,
-            num_links: 0,
-            file_size,
-            atime: 0u64.into(), // TODO(#81)
-            mtime: 0u64.into(),
-            ctime: 0u64.into(),
-        };
-        file.metadata.set(Some(meta));
-        Ok(meta)
+        Self::populate_file(ptx, file, &mut *file.buf.borrow_mut())
     }
 
     pub fn tell(
@@ -324,14 +257,18 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         fd: Fd,
     ) -> Result<FileSize> {
         let file = self.file(fd)?;
-        match file.offset {
-            FileOffset::FromStart(o) => Ok(o),
-            FileOffset::FromEnd(o) => {
-                let filesize = self.filestat(ptx, fd)?.file_size;
-                Ok(Self::checked_offset(filesize, o).ok_or(ErrNo::Inval)?)
-            }
-            FileOffset::Stream => Err(ErrNo::SPipe),
+        let mut buf = file.buf.borrow_mut();
+        if let FileCache::Absent(SeekFrom::End(_)) = &*buf {
+            Self::populate_file(ptx, &file, &mut *buf)?;
         }
+        Ok(match &mut *buf {
+            FileCache::Present(cursor) => cursor.position(),
+            FileCache::Absent(ref mut seekfrom) => match seekfrom {
+                SeekFrom::Start(offset) => *offset,
+                SeekFrom::End(_) => unreachable!("checked above"),
+                SeekFrom::Current(_) => unreachable!(),
+            },
+        })
     }
 
     pub fn read_vectored(
@@ -340,10 +277,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         fd: Fd,
         bufs: &mut [IoSliceMut],
     ) -> Result<usize> {
-        let (nbytes, offset) = self.do_pread_vectored(ptx, fd, bufs, None)?;
-        let mut file = self.file_mut(fd)?;
-        file.offset = offset;
-        Ok(nbytes)
+        self.do_pread_vectored(ptx, fd, bufs, None)
     }
 
     pub fn pread_vectored(
@@ -353,8 +287,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         bufs: &mut [IoSliceMut],
         offset: FileSize,
     ) -> Result<usize> {
-        self.do_pread_vectored(ptx, fd, bufs, Some(FileOffset::FromStart(offset)))
-            .map(|(nbytes, _offset)| nbytes)
+        self.do_pread_vectored(ptx, fd, bufs, Some(SeekFrom::Start(offset)))
     }
 
     pub fn write_vectored(
@@ -363,10 +296,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         fd: Fd,
         bufs: &[IoSlice],
     ) -> Result<usize> {
-        let (nbytes, offset) = self.do_pwrite_vectored(ptx, fd, bufs, None)?;
-        let mut file = self.file_mut(fd)?;
-        file.offset = offset;
-        Ok(nbytes)
+        self.do_pwrite_vectored(ptx, fd, bufs, None)
     }
 
     pub fn pwrite_vectored(
@@ -376,8 +306,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         bufs: &[IoSlice],
         offset: FileSize,
     ) -> Result<usize> {
-        self.do_pwrite_vectored(ptx, fd, bufs, Some(FileOffset::FromStart(offset)))
-            .map(|(nbytes, _offset)| nbytes)
+        self.do_pwrite_vectored(ptx, fd, bufs, Some(SeekFrom::Start(offset)))
     }
 
     pub fn renumber(
@@ -400,16 +329,16 @@ fn fd_usize(fd: Fd) -> usize {
     usize::try_from(u32::from(fd)).unwrap() // can't fail because usize is at least 32 bits
 }
 
-fn tx_err_to_errno(tx_err: TransactionOutcome) -> ErrNo {
-    match tx_err {
-        TransactionOutcome::Success => ErrNo::Success,
-        TransactionOutcome::InsufficientFunds => ErrNo::BadMsg,
-        TransactionOutcome::InsufficientGas => ErrNo::DQuot,
-        TransactionOutcome::InvalidInput => ErrNo::Inval,
-        TransactionOutcome::NoAccount => ErrNo::AddrNotAvail,
-        TransactionOutcome::Aborted => ErrNo::Canceled,
-        _ => ErrNo::Io,
-    }
+fn seekfrom_from_offset_whence(offset: FileDelta, whence: Whence) -> Result<SeekFrom> {
+    Ok(match whence {
+        Whence::Current => SeekFrom::Current(offset),
+        Whence::Start => SeekFrom::Start(if offset < 0 {
+            return Err(ErrNo::Inval);
+        } else {
+            offset as u64
+        }),
+        Whence::End => SeekFrom::End(offset),
+    })
 }
 
 impl<A: Address, M: AccountMeta> BCFS<A, M> {
@@ -499,24 +428,77 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         Ok((self.files.len() as u32).into())
     }
 
-    fn checked_offset(base: u64, offset: i64) -> Option<u64> {
+    fn checked_offset(base: u64, offset: i64) -> Result<u64> {
         if offset >= 0 {
             base.checked_add(offset as u64)
         } else {
             base.checked_sub(-offset as u64)
         }
+        .ok_or(ErrNo::Inval)
     }
 
     fn key_for_path(path: &Path) -> Result<&[u8]> {
         path.to_str().ok_or(ErrNo::Inval).map(str::as_bytes)
     }
 
-    fn hash_inode(bytes: &[u8], disambiguator: &str) -> Inode {
-        use std::hash::Hasher;
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        hasher.write(bytes);
-        hasher.write(disambiguator.as_bytes());
-        hasher.finish().into()
+    fn populate_file(
+        ptx: &dyn PendingTransaction<Address = A, AccountMeta = M>,
+        file: &File<A>,
+        cache: &mut FileCache,
+    ) -> Result<FileStat> {
+        let file_size = match cache {
+            FileCache::Present(cursor) => cursor.get_ref().len(),
+            FileCache::Absent(offset) => {
+                let bytes = match &file.kind {
+                    FileKind::Stdin => ptx.input().to_vec(),
+                    FileKind::Bytecode {
+                        addr: crate::AnyAddress::Native(addr),
+                    } => match ptx.code_at(&addr) {
+                        Some(code) => code.to_vec(),
+                        None => return Err(ErrNo::NoEnt),
+                    },
+                    FileKind::Balance {
+                        addr: crate::AnyAddress::Native(addr),
+                    } => match ptx.account_meta_at(&addr) {
+                        Some(meta) => meta.balance().to_le_bytes().to_vec(),
+                        None => return Err(ErrNo::NoEnt),
+                    },
+                    FileKind::Regular { key } => match ptx.state().get(&key) {
+                        Some(val) => val.to_vec(),
+                        None => return Err(ErrNo::NoEnt),
+                    },
+                    FileKind::Stdout | FileKind::Stderr | FileKind::Log => Vec::new(),
+                    FileKind::Bytecode {
+                        addr: crate::AnyAddress::Foreign(_),
+                    }
+                    | FileKind::Balance {
+                        addr: crate::AnyAddress::Foreign(_),
+                    } => return Err(ErrNo::Fault),
+                };
+                let file_size = bytes.len();
+                let mut cursor = Cursor::new(bytes);
+                cursor.seek(*offset)?;
+                *cache = FileCache::Present(cursor);
+                file_size
+            }
+        } as u64;
+        match file.metadata.get() {
+            Some(meta) => Ok(meta),
+            None => {
+                let meta = FileStat {
+                    device: 0u64.into(),
+                    inode: 0u64.into(), // TODO(#80)
+                    file_type: FileType::RegularFile,
+                    num_links: 0,
+                    file_size,
+                    atime: 0u64.into(), // TODO(#81)
+                    mtime: 0u64.into(),
+                    ctime: 0u64.into(),
+                };
+                file.metadata.set(Some(meta));
+                Ok(meta)
+            }
+        }
     }
 
     /// Returns (bytes_read, new_offset).
@@ -525,59 +507,34 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
         fd: Fd,
         bufs: &mut [IoSliceMut],
-        offset: Option<FileOffset>,
-    ) -> Result<(usize, FileOffset)> {
+        offset: Option<SeekFrom>,
+    ) -> Result<usize> {
         let file = self.file(fd)?;
-
-        if let FileOffset::Stream = file.offset {
-            match offset {
-                Some(FileOffset::FromStart(0)) | None => (),
-                _ => return Err(ErrNo::SPipe),
+        match file.kind {
+            FileKind::Stdout | FileKind::Stderr { .. } | FileKind::Log { .. } => {
+                return Err(ErrNo::Inval)
             }
-        }
-
-        let read_offset = offset.unwrap_or(file.offset);
-        let filesize = self.filestat(ptx, fd)?.file_size;
-        match read_offset {
-            FileOffset::FromStart(o) if o == 0 => (),
-            FileOffset::FromEnd(o) if o == -(filesize as i64) => (),
-            FileOffset::FromStart(o) if o == filesize => return Ok((0, file.offset)),
-            FileOffset::FromEnd(o) if o == 0 => return Ok((0, file.offset)),
-            _ => return Err(ErrNo::NotSup),
-        }
-
-        let nbytes = match &file.kind {
-            FileKind::Stdout | FileKind::Stderr | FileKind::Log => return Err(ErrNo::Inval),
-            FileKind::Stdin => ptx.input().read_vectored(bufs)?,
-            FileKind::Bytecode {
-                addr: crate::AnyAddress::Native(addr),
-            } => match ptx.code_at(addr) {
-                Some(code) => code.to_vec().as_slice().read_vectored(bufs)?,
-                None => return Err(ErrNo::NoEnt),
-            },
-            FileKind::Balance {
-                addr: crate::AnyAddress::Native(addr),
-            } => match ptx.account_meta_at(addr) {
-                Some(meta) => meta.balance().to_le_bytes().as_ref().read_vectored(bufs)?,
-                None => return Err(ErrNo::NoEnt),
-            },
-            FileKind::Regular { key } => {
-                let mut bytes = match ptx.state().get(key) {
-                    Some(bytes) => bytes,
-                    None => return Err(ErrNo::NoEnt),
-                };
-                bytes.read_vectored(bufs)?
-            }
-            FileKind::ServiceSock { receipt, .. } => receipt.output().read_vectored(bufs)?,
-            _ => return Err(ErrNo::Fault),
+            _ => (),
         };
 
-        let new_offset = match file.offset {
-            FileOffset::Stream => FileOffset::Stream,
-            _ => FileOffset::FromStart(nbytes as u64),
+        let mut buf = file.buf.borrow_mut();
+        Self::populate_file(ptx, &file, &mut *buf)?;
+
+        let cursor = match &mut *buf {
+            FileCache::Present(ref mut cursor) => cursor,
+            FileCache::Absent(_) => unreachable!("file was just populated"),
         };
 
-        Ok((nbytes, new_offset))
+        match offset {
+            Some(offset) => {
+                let orig_pos = cursor.position();
+                cursor.seek(offset)?;
+                let nbytes = cursor.read_vectored(bufs)?;
+                cursor.set_position(orig_pos);
+                Ok(nbytes)
+            }
+            None => Ok(cursor.read_vectored(bufs)?),
+        }
     }
 
     /// Returns (bytes_written, new_offset).
@@ -586,76 +543,37 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
         fd: Fd,
         bufs: &[IoSlice],
-        offset: Option<FileOffset>,
-    ) -> Result<(usize, FileOffset)> {
+        offset: Option<SeekFrom>,
+    ) -> Result<usize> {
         let file = self.file(fd)?;
-        let write_offset = offset.unwrap_or(file.offset);
         match file.kind {
-            FileKind::Stdin
-            | FileKind::Bytecode { .. }
-            | FileKind::Balance { .. }
-            | FileKind::ServiceSock { .. } => return Err(ErrNo::Inval),
+            FileKind::Stdin | FileKind::Bytecode { .. } | FileKind::Balance { .. } => {
+                return Err(ErrNo::Inval)
+            }
             _ => (),
         };
 
-        let mut cat_buf = Vec::with_capacity(bufs.iter().map(|v| v.len()).sum());
-        let nbytes = cat_buf.write_vectored(bufs)?;
+        let mut buf = file.buf.borrow_mut();
+        Self::populate_file(ptx, &file, &mut *buf)?;
 
-        let new_offset = match &file.kind {
-            FileKind::Stdout => {
-                ptx.ret(&cat_buf);
-                FileOffset::FromEnd(0)
-            }
-            FileKind::Stderr => {
-                ptx.err(&cat_buf);
-                FileOffset::FromEnd(0)
-            }
-            FileKind::Log => {
-                // NOTE: topics must be written as a block of TOPIC_SIZE * MAX_TOPICS bytes.
-                // Space for unused topics should be set to zero.
-                const TOPIC_SIZE: usize = 32; // 256 bits
-                const MAX_TOPICS: usize = 4;
-                let data = cat_buf.split_off(TOPIC_SIZE * MAX_TOPICS);
-                let topics = cat_buf
-                    .chunks_exact(TOPIC_SIZE)
-                    .map(|c| {
-                        let mut arr = [0u8; 32];
-                        arr.copy_from_slice(c);
-                        arr
-                    })
-                    .collect::<Vec<[u8; 32]>>();
-                ptx.emit(
-                    &topics.iter().map(<[u8; 32]>::as_ref).collect::<Vec<_>>(),
-                    &data,
-                );
-                FileOffset::FromEnd(0)
-            }
-            FileKind::Regular { key } => {
-                let filesize = self.filestat(ptx, fd)?.file_size;
-                match write_offset {
-                    FileOffset::FromStart(0) => (),
-                    FileOffset::FromEnd(o) if o == -(filesize as i64) => (),
-                    _ => return Err(ErrNo::NotSup),
-                }
-                let nbytes = cat_buf.len();
-                ptx.state_mut().set(key, &cat_buf);
-                file.metadata.update(|mm| {
-                    mm.map(|mut m| {
-                        m.file_size = nbytes as u64;
-                        m
-                    })
-                });
-                match write_offset {
-                    FileOffset::FromStart(o) => FileOffset::FromStart(o + nbytes as u64),
-                    FileOffset::FromEnd(o) => {
-                        FileOffset::FromEnd(filesize as i64 + o + nbytes as i64)
-                    }
-                    FileOffset::Stream => FileOffset::Stream,
-                }
-            }
-            _ => unreachable!("checked above"),
+        let cursor = match &mut *buf {
+            FileCache::Present(ref mut cursor) => cursor,
+            FileCache::Absent(_) => unreachable!("file was just populated"),
         };
 
-        Ok((nbytes, new_offset))
+        let nbytes = match offset {
+            Some(offset) => {
+                let orig_pos = cursor.position();
+                cursor.seek(offset)?;
+                let nbytes = cursor.write_vectored(bufs)?;
+                cursor.set_position(orig_pos);
+                nbytes
+            }
+            None => cursor.write_vectored(bufs)?,
+        };
+        if nbytes > 0 {
+            file.dirty.replace(true);
+        }
+        Ok(nbytes)
     }
 }

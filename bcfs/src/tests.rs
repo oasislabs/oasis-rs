@@ -105,8 +105,12 @@ testcase!(
     fn open_close(ptx: &mut dyn PendingTransaction) -> u16 {
         let mut bcfs = BCFS::new(ptx, CHAIN_NAME);
         let mut abspath = good_home();
+        abspath.push(".");
+        abspath.push(".");
         abspath.push("somefile");
-        let relpath = PathBuf::from("somefile");
+        abspath.push("..");
+        abspath.push("somefile");
+        let relpath = PathBuf::from("./././././somefile/../somefile/.");
 
         let abs_fd = bcfs
             .open(ptx, None, &abspath, OpenFlags::CREATE, FdFlags::empty())

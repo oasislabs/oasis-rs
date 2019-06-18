@@ -59,6 +59,8 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
             return Err(ErrNo::NotSup);
         }
 
+        let path = self.canonicalize_path(path)?;
+
         if path == Path::new("/log") {
             if open_flags.intersects(OpenFlags::CREATE | OpenFlags::EXCL) {
                 return Err(ErrNo::Exist);
@@ -71,9 +73,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
             return Ok(File::<A>::LOG_DESCRIPTOR.into());
         }
 
-        let rel_path = path.strip_prefix(&self.home_dir).unwrap_or(path);
-
-        if let Some(svc_file_kind) = self.is_service_path(ptx, rel_path) {
+        if let Some(svc_file_kind) = self.is_service_path(ptx, &path) {
             if open_flags.intersects(OpenFlags::CREATE | OpenFlags::EXCL) {
                 return Err(ErrNo::Exist);
             }
@@ -93,14 +93,14 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
             return Ok(fd);
         }
 
-        if rel_path.is_absolute() {
+        if !path.starts_with(&self.home_dir) {
             // there are no other special files and those outside of the home directory are
             // (currently) defined as not existing. This will change once services can pass
             // capabilities to their storage to other services.
             return Err(ErrNo::NoEnt);
         }
 
-        let key = Self::key_for_path(rel_path)?;
+        let key = Self::key_for_path(&path)?;
         let file_exists = ptx.state().contains(&key);
 
         if file_exists && open_flags.contains(OpenFlags::EXCL) {
@@ -342,6 +342,29 @@ fn seekfrom_from_offset_whence(offset: FileDelta, whence: Whence) -> Result<Seek
 }
 
 impl<A: Address, M: AccountMeta> BCFS<A, M> {
+    fn canonicalize_path(&self, path: &Path) -> Result<PathBuf> {
+        use std::path::Component;
+        let mut canon_path = if path.has_root() {
+            PathBuf::new()
+        } else {
+            self.home_dir.clone()
+        };
+        for component in path.components() {
+            match component {
+                Component::Prefix(_) => return Err(ErrNo::NoEnt),
+                Component::RootDir => canon_path.push("/"),
+                Component::CurDir => (),
+                Component::ParentDir => {
+                    if !canon_path.pop() {
+                        return Err(ErrNo::NoEnt);
+                    }
+                }
+                Component::Normal(c) => canon_path.push(c),
+            }
+        }
+        Ok(canon_path)
+    }
+
     fn has_fd(&self, fd: Fd) -> bool {
         match self.files.get(fd_usize(fd)) {
             Some(Some(_)) => true,

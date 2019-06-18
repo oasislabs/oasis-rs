@@ -12,5 +12,4 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly && 
     rustup component add rustfmt && \
     rustup target add wasm32-unknown-unknown && \
     rustup target add wasm32-wasi && \
-    cargo install owasm-utils-cli --bin wasm-build && \
     echo "source ~/.cargo/env" >> ~/.bashrc

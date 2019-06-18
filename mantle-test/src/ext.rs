@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use mantle_types::{Address, ExtStatusCode};
 
 #[no_mangle]

@@ -203,11 +203,13 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector {
                     match msig.header.abi {
                         rustc_target::spec::abi::Abi::Rust => (),
                         _ => {
-                            let err_span = impl_item.span.until(impl_item.ident.span); // from the `pub` to the fn ident
-                            let err_span = err_span.from_inner_byte_pos(
-                                4,                                                // remoe the the `pub `
-                                (err_span.hi().0 - err_span.lo().0) as usize - 4, // remove the ` fn `
-                            );
+                            // start from the `pub` to the fn ident
+                            // then slice from after the `pub ` to before the ` fn `
+                            let err_span = impl_item.span.until(impl_item.ident.span);
+                            let err_span = err_span.from_inner(syntax_pos::InnerSpan::new(
+                                4,
+                                (err_span.hi().0 - err_span.lo().0) as usize - 4,
+                            ));
                             self.errors.push(RpcError::HasAbi(err_span));
                         }
                     }
@@ -319,15 +321,15 @@ impl<'ast> syntax::visit::Visitor<'ast> for RefChecker {
 }
 
 /// Collects public functions defined in `impl #service_name`.
-pub struct AnalyzedRpcCollector<'a, 'gcx, 'tcx> {
-    tcx: TyCtxt<'a, 'gcx, 'tcx>,
+pub struct AnalyzedRpcCollector<'tcx> {
+    tcx: TyCtxt<'tcx>,
     service_name: Symbol,
     rpc_impls: HirIdSet,
     rpcs: Vec<(Symbol, &'tcx hir::FnDecl)>, // the collected RPC fns
 }
 
-impl<'a, 'gcx, 'tcx> AnalyzedRpcCollector<'a, 'gcx, 'tcx> {
-    pub fn new(tcx: TyCtxt<'a, 'gcx, 'tcx>, service_name: Symbol) -> Self {
+impl<'tcx> AnalyzedRpcCollector<'tcx> {
+    pub fn new(tcx: TyCtxt<'tcx>, service_name: Symbol) -> Self {
         Self {
             tcx,
             service_name,
@@ -341,9 +343,7 @@ impl<'a, 'gcx, 'tcx> AnalyzedRpcCollector<'a, 'gcx, 'tcx> {
     }
 }
 
-impl<'a, 'gcx, 'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx>
-    for AnalyzedRpcCollector<'a, 'gcx, 'tcx>
-{
+impl<'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx> for AnalyzedRpcCollector<'tcx> {
     fn visit_item(&mut self, item: &'tcx hir::Item) {
         if let hir::ItemKind::Impl(_, _, _, _, None /* `trait_ref` */, ty, _) = &item.node {
             if let hir::TyKind::Path(hir::QPath::Resolved(_, path)) = &ty.node {
@@ -371,13 +371,13 @@ impl<'a, 'gcx, 'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx>
 
 /// Visits an RPC method's types and collects structs, unions, enums, and type aliases
 /// that are not in a standard library crate.
-pub struct DefinedTypeCollector<'a, 'gcx, 'tcx> {
-    tcx: TyCtxt<'a, 'gcx, 'tcx>,
+pub struct DefinedTypeCollector<'tcx> {
+    tcx: TyCtxt<'tcx>,
     adt_defs: FxHashSet<&'tcx AdtDef>, // maintain a `Set` to handle recursive types
 }
 
-impl<'a, 'gcx, 'tcx> DefinedTypeCollector<'a, 'gcx, 'tcx> {
-    pub fn new(tcx: TyCtxt<'a, 'gcx, 'tcx>) -> Self {
+impl<'tcx> DefinedTypeCollector<'tcx> {
+    pub fn new(tcx: TyCtxt<'tcx>) -> Self {
         Self {
             tcx,
             adt_defs: FxHashSet::default(),
@@ -408,7 +408,7 @@ impl<'a, 'gcx, 'tcx> DefinedTypeCollector<'a, 'gcx, 'tcx> {
     }
 }
 
-impl<'a, 'gcx, 'tcx> hir::intravisit::Visitor<'tcx> for DefinedTypeCollector<'a, 'gcx, 'tcx> {
+impl<'tcx> hir::intravisit::Visitor<'tcx> for DefinedTypeCollector<'tcx> {
     fn visit_ty(&mut self, ty: &'tcx hir::Ty) {
         if let hir::TyKind::Path(hir::QPath::Resolved(_, path)) = &ty.node {
             use hir::def::{DefKind, Res};
@@ -432,13 +432,13 @@ impl<'a, 'gcx, 'tcx> hir::intravisit::Visitor<'tcx> for DefinedTypeCollector<'a,
 /// Visits method bodies to find the structs of emitted events.
 /// Visit all methods because events can be emitted from any context (incl. library functions).
 /// The only constraint is that any event must be emitted in the current crate.
-pub struct EventCollector<'a, 'gcx, 'tcx> {
-    tcx: TyCtxt<'a, 'gcx, 'tcx>,
+pub struct EventCollector<'tcx> {
+    tcx: TyCtxt<'tcx>,
     adt_defs: FxHashSet<&'tcx AdtDef>,
 }
 
-impl<'a, 'gcx, 'tcx> EventCollector<'a, 'gcx, 'tcx> {
-    pub fn new(tcx: TyCtxt<'a, 'gcx, 'tcx>) -> Self {
+impl<'tcx> EventCollector<'tcx> {
+    pub fn new(tcx: TyCtxt<'tcx>) -> Self {
         Self {
             tcx,
             adt_defs: FxHashSet::default(),
@@ -452,7 +452,7 @@ impl<'a, 'gcx, 'tcx> EventCollector<'a, 'gcx, 'tcx> {
 
 // This visit could be made more robust to other traits/methods named Event/emit by actually
 // checking whether the types implement `mantle::exe::Event`, but this should suffice for now.
-impl<'a, 'gcx, 'tcx> hir::intravisit::Visitor<'tcx> for EventCollector<'a, 'gcx, 'tcx> {
+impl<'tcx> hir::intravisit::Visitor<'tcx> for EventCollector<'tcx> {
     fn visit_expr(&mut self, expr: &'tcx hir::Expr) {
         let emit_arg = match &expr.node {
             hir::ExprKind::MethodCall(path_seg, _span, args)

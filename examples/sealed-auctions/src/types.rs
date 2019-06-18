@@ -1,11 +1,12 @@
 extern crate chrono;
 
-use mantle::{Address, Event};
 use std::{collections::HashMap, vec::Vec};
 
-pub type UserId = Address;
+use mantle::{Address, Event};
+
 pub type ItemId = u64;
 pub type Result<T> = std::result::Result<T, Error>;
+pub type UserId = Address;
 
 #[derive(Debug, Eq, PartialEq, failure::Fail)]
 pub enum Error {

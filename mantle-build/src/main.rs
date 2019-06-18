@@ -1,5 +1,5 @@
 //! Compiles a Mantle executable and generates the RPC interface definition.
-//! Usage: `GEN_IDL_FOR=<crate_name> RUSTC_WRAPPER=mantle-build cargo build`
+//! Usage: `RUSTC_WRAPPER=mantle-build cargo build`
 
 #![feature(box_syntax, rustc_private)]
 
@@ -57,18 +57,11 @@ fn main() {
         args.push("--sysroot".to_string());
         args.push(sys_root);
 
-        let gen_crate_names_env = std::env::var("GEN_IDL_FOR");
-        let gen_crate_names = gen_crate_names_env
-            .as_ref()
-            .map(|names| names.split(',').collect::<Vec<_>>())
-            .unwrap_or_default();
-        let crate_name = arg_value(&args, "--crate-name", |name| {
-            gen_crate_names.contains(&name)
-        });
+        let crate_name = arg_value(&args, "--crate-name", |_| true);
         let is_bin = arg_value(&args, "--crate-type", |ty| ty == "bin").is_some();
         let is_testing =
             arg_value(&args, "--cfg", |ty| ty == "feature=\"mantle-build-test\"").is_some();
-        let do_gen = (crate_name.is_some() && is_bin) || is_testing;
+        let do_gen = is_testing || (is_bin && crate_name != Some("build_script_build"));
 
         let mut idl8r = mantle_build::BuildPlugin::default();
         let mut default = rustc_driver::DefaultCallbacks;

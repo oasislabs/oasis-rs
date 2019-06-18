@@ -259,20 +259,24 @@ testcase!(
             );
         }
 
-        assert_eq!(bcfs.seek(ptx, fd, 0, Whence::Start), Ok(0));
+        assert_eq!(
+            bcfs.seek(ptx, fd, -(nbytes as i64) + 1, Whence::Current),
+            Ok(1)
+        );
 
         assert_eq!(
             bcfs.read_vectored(ptx, fd, &mut [IoSliceMut::new(&mut read_buf)]),
-            Ok(nbytes)
+            Ok(nbytes - 1)
         );
 
         assert_eq!(
-            read_buf,
+            read_buf[..nbytes - 1],
             write_bufs
                 .iter()
                 .flat_map(|buf| buf.iter().cloned())
-                .collect::<Vec<u8>>()
+                .collect::<Vec<u8>>()[1..]
         );
+        assert_eq!(read_buf[read_buf.len() - 1], 0);
 
         0
     }

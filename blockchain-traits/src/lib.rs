@@ -189,7 +189,8 @@ pub enum TransactionOutcome {
     InsufficientGas,
     InvalidInput,
     NoAccount,
-    Aborted,
+    Aborted, // recoverable error
+    Fatal,
 }
 
 impl TransactionOutcome {

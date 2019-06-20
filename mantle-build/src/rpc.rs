@@ -369,7 +369,11 @@ impl Type {
         })
     }
 
-    fn convert_sty(tcx: TyCtxt, did: DefId, ty: &TyS) -> Result<Self, UnsupportedTypeError> {
+    fn convert_sty<'tcx>(
+        tcx: TyCtxt<'tcx>,
+        did: DefId,
+        ty: &'tcx TyS,
+    ) -> Result<Self, UnsupportedTypeError> {
         use ty::TyKind::*;
         Ok(match ty.sty {
             Bool => Type::Bool,

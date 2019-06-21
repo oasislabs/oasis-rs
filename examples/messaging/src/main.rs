@@ -120,7 +120,7 @@ impl MessageBoard {
 impl MessageBoard {
     /// Make a post to this message board. Only registered accounts may post.
     /// Returns the id of the post.
-    pub fn post(&mut self, ctx: &Context, text: String) -> Result<usize> {
+    pub fn post(&mut self, ctx: &Context, text: String) -> Result<u32> {
         if !self.accounts.contains_key(&ctx.sender()) {
             return Err(Error::PermissionDenied);
         }
@@ -142,7 +142,7 @@ impl MessageBoard {
             recipient: None,
         });
 
-        Ok(self.posts.len() - 1)
+        Ok(self.posts.len() as u32 - 1)
     }
 
     /// Returns all posts made during a given interval.

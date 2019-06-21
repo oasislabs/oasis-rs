@@ -14,7 +14,7 @@ use crate::Error;
 
 macro_rules! chain_dir {
     ($($ext:literal),*) => {
-        concat!("/opt/", env!("MANTLE_BLOCKCHAIN_NAME"), "/", $($ext),*)
+        concat!("/opt/", default_env::default_env!("MANTLE_BLOCKCHAIN_NAME", "oasis"), "/", $($ext),*)
     }
 }
 fn home<P: AsRef<Path>>(addr: &Address, file: P) -> PathBuf {

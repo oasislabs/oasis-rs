@@ -1,4 +1,9 @@
-#![feature(bind_by_move_pattern_guards, linkage, non_exhaustive, trait_alias)]
+#![feature(
+    bind_by_move_pattern_guards,
+    non_exhaustive,
+    proc_macro_hygiene,
+    trait_alias
+)]
 #![cfg_attr(target_os = "wasi", feature(wasi_ext))]
 
 extern crate mantle_macros;

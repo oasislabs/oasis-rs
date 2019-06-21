@@ -34,6 +34,18 @@ pub fn generate_and_insert(
     krate.module.items.push(
         parse!(format!("include!(\"{}\");", ctor_include_file.display()) => parse_item).unwrap(),
     );
+    krate.module.items.insert(0,
+        parse!(r#"
+            #[cfg(all(
+                not(any(test, feature = "mantle-build-test")),
+                not(all(
+                    target_arch = "wasm32",
+                    not(target_env = "emscripten")
+                ))
+            ))]
+            compile_error!("Compiling a Mantle service to a native target is unlikely to work as expected. Did you meant to use `cargo build --target wasm32-wasi`?");
+        "# => parse_item).unwrap(),
+    );
 }
 
 fn generate_rpc_dispatcher(service_name: Symbol, rpcs: &[(Symbol, MethodSig)]) -> P<Block> {

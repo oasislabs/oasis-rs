@@ -488,3 +488,29 @@ testcase!(
         0
     }
 );
+
+testcase!(
+    fn unlink(ptx: &mut dyn PendingTransaction) -> u16 {
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
+
+        let path = PathBuf::from("somefile");
+        let curdir = crate::file::HOME_DIR_FILENO.into();
+
+        let fd = bcfs
+            .open(ptx, curdir, &path, OpenFlags::CREATE, FdFlags::empty())
+            .unwrap();
+
+        let write_val = b"not empty";
+        assert_eq!(
+            bcfs.write_vectored(ptx, fd, &[std::io::IoSlice::new(write_val.as_ref())]),
+            Ok(write_val.len())
+        );
+        assert!(bcfs.close(ptx, fd).is_ok());
+        assert_eq!(bcfs.unlink(ptx, curdir, &path), Ok(write_val.len() as u64));
+        assert_eq!(
+            bcfs.open(ptx, curdir, &path, OpenFlags::empty(), FdFlags::empty()),
+            Err(ErrNo::NoEnt)
+        );
+        0
+    }
+);

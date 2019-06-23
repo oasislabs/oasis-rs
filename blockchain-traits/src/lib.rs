@@ -136,6 +136,9 @@ pub trait KVStoreMut: KVStore {
     /// Sets the data stored in the account under the given  `key`.
     /// Overwrites any existing data.
     fn set(&mut self, key: &[u8], value: &[u8]);
+
+    /// Removes the data stored in the account under the given  `key`.
+    fn remove(&mut self, key: &[u8]);
 }
 
 pub trait Receipt {

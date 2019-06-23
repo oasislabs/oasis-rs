@@ -60,11 +60,9 @@ fn create_memchain(
 }
 
 /// Returns a known-good home directory.
+/// Path is relative to the FD with number CHAIN_DIR_FILENO.
 fn good_home() -> PathBuf {
-    let mut p = PathBuf::from("/opt");
-    p.push(CHAIN_NAME);
-    p.push(hex::encode(&ADDR_2));
-    p
+    PathBuf::from(hex::encode(&ADDR_2))
 }
 
 macro_rules! testcase {
@@ -88,13 +86,13 @@ macro_rules! testcase {
 
 testcase!(
     fn close_fd(ptx: &mut dyn PendingTransaction) -> u16 {
-        let mut bcfs = BCFS::new(ptx, CHAIN_NAME);
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
         for fd in 0u32..=3 {
             let fd = Fd::from(fd);
             assert!(bcfs.close(ptx, fd).is_ok());
             assert_eq!(bcfs.close(ptx, fd), Err(ErrNo::BadF)); // double close
         }
-        for fd in 4u32..10 {
+        for fd in (crate::file::HOME_DIR_FILENO + 1)..10 {
             assert_eq!(bcfs.close(ptx, Fd::from(fd)), Err(ErrNo::BadF));
         }
         0
@@ -103,7 +101,7 @@ testcase!(
 
 testcase!(
     fn open_close(ptx: &mut dyn PendingTransaction) -> u16 {
-        let mut bcfs = BCFS::new(ptx, CHAIN_NAME);
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
         let mut abspath = good_home();
         abspath.push(".");
         abspath.push(".");
@@ -113,20 +111,44 @@ testcase!(
         let relpath = PathBuf::from("./././././somefile/../somefile/.");
 
         let abs_fd = bcfs
-            .open(ptx, None, &abspath, OpenFlags::CREATE, FdFlags::empty())
+            .open(
+                ptx,
+                crate::file::CHAIN_DIR_FILENO.into(),
+                &abspath,
+                OpenFlags::CREATE,
+                FdFlags::empty(),
+            )
             .unwrap();
 
         // double create
         assert_eq!(
-            bcfs.open(ptx, None, &abspath, OpenFlags::EXCL, FdFlags::empty()),
+            bcfs.open(
+                ptx,
+                crate::file::CHAIN_DIR_FILENO.into(),
+                &abspath,
+                OpenFlags::EXCL,
+                FdFlags::empty()
+            ),
             Err(ErrNo::Exist)
         );
 
         let abs_fd2 = bcfs
-            .open(ptx, None, &abspath, OpenFlags::empty(), FdFlags::empty())
+            .open(
+                ptx,
+                crate::file::CHAIN_DIR_FILENO.into(),
+                &abspath,
+                OpenFlags::empty(),
+                FdFlags::empty(),
+            )
             .unwrap();
         let rel_fd = bcfs
-            .open(ptx, None, &relpath, OpenFlags::empty(), FdFlags::APPEND)
+            .open(
+                ptx,
+                crate::file::HOME_DIR_FILENO.into(),
+                &relpath,
+                OpenFlags::empty(),
+                FdFlags::APPEND,
+            )
             .unwrap();
 
         assert!(bcfs.close(ptx, abs_fd).is_ok());
@@ -138,12 +160,18 @@ testcase!(
 
 testcase!(
     fn read_write_basic(ptx: &mut dyn PendingTransaction) -> u16 {
-        let mut bcfs = BCFS::new(ptx, CHAIN_NAME);
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
 
         let path = PathBuf::from("somefile");
 
         let fd = bcfs
-            .open(ptx, None, &path, OpenFlags::CREATE, FdFlags::empty())
+            .open(
+                ptx,
+                crate::file::HOME_DIR_FILENO.into(),
+                &path,
+                OpenFlags::CREATE,
+                FdFlags::empty(),
+            )
             .unwrap();
 
         let write_bufs = ["hello", "world"];
@@ -242,12 +270,18 @@ testcase!(
 
 testcase!(
     fn write_consecutive(ptx: &mut dyn PendingTransaction) -> u16 {
-        let mut bcfs = BCFS::new(ptx, CHAIN_NAME);
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
 
         let path = PathBuf::from("somefile");
 
         let fd = bcfs
-            .open(ptx, None, &path, OpenFlags::CREATE, FdFlags::empty())
+            .open(
+                ptx,
+                crate::file::HOME_DIR_FILENO.into(),
+                &path,
+                OpenFlags::CREATE,
+                FdFlags::empty(),
+            )
             .unwrap();
 
         let write_bufs: &[&[u8]] = &[b"hello", b" world"];
@@ -288,16 +322,28 @@ testcase!(
 
 testcase!(
     fn read_write_aliased(ptx: &mut dyn PendingTransaction) -> u16 {
-        let mut bcfs = BCFS::new(ptx, CHAIN_NAME);
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
 
         let path = PathBuf::from("somefile");
         let abspath = good_home().join(&path);
 
-        let abs_fd = bcfs
-            .open(ptx, None, &path, OpenFlags::CREATE, FdFlags::empty())
-            .unwrap();
         let rel_fd = bcfs
-            .open(ptx, None, &abspath, OpenFlags::empty(), FdFlags::empty())
+            .open(
+                ptx,
+                crate::file::HOME_DIR_FILENO.into(),
+                &path,
+                OpenFlags::CREATE,
+                FdFlags::empty(),
+            )
+            .unwrap();
+        let abs_fd = bcfs
+            .open(
+                ptx,
+                crate::file::CHAIN_DIR_FILENO.into(),
+                &abspath,
+                OpenFlags::empty(),
+                FdFlags::empty(),
+            )
             .unwrap();
 
         let write_bufs = ["hello", "world"];
@@ -318,6 +364,15 @@ testcase!(
             ),
             Ok(nbytes)
         );
+        let rel_seek = 1;
+        assert_eq!(
+            bcfs.write_vectored(
+                ptx,
+                rel_fd, // NB: absolute path fd
+                &[IoSlice::new(b"!")]
+            ),
+            Ok(rel_seek)
+        );
         bcfs.flush(ptx, abs_fd).unwrap();
         assert_eq!(
             bcfs.read_vectored(
@@ -328,17 +383,17 @@ testcase!(
                     .map(|b| IoSliceMut::new(b))
                     .collect::<Vec<_>>()
             ),
-            Ok(nbytes)
+            Ok(nbytes - rel_seek)
         );
-        assert_eq!(std::str::from_utf8(&read_bufs[0]).unwrap(), write_bufs[0]);
-        assert_eq!(std::str::from_utf8(&read_bufs[1]).unwrap(), write_bufs[1]);
+        assert_eq!(std::str::from_utf8(&read_bufs[0]).unwrap(), "ellow");
+        assert_eq!(std::str::from_utf8(&read_bufs[1]).unwrap(), "orld\0");
         0
     }
 );
 
 testcase!(
     fn badf(ptx: &mut dyn PendingTransaction) -> u16 {
-        let mut bcfs = BCFS::new(ptx, CHAIN_NAME);
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
         let badf = Fd::from(99u32);
 
         assert_eq!(
@@ -375,15 +430,27 @@ testcase!(
 
 testcase!(
     fn renumber(ptx: &mut dyn PendingTransaction) -> u16 {
-        let mut bcfs = BCFS::new(ptx, CHAIN_NAME);
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
         let somefile = PathBuf::from("somefile");
         let anotherfile = PathBuf::from("anotherfile");
 
         let somefile_fd = bcfs
-            .open(ptx, None, &somefile, OpenFlags::CREATE, FdFlags::empty())
+            .open(
+                ptx,
+                crate::file::HOME_DIR_FILENO.into(),
+                &somefile,
+                OpenFlags::CREATE,
+                FdFlags::empty(),
+            )
             .unwrap();
         let anotherfile_fd = bcfs
-            .open(ptx, None, &anotherfile, OpenFlags::CREATE, FdFlags::empty())
+            .open(
+                ptx,
+                crate::file::HOME_DIR_FILENO.into(),
+                &anotherfile,
+                OpenFlags::CREATE,
+                FdFlags::empty(),
+            )
             .unwrap();
 
         let write_bufs = ["destination", "somefile"];

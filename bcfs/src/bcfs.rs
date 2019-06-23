@@ -11,14 +11,13 @@ use wasi_types::{
 };
 
 use crate::{
-    file::{File, FileCache, FileKind, Filelike},
-    AnyAddress, Result,
+    file::{File, FileCache, FileKind, CHAIN_DIR_FILENO, HOME_DIR_FILENO},
+    Result,
 };
 
 pub struct BCFS<A: Address, M: AccountMeta> {
-    files: Vec<Option<Filelike<A>>>,
-    blockchain_name: String,
-    home_dir: PathBuf,
+    files: Vec<Option<File<A>>>,
+    home_addr: A,
     _account_meta: std::marker::PhantomData<M>,
 }
 
@@ -26,98 +25,86 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
     /// Creates a new ptx FS with a backing `ptx` and hex stringified
     /// owner address.
     pub fn new<S: AsRef<str>>(
-        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        home_addr: A,
+        // ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
         blockchain_name: S,
     ) -> Self {
-        let mut home_dir = PathBuf::from("/opt");
-        home_dir.push(blockchain_name.as_ref());
-        home_dir.push(ptx.address().path_repr());
-
         Self {
-            files: vec![
-                Some(Filelike::File(File::stdin())),
-                Some(Filelike::File(File::stdout())),
-                Some(Filelike::File(File::stderr())),
-                Some(Filelike::File(File::log())),
-            ],
-            blockchain_name: blockchain_name.as_ref().to_string(),
-            home_dir,
+            files: File::defaults(blockchain_name.as_ref()),
+            home_addr,
             _account_meta: std::marker::PhantomData,
+        }
+    }
+
+    pub fn prestat(
+        &mut self,
+        _ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        fd: Fd,
+    ) -> Result<&Path> {
+        match &self.file(fd)?.kind {
+            FileKind::Directory { path } => Ok(path),
+            _ => Err(ErrNo::BadF),
         }
     }
 
     pub fn open(
         &mut self,
         ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
-        curdir: Option<Fd>,
+        curdir: Fd,
         path: &Path,
         open_flags: OpenFlags,
         fd_flags: FdFlags,
     ) -> Result<Fd> {
-        if open_flags.contains(OpenFlags::DIRECTORY) | curdir.is_some() {
-            // The virutal filesystem does not yet support directories.
+        if open_flags.contains(OpenFlags::DIRECTORY) {
+            // The virutal filesystem does not yet allow opening directories.
             return Err(ErrNo::NotSup);
         }
 
-        let path = self.canonicalize_path(path)?;
+        match &self.file(curdir)?.kind {
+            FileKind::Directory { .. } => (),
+            _ => return Err(ErrNo::BadF),
+        };
 
-        if path == Path::new("/log") {
+        let mut file_exists = true;
+        let file_kind = match self.canonicalize_path(curdir, path)? {
+            (None, path) if path == Path::new("log") => FileKind::Log,
+            (Some(addr), path) if path == Path::new("balance") => FileKind::Balance { addr },
+            (Some(addr), path) if path == Path::new("bytecode") => FileKind::Bytecode { addr },
+            (Some(addr), path) if addr == self.home_addr => {
+                let key = Self::key_for_path(&path)?;
+                file_exists = ptx.state().contains(&key);
+                if file_exists && open_flags.contains(OpenFlags::EXCL) {
+                    return Err(ErrNo::Exist);
+                } else if !file_exists && !open_flags.contains(OpenFlags::CREATE) {
+                    return Err(ErrNo::NoEnt);
+                } else if !file_exists {
+                    ptx.state_mut().set(&key, &Vec::new());
+                    // ^ This must be done eagerly to match POSIX which immediately creates the file.
+                }
+                FileKind::Regular { key }
+            }
+            _ => return Err(ErrNo::NoEnt),
+        };
+
+        if file_kind.is_blockchain_intrinsic() {
             if open_flags.intersects(OpenFlags::CREATE | OpenFlags::EXCL) {
                 return Err(ErrNo::Exist);
             }
-            if !fd_flags.contains(FdFlags::APPEND)
-                || open_flags.intersects(OpenFlags::TRUNC | OpenFlags::DIRECTORY)
+            if open_flags.intersects(OpenFlags::TRUNC | OpenFlags::DIRECTORY)
+                || (file_kind.is_log() && !fd_flags.contains(FdFlags::APPEND))
+                || (!file_kind.is_log() && fd_flags.contains(FdFlags::APPEND))
             {
                 return Err(ErrNo::Inval);
             }
-            return Ok(File::<A>::LOG_DESCRIPTOR.into());
-        }
-
-        if let Some(svc_file_kind) = self.is_service_path(ptx, &path) {
-            if open_flags.intersects(OpenFlags::CREATE | OpenFlags::EXCL) {
-                return Err(ErrNo::Exist);
-            }
-            if fd_flags.contains(FdFlags::APPEND)
-                || open_flags.intersects(OpenFlags::TRUNC | OpenFlags::DIRECTORY)
-            {
-                return Err(ErrNo::Inval);
-            }
-            let fd = self.alloc_fd()?;
-            self.files.push(Some(Filelike::File(File {
-                kind: svc_file_kind,
-                flags: fd_flags,
-                metadata: Cell::new(None),
-                buf: RefCell::new(FileCache::Absent(SeekFrom::Start(0))),
-                dirty: Cell::new(false),
-            })));
-            return Ok(fd);
-        }
-
-        if !path.starts_with(&self.home_dir) {
-            // there are no other special files and those outside of the home directory are
-            // (currently) defined as not existing. This will change once services can pass
-            // capabilities to their storage to other services.
-            return Err(ErrNo::NoEnt);
-        }
-
-        let key = Self::key_for_path(&path)?;
-        let file_exists = ptx.state().contains(&key);
-
-        if file_exists && open_flags.contains(OpenFlags::EXCL) {
-            return Err(ErrNo::Exist);
-        } else if !file_exists && !open_flags.contains(OpenFlags::CREATE) {
-            return Err(ErrNo::NoEnt);
         }
 
         let fd = self.alloc_fd()?;
-        self.files.push(Some(Filelike::File(File {
-            kind: FileKind::Regular { key: key.to_vec() },
+        self.files.push(Some(File {
+            kind: file_kind,
             flags: fd_flags,
             metadata: Cell::new(if file_exists {
                 None
             } else {
-                ptx.state_mut().set(key, &Vec::new());
-                // ^ This must be done eagerly to match POSIX which immediately creates the file.
                 Some(FileStat {
                     device: 0u64.into(),
                     inode: 0u32.into(),
@@ -135,7 +122,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
                 FileCache::Present(Cursor::new(Vec::new()))
             }),
             dirty: Cell::new(false),
-        })));
+        }));
         Ok(fd)
     }
 
@@ -144,30 +131,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
         fd: Fd,
     ) -> Result<()> {
-        let file = self.file(fd)?;
-        if !file.dirty.get() {
-            return Ok(());
-        }
-        let maybe_cursor = file.buf.borrow();
-        let buf = match &*maybe_cursor {
-            FileCache::Present(cursor) => cursor.get_ref(),
-            FileCache::Absent(_) => return Ok(()),
-        };
-        match &file.kind {
-            FileKind::Stdin | FileKind::Bytecode { .. } | FileKind::Balance { .. } => (),
-            FileKind::Stdout => ptx.ret(buf),
-            FileKind::Stderr => ptx.err(buf),
-            FileKind::Log => {
-                // NOTE: topics must be written as a block of TOPIC_SIZE * MAX_TOPICS bytes.
-                // Space for unused topics should be set to zero.
-                const TOPIC_SIZE: usize = 32; // 256 bits
-                const MAX_TOPICS: usize = 4;
-                let (cat_topics, data) = buf.split_at(TOPIC_SIZE * MAX_TOPICS);
-                let topics = cat_topics.chunks_exact(TOPIC_SIZE).collect::<Vec<&[u8]>>();
-                ptx.emit(&topics, &data);
-            }
-            FileKind::Regular { key } => ptx.state_mut().set(&key, &buf),
-        }
+        self.do_flush(ptx, self.file(fd)?);
         Ok(())
     }
 
@@ -323,6 +287,15 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
             Err(ErrNo::BadF)
         }
     }
+
+    pub fn sync(&mut self, ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>) {
+        // flush stdout and stderr
+        for file in self.files[1..=3].iter() {
+            if let Some(file) = file {
+                self.do_flush(ptx, file);
+            }
+        }
+    }
 }
 
 fn fd_usize(fd: Fd) -> usize {
@@ -342,17 +315,44 @@ fn seekfrom_from_offset_whence(offset: FileDelta, whence: Whence) -> Result<Seek
 }
 
 impl<A: Address, M: AccountMeta> BCFS<A, M> {
-    fn canonicalize_path(&self, path: &Path) -> Result<PathBuf> {
+    fn canonicalize_path(&self, curdir: Fd, path: &Path) -> Result<(Option<A>, PathBuf)> {
         use std::path::Component;
-        let mut canon_path = if path.has_root() {
-            PathBuf::new()
+
+        if path.has_root() {
+            return Err(ErrNo::NoEnt); // WASI paths must be releative to a preopened dir.
+        }
+
+        let curdir_fileno = u32::from(curdir);
+
+        let mut canon_path = PathBuf::new();
+
+        let mut comps = path
+            .components()
+            .skip_while(|comp| *comp == Component::CurDir)
+            .peekable();
+
+        let addr = if curdir_fileno == CHAIN_DIR_FILENO {
+            match comps.peek() {
+                Some(Component::Normal(maybe_addr)) => {
+                    let addr = match maybe_addr.to_str().map(A::from_str) {
+                        Some(Ok(addr)) => {
+                            comps.next();
+                            Some(addr)
+                        }
+                        _ => None,
+                    };
+                    addr
+                }
+                Some(Component::Prefix(_)) | Some(Component::RootDir) => return Err(ErrNo::NoEnt),
+                _ => None,
+            }
         } else {
-            self.home_dir.clone()
+            Some(self.home_addr)
         };
-        for component in path.components() {
-            match component {
-                Component::Prefix(_) => return Err(ErrNo::NoEnt),
-                Component::RootDir => canon_path.push("/"),
+
+        for comp in comps {
+            match comp {
+                Component::Prefix(_) | Component::RootDir => return Err(ErrNo::NoEnt),
                 Component::CurDir => (),
                 Component::ParentDir => {
                     if !canon_path.pop() {
@@ -362,7 +362,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
                 Component::Normal(c) => canon_path.push(c),
             }
         }
-        Ok(canon_path)
+        Ok((addr, canon_path))
     }
 
     fn has_fd(&self, fd: Fd) -> bool {
@@ -374,7 +374,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
 
     fn file(&self, fd: Fd) -> Result<&File<A>> {
         match self.files.get(fd_usize(fd)) {
-            Some(Some(Filelike::File(file))) => Ok(file),
+            Some(Some(file)) => Ok(file),
             _ => Err(ErrNo::BadF),
         }
     }
@@ -384,63 +384,8 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
             .files
             .get_mut(usize::try_from(u64::from(fd)).map_err(|_| ErrNo::BadF)?)
         {
-            Some(Some(Filelike::File(file))) => Ok(file),
+            Some(Some(file)) => Ok(file),
             _ => Err(ErrNo::BadF),
-        }
-    }
-
-    fn is_service_path(
-        &self,
-        ptx: &dyn PendingTransaction<Address = A, AccountMeta = M>,
-        path: &Path,
-    ) -> Option<FileKind<A>> {
-        use std::path::Component;
-
-        if path == Path::new("code") {
-            return Some(FileKind::Bytecode {
-                addr: AnyAddress::Native(*ptx.address()),
-            });
-        } else if path == Path::new("balance") {
-            return Some(FileKind::Balance {
-                addr: AnyAddress::Native(*ptx.address()),
-            });
-        }
-
-        let mut comps = path.components();
-
-        match comps.next() {
-            Some(Component::RootDir) => (),
-            _ => return None,
-        }
-
-        match comps.next() {
-            Some(Component::Normal(c)) if c == "opt" => (),
-            _ => return None,
-        }
-
-        match comps.next() {
-            Some(Component::Normal(c)) if *c == self.blockchain_name.as_ref() => (),
-            _ => return None,
-        }
-
-        let addr = match comps
-            .next()
-            .and_then(|c| c.as_os_str().to_str())
-            .map(A::from_str)
-        {
-            Some(Ok(addr)) => AnyAddress::Native(addr),
-            _ => return None,
-        };
-
-        let svc_file_kind = match comps.next() {
-            Some(Component::Normal(c)) if c == "code" => FileKind::Bytecode { addr },
-            Some(Component::Normal(c)) if c == "balance" => FileKind::Balance { addr },
-            _ => return None,
-        };
-
-        match comps.next() {
-            None => Some(svc_file_kind),
-            _ => None,
         }
     }
 
@@ -460,8 +405,10 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         .ok_or(ErrNo::Inval)
     }
 
-    fn key_for_path(path: &Path) -> Result<&[u8]> {
-        path.to_str().ok_or(ErrNo::Inval).map(str::as_bytes)
+    fn key_for_path(path: &Path) -> Result<Vec<u8>> {
+        path.to_str()
+            .ok_or(ErrNo::Inval)
+            .map(|s| s.as_bytes().to_vec())
     }
 
     fn populate_file(
@@ -474,15 +421,11 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
             FileCache::Absent(offset) => {
                 let bytes = match &file.kind {
                     FileKind::Stdin => ptx.input().to_vec(),
-                    FileKind::Bytecode {
-                        addr: crate::AnyAddress::Native(addr),
-                    } => match ptx.code_at(&addr) {
+                    FileKind::Bytecode { addr } => match ptx.code_at(&addr) {
                         Some(code) => code.to_vec(),
                         None => return Err(ErrNo::NoEnt),
                     },
-                    FileKind::Balance {
-                        addr: crate::AnyAddress::Native(addr),
-                    } => match ptx.account_meta_at(&addr) {
+                    FileKind::Balance { addr } => match ptx.account_meta_at(&addr) {
                         Some(meta) => meta.balance().to_le_bytes().to_vec(),
                         None => return Err(ErrNo::NoEnt),
                     },
@@ -491,12 +434,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
                         None => return Err(ErrNo::NoEnt),
                     },
                     FileKind::Stdout | FileKind::Stderr | FileKind::Log => Vec::new(),
-                    FileKind::Bytecode {
-                        addr: crate::AnyAddress::Foreign(_),
-                    }
-                    | FileKind::Balance {
-                        addr: crate::AnyAddress::Foreign(_),
-                    } => return Err(ErrNo::Fault),
+                    FileKind::Directory { .. } => return Err(ErrNo::Fault),
                 };
                 let file_size = bytes.len();
                 let mut cursor = Cursor::new(bytes);
@@ -598,5 +536,71 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
             file.dirty.replace(true);
         }
         Ok(nbytes)
+    }
+
+    fn do_flush(
+        &self,
+        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        file: &File<A>,
+    ) {
+        if !file.dirty.get() {
+            return;
+        }
+        let maybe_cursor = file.buf.borrow();
+        let buf = match &*maybe_cursor {
+            FileCache::Present(cursor) => cursor.get_ref(),
+            FileCache::Absent(_) => return,
+        };
+        match &file.kind {
+            FileKind::Stdin | FileKind::Bytecode { .. } | FileKind::Balance { .. } => (),
+            FileKind::Stdout => ptx.ret(buf),
+            FileKind::Stderr => ptx.err(buf),
+            FileKind::Log => {
+                if let Some((topics, data)) = Self::parse_log(buf) {
+                    ptx.emit(&topics, data);
+                }
+            }
+            FileKind::Regular { key } => {
+                ptx.state_mut().set(&key, &buf);
+                for f in self.files[(HOME_DIR_FILENO as usize + 1)..].iter() {
+                    match f {
+                        Some(f) => match f {
+                            File {
+                                kind: FileKind::Regular { key: f_key },
+                                ..
+                            } if key == f_key && f as *const File<A> != file as *const File<A> => {
+                                let mut f_buf = f.buf.borrow_mut();
+                                let mut cursor = Cursor::new(buf.clone());
+                                cursor
+                                    .seek(match &*f_buf {
+                                        FileCache::Absent(seek_from) => *seek_from,
+                                        FileCache::Present(cursor) => {
+                                            SeekFrom::Start(cursor.position())
+                                        }
+                                    })
+                                    .ok(); // deal with the error when the file is actually read
+                                *f_buf = FileCache::Present(cursor);
+                                f.metadata.replace(None);
+                            }
+                            _ => (),
+                        },
+                        None => (),
+                    }
+                }
+                file.dirty.set(false);
+            }
+            FileKind::Directory { .. } => (),
+        }
+    }
+
+    fn parse_log(buf: &[u8]) -> Option<(Vec<&[u8]>, &[u8])> {
+        use nom::{length_count, length_data, named, number::complete::le_u32, tuple};
+        named!(parser<&[u8], (Vec<&[u8]>, &[u8])>, tuple!(
+            length_count!(le_u32, length_data!(le_u32)), length_data!(le_u32)
+        ));
+        match parser(buf) {
+            Ok(([], result)) => Some(result),
+            _ => None,
+        }
     }
 }

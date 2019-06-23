@@ -128,9 +128,6 @@ pub trait KVStore {
     /// Returns whether the key is present in account storage.
     fn contains(&self, key: &[u8]) -> bool;
 
-    /// Returns the size of the data stored in the account at `addr` under the given `key`.
-    fn size(&self, key: &[u8]) -> Option<u64>;
-
     /// Returns the data stored in the account at `addr` under the given `key`.
     fn get(&self, key: &[u8]) -> Option<&[u8]>;
 }

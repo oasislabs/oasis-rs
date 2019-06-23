@@ -108,10 +108,6 @@ impl blockchain_traits::KVStore for Account {
         self.storage.contains_key(key)
     }
 
-    fn size(&self, key: &[u8]) -> Option<u64> {
-        self.storage.get(key).map(|v| v.len() as u64)
-    }
-
     fn get(&self, key: &[u8]) -> Option<&[u8]> {
         self.storage.get(key).map(Vec::as_slice)
     }

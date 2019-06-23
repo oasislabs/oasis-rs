@@ -15,6 +15,7 @@ crate-type = ["rlib", "cdylib"]
 [dependencies]
 blockchain-traits = { version = "0.1", path = "../blockchain-traits" }
 mantle-types = { version = "0.2", path = "../mantle-types" }
+nom = { version = "5.0.0-beta3", default-features = false, features = ["std"] }
 wasi-types = "0.1"
 
 [dev-dependencies]

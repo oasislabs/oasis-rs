@@ -1,12 +1,11 @@
 use std::{
     cell::{Cell, RefCell},
     io::{Cursor, SeekFrom},
+    path::PathBuf,
 };
 
 use blockchain_traits::Address;
 use wasi_types::{FdFlags, FileStat};
-
-use crate::AnyAddress;
 
 pub struct File<A: Address> {
     pub kind: FileKind<A>,
@@ -28,38 +27,69 @@ pub enum FileCache {
     Present(Cursor<Vec<u8>>),
 }
 
-pub enum Filelike<A: Address> {
-    File(File<A>),
-}
-
 pub enum FileKind<A: Address> {
     Stdin,
     Stdout,
     Stderr,
     Log,
     Regular { key: Vec<u8> },
-    Bytecode { addr: AnyAddress<A> },
-    Balance { addr: AnyAddress<A> },
+    Balance { addr: A },
+    Bytecode { addr: A },
+    Directory { path: PathBuf },
+}
+
+impl<A: Address> FileKind<A> {
+    pub fn is_log(&self) -> bool {
+        match self {
+            FileKind::Log => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_blockchain_intrinsic(&self) -> bool {
+        match self {
+            FileKind::Log | FileKind::Balance { .. } | FileKind::Bytecode { .. } => true,
+            _ => false,
+        }
+    }
 }
 
 macro_rules! special_file_ctor {
-    ($($fn:ident : $kind:ident),+) => {
-        $(
-        pub fn $fn() -> Self {
-            Self {
-                kind: FileKind::$kind,
-                flags: FdFlags::APPEND | FdFlags::SYNC,
-                metadata: Cell::new(None),
-                buf: RefCell::new(FileCache::Absent(SeekFrom::Start(0))),
-                dirty: Cell::new(false),
-            }
+    ($($kind:ident),+) => {
+        pub fn defaults(blockchain_name: &str) -> Vec<Option<Self>> {
+            let mut chain_dir = PathBuf::from("/opt");
+            chain_dir.push(blockchain_name);
+
+            vec![
+                $(Some(Self {
+                    kind: FileKind::$kind,
+                    flags: FdFlags::APPEND | FdFlags::SYNC,
+                    metadata: Cell::new(None),
+                    buf: RefCell::new(FileCache::Absent(SeekFrom::Start(0))),
+                    dirty: Cell::new(false),
+                })),+,
+                Some(Self {
+                    kind: FileKind::Directory { path: chain_dir },
+                    flags: FdFlags::SYNC,
+                    metadata: Cell::new(None),
+                    buf: RefCell::new(FileCache::Absent(SeekFrom::Start(0))),
+                    dirty: Cell::new(false),
+                }),
+                Some(Self {
+                    kind: FileKind::Directory { path: PathBuf::from(".") },
+                    flags: FdFlags::SYNC,
+                    metadata: Cell::new(None),
+                    buf: RefCell::new(FileCache::Absent(SeekFrom::Start(0))),
+                    dirty: Cell::new(false),
+                }),
+            ]
         }
-        )+
     }
 }
 
 impl<A: Address> File<A> {
-    pub const LOG_DESCRIPTOR: u32 = 3;
-
-    special_file_ctor!(stdin: Stdin, stdout: Stdout, stderr: Stderr, log: Log);
+    special_file_ctor!(Stdin, Stdout, Stderr);
 }
+
+pub const CHAIN_DIR_FILENO: u32 = 3;
+pub const HOME_DIR_FILENO: u32 = 4;

@@ -78,7 +78,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
                 } else if !file_exists && !open_flags.contains(OpenFlags::CREATE) {
                     return Err(ErrNo::NoEnt);
                 } else if !file_exists {
-                    ptx.state_mut().set(&key, &Vec::new());
+                    ptx.state_mut().set(&key, &[]);
                     // ^ This must be done eagerly to match POSIX which immediately creates the file.
                 }
                 FileKind::Regular { key }
@@ -148,6 +148,35 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
             }
             _ => Err(ErrNo::BadF),
         }
+    }
+
+    /// Removes the file at `path` and returns the number of bytes previously in the file.
+    pub fn unlink(
+        &mut self,
+        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        curdir: Fd,
+        path: &Path,
+    ) -> Result<u64> {
+        let curdir_fileno = u32::from(curdir);
+        if curdir_fileno != HOME_DIR_FILENO {
+            return Err(ErrNo::Access);
+        }
+
+        let (addr, path) = self.canonicalize_path(curdir, path)?;
+        match addr {
+            Some(addr) if addr == self.home_addr => (),
+            _ => return Err(ErrNo::Access),
+        }
+
+        if path == Path::new("balance") || path == Path::new("bytecode") {
+            return Err(ErrNo::Access);
+        }
+
+        let key = Self::key_for_path(&path)?;
+        let state = ptx.state_mut();
+        let prev_len = state.get(&key).unwrap_or_default().len() as u64;
+        state.remove(&key);
+        Ok(prev_len)
     }
 
     pub fn seek(
@@ -350,6 +379,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
             Some(self.home_addr)
         };
 
+        let mut has_path = false;
         for comp in comps {
             match comp {
                 Component::Prefix(_) | Component::RootDir => return Err(ErrNo::NoEnt),
@@ -359,10 +389,18 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
                         return Err(ErrNo::NoEnt);
                     }
                 }
-                Component::Normal(c) => canon_path.push(c),
+                Component::Normal(c) => {
+                    has_path |= c.len() > 0;
+                    canon_path.push(c);
+                }
             }
         }
-        Ok((addr, canon_path))
+
+        if has_path {
+            Ok((addr, canon_path))
+        } else {
+            Err(ErrNo::Inval)
+        }
     }
 
     fn has_fd(&self, fd: Fd) -> bool {

@@ -117,6 +117,10 @@ impl blockchain_traits::KVStoreMut for Account {
     fn set(&mut self, key: &[u8], value: &[u8]) {
         self.storage.insert(key.to_vec(), value.to_vec());
     }
+
+    fn remove(&mut self, key: &[u8]) {
+        self.storage.remove(key);
+    }
 }
 
 #[cfg(test)]

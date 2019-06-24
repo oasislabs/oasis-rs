@@ -10,7 +10,7 @@ readme = "README.md"
 keywords = ["mantle"]
 
 [dependencies]
-blockchain-traits = { version = "0.1", path = "../blockchain-traits" }
+blockchain-traits = { version = "0.2", path = "../blockchain-traits" }
 cfg-if = "0.1"
 default-env = "0.1"
 failure = "0.1"

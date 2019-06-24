@@ -10,6 +10,6 @@ readme = "README.md"
 keywords = ["blockchain", "mantle"]
 
 [dependencies]
-blockchain-traits = { version = "0.1", path = "../blockchain-traits" }
+blockchain-traits = { version = "0.2", path = "../blockchain-traits" }
 hex = "0.3"
 serde = { version = "1.0", features = ["derive"] }

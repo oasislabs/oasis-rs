@@ -1,6 +1,6 @@
 [package]
 name = "bcfs"
-version = "0.1.0"
+version = "0.2.0"
 license = "Apache-2.0"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
@@ -13,14 +13,14 @@ keywords = ["blockchain", "filesystem", "wasm", "wasi"]
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-blockchain-traits = { version = "0.1", path = "../blockchain-traits" }
+blockchain-traits = { version = "0.2", path = "../blockchain-traits" }
 mantle-types = { version = "0.2", path = "../mantle-types" }
 nom = { version = "5.0.0-beta3", default-features = false, features = ["std"] }
 wasi-types = "0.1"
 
 [dev-dependencies]
 hex = "0.3"
-memchain = { version = "0.1", path = "../memchain" }
+memchain = { version = "0.2", path = "../memchain" }
 
 [features]
 ffi = []

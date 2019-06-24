@@ -108,8 +108,8 @@ impl blockchain_traits::KVStore for Account {
         self.storage.contains_key(key)
     }
 
-    fn get(&self, key: &[u8]) -> Option<&[u8]> {
-        self.storage.get(key).map(Vec::as_slice)
+    fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
+        self.storage.get(key).map(Vec::to_owned)
     }
 }
 

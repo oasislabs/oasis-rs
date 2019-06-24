@@ -129,7 +129,7 @@ pub trait KVStore {
     fn contains(&self, key: &[u8]) -> bool;
 
     /// Returns the data stored in the account at `addr` under the given `key`.
-    fn get(&self, key: &[u8]) -> Option<&[u8]>;
+    fn get(&self, key: &[u8]) -> Option<Vec<u8>>;
 }
 
 pub trait KVStoreMut: KVStore {

@@ -362,16 +362,13 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
 
         let addr = if curdir_fileno == CHAIN_DIR_FILENO {
             match comps.peek() {
-                Some(Component::Normal(maybe_addr)) => {
-                    let addr = match maybe_addr.to_str().map(A::from_str) {
-                        Some(Ok(addr)) => {
-                            comps.next();
-                            Some(addr)
-                        }
-                        _ => None,
-                    };
-                    addr
-                }
+                Some(Component::Normal(maybe_addr)) => match maybe_addr.to_str().map(A::from_str) {
+                    Some(Ok(addr)) => {
+                        comps.next();
+                        Some(addr)
+                    }
+                    _ => None,
+                },
                 Some(Component::Prefix(_)) | Some(Component::RootDir) => return Err(ErrNo::NoEnt),
                 _ => None,
             }
@@ -390,7 +387,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
                     }
                 }
                 Component::Normal(c) => {
-                    has_path |= c.len() > 0;
+                    has_path |= !c.is_empty();
                     canon_path.push(c);
                 }
             }

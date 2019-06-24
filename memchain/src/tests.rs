@@ -150,11 +150,11 @@ fn static_account() {
     let common_key = b"common_key".as_ref();
     assert_eq!(
         bc.last_block().state_at(&ADDR_1).unwrap().get(common_key),
-        Some(b"common_value".as_ref())
+        Some(b"common_value".to_vec())
     );
     assert_eq!(
         bc.last_block().state_at(&ADDR_2).unwrap().get(common_key),
-        Some(b"common_value".as_ref())
+        Some(b"common_value".to_vec())
     );
 
     assert_eq!(
@@ -163,7 +163,7 @@ fn static_account() {
             .state_at(&ADDR_1)
             .unwrap()
             .get(b"key_1"),
-        Some(b"value_1".as_ref())
+        Some(b"value_1".to_vec())
     );
 
     assert!(bc.last_block().state_at(&Address::default()).is_none());
@@ -226,7 +226,7 @@ fn subtx_ok() {
             .state_at(&ADDR_2)
             .unwrap()
             .get(b"common_key"),
-        Some(b"uncommon_value".as_ref())
+        Some(b"uncommon_value".to_vec())
     );
 }
 
@@ -245,6 +245,6 @@ fn subtx_revert() {
             .state_at(&ADDR_2)
             .unwrap()
             .get(b"common_key"),
-        Some(b"common_value".as_ref())
+        Some(b"common_value".to_vec())
     );
 }

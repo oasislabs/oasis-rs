@@ -119,42 +119,6 @@ impl ParsedRpcCollector {
             _ => false,
         }
     }
-
-    fn is_context_ref(ty: &syntax::ast::Ty) -> bool {
-        match &ty.node {
-            syntax::ast::TyKind::Rptr(_, mut_ty) => match &mut_ty.ty.node {
-                syntax::ast::TyKind::Path(_, path) => {
-                    crate::utils::path_ends_with(&path, &["mantle", "Context"])
-                }
-                _ => false,
-            },
-            _ => false,
-        }
-    }
-
-    fn result_ty(ty: &syntax::ast::FunctionRetTy) -> Option<syntax::ast::Ty> {
-        match ty {
-            syntax::ast::FunctionRetTy::Ty(ty) => match &ty.node {
-                syntax::ast::TyKind::Path(_, path) => {
-                    let result = path.segments.last().unwrap();
-                    if result.ident.name != Symbol::intern("Result") {
-                        return None;
-                    }
-                    match result.args.as_ref().map(|args| args.clone().into_inner()) {
-                        Some(syntax::ast::GenericArgs::AngleBracketed(
-                            syntax::ast::AngleBracketedArgs { args, .. },
-                        )) => args.into_iter().nth(0).and_then(|arg| match arg {
-                            syntax::ast::GenericArg::Type(p_ty) => Some(p_ty.into_inner()),
-                            _ => None,
-                        }),
-                        _ => None,
-                    }
-                }
-                _ => None,
-            },
-            _ => None,
-        }
-    }
 }
 
 impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector {
@@ -226,7 +190,7 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector {
                         }
                     }
                     match args.next() {
-                        Some(arg) if !Self::is_context_ref(&arg.ty) => {
+                        Some(arg) if !crate::utils::is_context_ref(&arg.ty) => {
                             self.errors.push(RpcError::MissingContext {
                                 from_ctor: is_ctor,
                                 span: arg.ty.span.to(arg.pat.span),
@@ -257,7 +221,7 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector {
                         }
                     }
 
-                    match Self::result_ty(&msig.decl.output) {
+                    match crate::utils::result_ty(&msig.decl.output) {
                         Some(result_ty) => {
                             if is_ctor
                                 && (match &result_ty.node {

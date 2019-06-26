@@ -1,6 +1,6 @@
 {
   "name": "TestService",
-  "namespace": "test_idl_gen",
+  "namespace": "types",
   "imports": [
     {
       "name": "testlib",
@@ -191,8 +191,7 @@
     },
     {
       "name": "void",
-      "mutability": "immutable",
-      "inputs": []
+      "mutability": "immutable"
     },
     {
       "name": "import",
@@ -217,7 +216,17 @@
           }
         ]
       }
+    },
+    {
+      "name": "default",
+      "mutability": "mutable",
+      "inputs": [
+        {
+          "type": "u32"
+        }
+      ]
     }
   ],
+  "has_default_function": false,
   "mantle_build_version": "0.2.0"
 }

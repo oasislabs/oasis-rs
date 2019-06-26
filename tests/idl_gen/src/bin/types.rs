@@ -78,7 +78,11 @@ impl TestService {
             the_topic: "hello".to_string(),
             the_data: "world".to_string(),
         });
-        unimplemented!();
+        unimplemented!()
+    }
+
+    pub fn default(&mut self, ctx: &Context, nondefault_arg: u32) -> Result<()> {
+        unimplemented!()
     }
 }
 

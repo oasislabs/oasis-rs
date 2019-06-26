@@ -15,12 +15,14 @@ use crate::error::UnsupportedTypeError;
 pub struct Interface {
     name: Ident,
     namespace: Ident, // the current crate name
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     imports: Vec<Import>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     type_defs: Vec<TypeDef>,
     constructor: StateConstructor,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     functions: Vec<Function>,
+    has_default_function: bool,
     mantle_build_version: String,
 }
 
@@ -70,6 +72,7 @@ impl Interface {
 
         let mut ctor = None;
         let mut functions = Vec::with_capacity(fns.len());
+        let mut has_default_function = false;
         for (name, decl) in fns.iter() {
             if name.as_str() == "new" {
                 match StateConstructor::convert(tcx, decl) {
@@ -78,6 +81,13 @@ impl Interface {
                 }
             } else {
                 match Function::convert(tcx, *name, decl) {
+                    Ok(ref rpc_fn)
+                        if name.as_str() == "default"
+                            && rpc_fn.inputs.is_empty()
+                            && rpc_fn.output.is_none() =>
+                    {
+                        has_default_function = true;
+                    }
                     Ok(rpc_fn) => functions.push(rpc_fn),
                     Err(mut errz) => errs.append(&mut errz),
                 }
@@ -94,6 +104,7 @@ impl Interface {
                 type_defs,
                 constructor: ctor.unwrap(),
                 functions,
+                has_default_function,
                 mantle_build_version: env!("CARGO_PKG_VERSION").to_string(),
             })
         }
@@ -142,6 +153,7 @@ impl StateConstructor {
 pub struct Function {
     name: Ident,
     mutability: StateMutability,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     inputs: Vec<Type>,
     #[serde(skip_serializing_if = "Option::is_none")]
     output: Option<Type>,

@@ -17,7 +17,7 @@ pub trait Event {
 }
 
 /// The context of the current RPC.
-// `Option` values are set by the user. `None` when populated by runting (during call/deploy).
+// `Option` values are set by the user during testing.
 #[derive(Default, Copy, Clone, Debug)]
 pub struct Context {
     #[doc(hidden)]
@@ -54,19 +54,6 @@ impl Context {
         }
     }
 
-    /// Sets the sender of the RPC receiving this `Context` as an argument.
-    /// Has no effect when called inside of a service.
-    pub fn with_sender(mut self, sender: Address) -> Self {
-        self.sender = Some(sender);
-        self
-    }
-
-    /// Amends a Context with the value that should be transferred to the callee.
-    pub fn with_value(mut self, value: u64) -> Self {
-        self.value = Some(value);
-        self
-    }
-
     /// Sets the amount of computation resources available to the callee.
     /// Has no effect when called inside of a service.
     pub fn with_gas(mut self, gas: u64) -> Self {
@@ -88,5 +75,20 @@ impl Context {
     /// Returns the value with which this `Context` was created.
     pub fn value(&self) -> u64 {
         self.value.unwrap_or_else(crate::backend::value)
+    }
+}
+
+impl Context {
+    /// Sets the sender of the RPC receiving this `Context` as an argument.
+    /// Has no effect when called inside of a service.
+    pub fn with_sender(mut self, sender: Address) -> Self {
+        self.sender = Some(sender);
+        self
+    }
+
+    /// Amends a Context with the value that should be transferred to the callee.
+    pub fn with_value(mut self, value: u64) -> Self {
+        self.value = Some(value);
+        self
     }
 }

@@ -54,10 +54,11 @@ extern "C" {
 impl From<ExtStatusCode> for Error {
     fn from(code: ExtStatusCode) -> Self {
         match code {
+            ExtStatusCode::Success => unreachable!(),
             ExtStatusCode::InsufficientFunds => Error::InsufficientFunds,
             ExtStatusCode::InvalidInput => Error::InvalidInput,
             ExtStatusCode::NoAccount => Error::NoAccount,
-            code if code.0 < u32::from(u8::max_value()) => Error::Unknown,
+            code if code.0 <= u32::from(u8::max_value()) => Error::Unknown,
             code => Error::Execution {
                 code: code.0,
                 payload: fetch_err(),

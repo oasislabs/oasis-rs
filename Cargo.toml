@@ -2,9 +2,10 @@
 members = [
     "bcfs",
     "blockchain-traits",
-    "mantle-build",
     "mantle",
+    "mantle-build",
     "mantle-macros",
+    "mantle-rpc",
     "mantle-test",
     "mantle-types",
     "memchain",

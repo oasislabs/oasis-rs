@@ -4,12 +4,9 @@ use rustc::{hir::intravisit::Visitor, util::nodemap::FxHashMap};
 use rustc_data_structures::sync::Once;
 use syntax_pos::symbol::Symbol;
 
-use crate::{
-    rpc,
-    visitor::{
-        AnalyzedRpcCollector, DefinedTypeCollector, EventCollector, ParsedRpcCollector,
-        ServiceDefFinder,
-    },
+use crate::visitor::{
+    AnalyzedRpcCollector, DefinedTypeCollector, EventCollector, ParsedRpcCollector,
+    ServiceDefFinder,
 };
 
 #[derive(Deserialize)]
@@ -26,7 +23,7 @@ struct LockfileEntry {
 pub struct BuildPlugin {
     service_name: Once<Symbol>,
     event_indexed_fields: FxHashMap<Symbol, Vec<Symbol>>, // event_name -> field_name
-    iface: Once<rpc::Interface>,
+    iface: Once<mantle_rpc::Interface>,
     deps: Once<BTreeMap<String, LockfileEntry>>,
 }
 
@@ -44,7 +41,7 @@ impl Default for BuildPlugin {
 impl BuildPlugin {
     /// Returns the generated interface.
     /// Only valid after rustc callback has been executed. Panics if called before.
-    pub fn try_get(&self) -> Option<&rpc::Interface> {
+    pub fn try_get(&self) -> Option<&mantle_rpc::Interface> {
         self.iface.try_get()
     }
 
@@ -211,7 +208,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
                 }
             }
 
-            let iface = match rpc::Interface::convert(
+            let iface = match crate::rpc::convert_interface(
                 tcx,
                 *service_name,
                 imports,

@@ -12,7 +12,6 @@ use colored::*;
 
 // This wrapper script is inspired by `clippy-driver`.
 // https://github.com/rust-lang/rust-clippy/blob/master/src/driver.rs
-
 fn arg_value<'a>(
     args: impl IntoIterator<Item = &'a String>,
     find_arg: &str,
@@ -59,8 +58,10 @@ fn main() {
 
         let crate_name = arg_value(&args, "--crate-name", |_| true);
         let is_bin = arg_value(&args, "--crate-type", |ty| ty == "bin").is_some();
-        let is_testing =
-            arg_value(&args, "--cfg", |ty| ty == "feature=\"mantle-build-test\"").is_some();
+        let is_testing = arg_value(&args, "--cfg", |ty| {
+            ty == "feature=\"mantle-build-compiletest\""
+        })
+        .is_some();
         let do_gen = is_testing || (is_bin && crate_name != Some("build_script_build"));
 
         let mut idl8r = mantle_build::BuildPlugin::default();
@@ -69,7 +70,7 @@ fn main() {
             if do_gen { &mut idl8r } else { &mut default };
         rustc_driver::run_compiler(&args, callbacks, None, None)?;
 
-        if !do_gen {
+        if !do_gen || is_testing {
             return Ok(());
         }
 
@@ -96,7 +97,7 @@ fn main() {
                 return Err(rustc::util::common::ErrorReported);
             }
         };
-        let idl_path = out_dir.join(format!("{}.json", rpc_iface.service_name()));
+        let idl_path = out_dir.join(format!("{}.json", rpc_iface.name));
         std::fs::write(idl_path, serde_json::to_string_pretty(rpc_iface).unwrap()).unwrap();
 
         Ok(())

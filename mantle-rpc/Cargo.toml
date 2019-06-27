@@ -1,0 +1,15 @@
+[package]
+name = "mantle-rpc"
+version = "0.1.0"
+authors = ["Oasis Labs <feedback@oasislabs.com>"]
+edition = "2018"
+license = "Apache-2.0"
+description = "Mantle RPC IR and utilities"
+repository = "https://github.com/oasislabs/mantle.git"
+readme = "README.md"
+keywords = ["idl", "rpc", "mantle"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]

@@ -27,7 +27,7 @@ fn run_mode(mode: &'static str) {
         target_rustcflags: Some(format!(
             "--edition=2018 \
              -Z unstable-options \
-             --cfg feature=\"mantle-build-test\" \
+             --cfg feature=\"mantle-build-compiletest\" \
              --extern mantle \
              --extern mantle_test \
              --extern {} \

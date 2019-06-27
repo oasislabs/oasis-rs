@@ -1,37 +1,35 @@
 #![cfg(test)]
 
-#[test]
-fn test_mantle_build() {
-    let idl_json = std::fs::read_to_string(concat!(
+fn test_mantle_interface(bin_name: &str, service_name: &str) {
+    let mut wasm_path = std::path::PathBuf::from(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/target/service/TestService.json"
-    ))
-    .unwrap();
+        "/target/wasm32-wasi/debug"
+    ));
+    wasm_path.push(format!("{}.wasm", bin_name));
+    let actual: serde_json::Value = serde_json::from_slice(
+        &walrus::Module::from_file(wasm_path)
+            .expect("No wasm")
+            .customs
+            .remove_raw("mantle-interface")
+            .expect("No custom")
+            .data,
+    )
+    .expect("Bad custom");
 
-    let actual: serde_json::Value = serde_json::from_str(&idl_json).unwrap();
-    let expected: serde_json::Value = serde_json::from_str(include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/res/TestService.json"
-    )))
-    .unwrap();
+    let mut json_path = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/res"));
+    json_path.push(format!("{}.json", service_name));
+    let expected: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(json_path).expect("No json")).expect("Bad json");
 
     assert_eq!(actual, expected);
 }
 
 #[test]
+fn test_mantle_build() {
+    test_mantle_interface("types", "TestService");
+}
+
+#[test]
 fn test_default_fn() {
-    let idl_json = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/target/service/DefaultFnService.json"
-    ))
-    .unwrap();
-
-    let actual: serde_json::Value = serde_json::from_str(&idl_json).unwrap();
-    let expected: serde_json::Value = serde_json::from_str(include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/res/DefaultFnService.json"
-    )))
-    .unwrap();
-
-    assert_eq!(actual, expected);
+    test_mantle_interface("default_fn", "DefaultFnService");
 }

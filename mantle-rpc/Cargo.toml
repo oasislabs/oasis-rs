@@ -11,5 +11,6 @@ keywords = ["idl", "rpc", "mantle"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
+walrus = "0.8"
 
 [dev-dependencies]

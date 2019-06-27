@@ -9,6 +9,7 @@ publish = false
 mantle = { path = "../../mantle" }
 serde = { version = "1.0", features = ["derive"] }
 testlib = { path = "../testlib" }
+walrus = "0.8"
 
 [dev-dependencies]
 serde = { version = "1.0", features = ["derive"] }

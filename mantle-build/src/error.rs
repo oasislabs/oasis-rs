@@ -6,7 +6,6 @@ type TypeStr = String;
 pub enum UnsupportedTypeError {
     NotReprC(TypeStr, MultiSpan),
     ComplexEnum(MultiSpan),
-    Unimplemented(TypeStr, MultiSpan),
 }
 
 impl std::fmt::Display for UnsupportedTypeError {
@@ -15,7 +14,6 @@ impl std::fmt::Display for UnsupportedTypeError {
         match self {
             NotReprC(ty_str, ..) => write!(f, "`{}` cannot be converted to an RPC type", ty_str),
             ComplexEnum(..) => write!(f, "Tagged unions cannot (yet) be converted to an RPC type"),
-            Unimplemented(ty_str, ..) => write!(f, "Unimplemented RPC type: `{}`", ty_str),
         }
     }
 }
@@ -24,16 +22,7 @@ impl UnsupportedTypeError {
     pub fn span(&self) -> MultiSpan {
         use UnsupportedTypeError::*;
         match &self {
-            NotReprC(_, span) | ComplexEnum(span) | Unimplemented(_, span) => span.clone(),
-        }
-    }
-
-    pub fn span_mut(&mut self) -> &mut MultiSpan {
-        use UnsupportedTypeError::*;
-        match self {
-            NotReprC(_, ref mut span)
-            | ComplexEnum(ref mut span)
-            | Unimplemented(_, ref mut span) => span,
+            NotReprC(_, span) | ComplexEnum(span) => span.clone(),
         }
     }
 }

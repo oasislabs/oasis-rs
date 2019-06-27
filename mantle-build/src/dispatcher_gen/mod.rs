@@ -38,7 +38,7 @@ pub fn generate_and_insert(
     krate.module.items.insert(0,
         parse!(r#"
             #[cfg(all(
-                not(any(test, feature = "mantle-build-test")),
+                not(any(test, feature = "mantle-build-compiletest")),
                 not(all(
                     target_arch = "wasm32",
                     not(target_env = "emscripten")

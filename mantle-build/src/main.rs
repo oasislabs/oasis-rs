@@ -6,13 +6,10 @@
 extern crate rustc;
 extern crate rustc_driver;
 
-extern crate mantle_build;
-
 use colored::*;
 
 // This wrapper script is inspired by `clippy-driver`.
 // https://github.com/rust-lang/rust-clippy/blob/master/src/driver.rs
-
 fn arg_value<'a>(
     args: impl IntoIterator<Item = &'a String>,
     find_arg: &str,
@@ -59,8 +56,10 @@ fn main() {
 
         let crate_name = arg_value(&args, "--crate-name", |_| true);
         let is_bin = arg_value(&args, "--crate-type", |ty| ty == "bin").is_some();
-        let is_testing =
-            arg_value(&args, "--cfg", |ty| ty == "feature=\"mantle-build-test\"").is_some();
+        let is_testing = arg_value(&args, "--cfg", |ty| {
+            ty == "feature=\"mantle-build-compiletest\""
+        })
+        .is_some();
         let do_gen = is_testing || (is_bin && crate_name != Some("build_script_build"));
 
         let mut idl8r = mantle_build::BuildPlugin::default();
@@ -69,21 +68,11 @@ fn main() {
             if do_gen { &mut idl8r } else { &mut default };
         rustc_driver::run_compiler(&args, callbacks, None, None)?;
 
-        if !do_gen {
+        if !do_gen || is_testing {
             return Ok(());
         }
 
-        let mut out_dir = std::path::PathBuf::from(match arg_value(&args, "--out-dir", |_| true) {
-            Some(out_dir) => out_dir,
-            None => return Ok(()),
-        });
-
-        while out_dir.file_name() != Some(&std::ffi::OsStr::new("target")) {
-            out_dir.pop();
-        }
-        out_dir.push("service"); // should look like `.../target/service`
-
-        std::fs::create_dir_all(&out_dir).expect("Could not create service dir");
+        let crate_name = crate_name.unwrap(); // `crate_name.is_some()` when `do_gen && !is_testing`
 
         let rpc_iface = match idl8r.try_get() {
             Some(rpc_iface) => rpc_iface,
@@ -91,13 +80,29 @@ fn main() {
                 eprintln!(
                     "    {} No service defined in crate: `{}`",
                     "warning:".yellow(),
-                    crate_name.unwrap()
+                    crate_name
                 );
                 return Err(rustc::util::common::ErrorReported);
             }
         };
-        let idl_path = out_dir.join(format!("{}.json", rpc_iface.service_name()));
-        std::fs::write(idl_path, serde_json::to_string_pretty(rpc_iface).unwrap()).unwrap();
+
+        let mut wasm_path =
+            std::path::PathBuf::from(match arg_value(&args, "--out-dir", |_| true) {
+                Some(out_dir) => out_dir,
+                None => return Ok(()),
+            });
+        wasm_path.push(format!("{}.wasm", crate_name));
+
+        if !wasm_path.is_file() {
+            return Ok(());
+        }
+
+        let mut module = walrus::Module::from_file(&wasm_path).unwrap();
+        module.customs.add(walrus::RawCustomSection {
+            name: "mantle-interface".to_string(),
+            data: serde_json::to_vec(rpc_iface).unwrap(),
+        });
+        module.emit_wasm_file(wasm_path).unwrap();
 
         Ok(())
     });

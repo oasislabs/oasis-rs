@@ -135,7 +135,7 @@ jobs:
       - run:
           name: Test IDL generation
           working_directory: tests/idl_gen
-          command: cargo test --features mantle-build-test
+          command: ./run_tests.sh
 
 workflows:
   version: 2

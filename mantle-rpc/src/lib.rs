@@ -12,6 +12,7 @@ pub struct Interface {
     pub constructor: StateConstructor,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub functions: Vec<Function>,
+    #[serde(skip_serializing_if = "std::ops::Not::not", default)]
     pub has_default_function: bool,
     pub mantle_build_version: String,
 }
@@ -43,7 +44,7 @@ pub struct Field {
     pub name: Ident,
     #[serde(rename = "type")]
     pub ty: Type,
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[serde(skip_serializing_if = "std::ops::Not::not", default)]
     pub indexed: bool, // can only be set when a field of an event
 }
 

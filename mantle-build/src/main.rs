@@ -98,11 +98,11 @@ fn main() {
         }
 
         let mut module = walrus::Module::from_file(&wasm_path).unwrap();
-        let mut encoder = libflate::deflate::Encoder::new(Vec::new());
-        serde_json::to_writer(&mut encoder, rpc_iface).unwrap();
         module.customs.add(walrus::RawCustomSection {
             name: "mantle-interface".to_string(),
-            data: encoder.finish().into_result().unwrap(),
+            data: rpc_iface
+                .to_vec()
+                .map_err(|_| rustc::util::common::ErrorReported)?,
         });
         module.emit_wasm_file(wasm_path).unwrap();
 

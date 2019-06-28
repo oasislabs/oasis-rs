@@ -24,7 +24,7 @@ pub struct Function {
     pub name: Ident,
     pub mutability: StateMutability,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub inputs: Vec<Type>,
+    pub inputs: Vec<Field>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<Type>,
     // throws: Option<Type>,
@@ -33,9 +33,18 @@ pub struct Function {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
 #[serde(rename_all = "lowercase", tag = "type")]
 pub enum TypeDef {
-    Struct { name: Ident, fields: Vec<Field> },
-    Enum { name: Ident, variants: Vec<Ident> },
-    Event { name: Ident, fields: Vec<Field> },
+    Struct {
+        name: Ident,
+        fields: Vec<Field>,
+    },
+    Enum {
+        name: Ident,
+        variants: Vec<Ident>,
+    },
+    Event {
+        name: Ident,
+        fields: Vec<IndexedField>,
+    },
     // TODO: unions and exceptions
 }
 
@@ -44,8 +53,15 @@ pub struct Field {
     pub name: Ident,
     #[serde(rename = "type")]
     pub ty: Type,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
+pub struct IndexedField {
+    pub name: Ident,
+    #[serde(rename = "type")]
+    pub ty: Type,
     #[serde(skip_serializing_if = "std::ops::Not::not", default)]
-    pub indexed: bool, // can only be set when a field of an event
+    pub indexed: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
@@ -63,7 +79,7 @@ pub struct Import {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
 pub struct StateConstructor {
-    pub inputs: Vec<Type>,
+    pub inputs: Vec<Field>,
     // throws: Option<Type>,
 }
 

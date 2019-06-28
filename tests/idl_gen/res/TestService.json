@@ -131,7 +131,10 @@
   "constructor": {
     "inputs": [
       {
-        "type": "string"
+        "name": "name",
+        "type": {
+          "type": "string"
+        }
       }
     ]
   },
@@ -141,16 +144,22 @@
       "mutability": "immutable",
       "inputs": [
         {
-          "type": "list",
-          "params": {
-            "type": "defined",
+          "name": "arg1",
+          "type": {
+            "type": "list",
             "params": {
-              "type": "DefTy"
+              "type": "defined",
+              "params": {
+                "type": "DefTy"
+              }
             }
           }
         },
         {
-          "type": "bytes"
+          "name": "arg2",
+          "type": {
+            "type": "bytes"
+          }
         }
       ],
       "output": {
@@ -165,26 +174,32 @@
       "mutability": "mutable",
       "inputs": [
         {
-          "type": "map",
-          "params": [
-            {
-              "type": "bool"
-            },
-            {
-              "type": "array",
-              "params": [
-                {
-                  "type": "u32"
-                },
-                12
-              ]
-            }
-          ]
+          "name": "a1",
+          "type": {
+            "type": "map",
+            "params": [
+              {
+                "type": "bool"
+              },
+              {
+                "type": "array",
+                "params": [
+                  {
+                    "type": "u32"
+                  },
+                  12
+                ]
+              }
+            ]
+          }
         },
         {
-          "type": "set",
-          "params": {
-            "type": "i64"
+          "name": "a3",
+          "type": {
+            "type": "set",
+            "params": {
+              "type": "i64"
+            }
           }
         }
       ]
@@ -198,10 +213,13 @@
       "mutability": "mutable",
       "inputs": [
         {
-          "type": "defined",
-          "params": {
-            "namespace": "testlib",
-            "type": "RpcType"
+          "name": "imported",
+          "type": {
+            "type": "defined",
+            "params": {
+              "namespace": "testlib",
+              "type": "RpcType"
+            }
           }
         }
       ],
@@ -222,11 +240,13 @@
       "mutability": "mutable",
       "inputs": [
         {
-          "type": "u32"
+          "name": "nondefault_arg",
+          "type": {
+            "type": "u32"
+          }
         }
       ]
     }
   ],
-  "has_default_function": false,
   "mantle_build_version": "0.2.2"
 }

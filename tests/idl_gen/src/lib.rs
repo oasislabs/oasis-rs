@@ -16,10 +16,7 @@ fn test_mantle_interface(bin_name: &str, service_name: &str) {
         .expect("No custom")
         .data;
 
-    let mut decoder = libflate::deflate::Decoder::new(iface_bytes.as_slice());
-    let mut iface_bytes = Vec::new();
-    decoder.read_to_end(&mut iface_bytes).unwrap();
-    let actual: mantle_rpc::Interface = serde_json::from_slice(&iface_bytes).expect("Bad custom");
+    let actual = mantle_rpc::Interface::from_slice(iface_bytes).unwrap();
 
     let mut json_path = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/res"));
     json_path.push(format!("{}.json", service_name));

@@ -176,10 +176,11 @@ impl rustc_driver::Callbacks for BuildPlugin {
         };
 
         global_ctxt.enter(|tcx| {
-            let mut rpc_collector = AnalyzedRpcCollector::new(tcx, *service_name);
-            tcx.hir().krate().visit_all_item_likes(&mut rpc_collector);
+            let krate = tcx.hir().krate();
+            let mut rpc_collector = AnalyzedRpcCollector::new(krate, tcx, *service_name);
+            krate.visit_all_item_likes(&mut rpc_collector);
 
-            let defined_types = rpc_collector.rpcs().iter().flat_map(|(_, decl)| {
+            let defined_types = rpc_collector.rpcs().iter().flat_map(|(_, decl, _)| {
                 let mut def_ty_collector = DefinedTypeCollector::new(tcx);
                 def_ty_collector.visit_fn_decl(decl);
                 def_ty_collector.adt_defs()

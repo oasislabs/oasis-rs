@@ -3,14 +3,15 @@
 use std::collections::BTreeSet;
 
 use rustc::{
-    hir::{self, def_id::DefId, FnDecl},
+    hir::{self, def_id::DefId, Body, FnDecl},
     ty::{self, AdtDef, TyCtxt, TyS},
     util::nodemap::FxHashMap,
 };
 use syntax_pos::symbol::Symbol;
 
 use mantle_rpc::{
-    Field, Function, Import, Interface, StateConstructor, StateMutability, Type, TypeDef,
+    Field, Function, Import, IndexedField, Interface, StateConstructor, StateMutability, Type,
+    TypeDef,
 };
 
 use crate::error::UnsupportedTypeError;
@@ -23,7 +24,7 @@ pub fn convert_interface(
     imports: BTreeSet<(Symbol, String)>, // (name, version)
     adt_defs: BTreeSet<(&AdtDef, bool)>, // (adt_def, is_event)
     event_indices: &FxHashMap<Symbol, Vec<Symbol>>,
-    fns: &[(Symbol, &FnDecl)],
+    fns: &[(Symbol, &FnDecl, &Body)],
 ) -> Result<Interface, Vec<UnsupportedTypeError>> {
     let mut errs = Vec::new();
 
@@ -61,14 +62,14 @@ pub fn convert_interface(
     let mut ctor = None;
     let mut functions = Vec::with_capacity(fns.len());
     let mut has_default_function = false;
-    for (name, decl) in fns.iter() {
+    for (name, decl, body) in fns.iter() {
         if name.as_str() == "new" {
-            match convert_state_ctor(tcx, decl) {
+            match convert_state_ctor(tcx, decl, body) {
                 Ok(constructor) => ctor = Some(constructor),
                 Err(mut errz) => errs.append(&mut errz),
             }
         } else {
-            match convert_function(tcx, *name, decl) {
+            match convert_function(tcx, *name, decl, body) {
                 Ok(ref rpc_fn)
                     if name.as_str() == "default"
                         && rpc_fn.inputs.is_empty()
@@ -101,13 +102,19 @@ pub fn convert_interface(
 fn convert_state_ctor(
     tcx: TyCtxt,
     decl: &FnDecl,
+    body: &Body,
 ) -> Result<StateConstructor, Vec<UnsupportedTypeError>> {
     let mut errs = Vec::new();
 
     let mut inputs = Vec::with_capacity(decl.inputs.len());
-    for inp in decl.inputs.iter().skip(1 /* skip ctx */) {
-        match convert_ty(tcx, inp) {
-            Ok(ty) => inputs.push(ty),
+    for (arg, ty) in body
+        .arguments
+        .iter()
+        .zip(decl.inputs.iter())
+        .skip(1 /* skip ctx */)
+    {
+        match convert_arg(tcx, &arg.pat, ty) {
+            Ok(field) => inputs.push(field),
             Err(err) => errs.push(err),
         }
     }
@@ -123,6 +130,7 @@ fn convert_function(
     tcx: TyCtxt,
     name: Symbol,
     decl: &FnDecl,
+    body: &Body,
 ) -> Result<Function, Vec<UnsupportedTypeError>> {
     let mut errs = Vec::new();
 
@@ -133,8 +141,13 @@ fn convert_function(
     };
 
     let mut inputs = Vec::with_capacity(decl.inputs.len());
-    for inp in decl.inputs.iter().skip(2 /* skip self and ctx */) {
-        match convert_ty(tcx, inp) {
+    for (arg, ty) in body
+        .arguments
+        .iter()
+        .zip(decl.inputs.iter())
+        .skip(2 /* skip self and ctx */)
+    {
+        match convert_arg(tcx, &arg.pat, ty) {
             Ok(ty) => inputs.push(ty),
             Err(err) => errs.push(err),
         }
@@ -170,6 +183,18 @@ fn convert_function(
             output,
         })
     }
+}
+
+fn convert_arg(tcx: TyCtxt, pat: &hir::Pat, ty: &hir::Ty) -> Result<Field, UnsupportedTypeError> {
+    use hir::PatKind;
+    convert_ty(tcx, ty).map(|ty| Field {
+        name: match pat.node {
+            PatKind::Wild => "_".to_string(),
+            PatKind::Binding(_, _, ident, _) => ident.name.as_str().get().to_string(),
+            _ => unreachable!("arg pattern must be wild or ident"),
+        },
+        ty,
+    })
 }
 
 // this is a macro because it's difficult to convince rustc that `T` \in {`Ty`, `TyS`}`
@@ -418,22 +443,31 @@ fn convert_type_def(
         let fields = def
             .all_fields()
             .map(|f| {
-                Ok(Field {
-                    name: f.ident.to_string(),
-                    ty: convert_sty(tcx, f.did, tcx.type_of(f.did))?,
-                    indexed: false,
-                })
+                Ok((
+                    f.ident.to_string(),
+                    convert_sty(tcx, f.did, tcx.type_of(f.did))?,
+                ))
             })
-            .collect::<Result<Vec<Field>, UnsupportedTypeError>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(if is_event {
             TypeDef::Event {
                 name: ty_name,
-                fields,
+                fields: fields
+                    .into_iter()
+                    .map(|(name, ty)| IndexedField {
+                        name,
+                        ty,
+                        indexed: false,
+                    })
+                    .collect(),
             }
         } else {
             TypeDef::Struct {
                 name: ty_name,
-                fields,
+                fields: fields
+                    .into_iter()
+                    .map(|(name, ty)| Field { name, ty })
+                    .collect(),
             }
         })
     } else if def.is_union() {

@@ -1,5 +1,5 @@
 use rustc::{
-    hir::{self, intravisit},
+    hir::{self, intravisit, Crate},
     ty::{self, AdtDef, TyCtxt, TyS},
     util::nodemap::{FxHashMap, FxHashSet, HirIdSet},
 };
@@ -285,16 +285,18 @@ impl<'ast> syntax::visit::Visitor<'ast> for RefChecker {
 }
 
 /// Collects public functions defined in `impl #service_name`.
-pub struct AnalyzedRpcCollector<'tcx> {
+pub struct AnalyzedRpcCollector<'a, 'tcx> {
+    krate: &'a Crate,
     tcx: TyCtxt<'tcx>,
     service_name: Symbol,
     rpc_impls: HirIdSet,
-    rpcs: Vec<(Symbol, &'tcx hir::FnDecl)>, // the collected RPC fns
+    rpcs: Vec<(Symbol, &'tcx hir::FnDecl, &'a hir::Body)>, // the collected RPC fns
 }
 
-impl<'tcx> AnalyzedRpcCollector<'tcx> {
-    pub fn new(tcx: TyCtxt<'tcx>, service_name: Symbol) -> Self {
+impl<'a, 'tcx> AnalyzedRpcCollector<'a, 'tcx> {
+    pub fn new(krate: &'a Crate, tcx: TyCtxt<'tcx>, service_name: Symbol) -> Self {
         Self {
+            krate,
             tcx,
             service_name,
             rpc_impls: HirIdSet::default(),
@@ -302,12 +304,12 @@ impl<'tcx> AnalyzedRpcCollector<'tcx> {
         }
     }
 
-    pub fn rpcs(&self) -> &[(Symbol, &'tcx hir::FnDecl)] {
+    pub fn rpcs(&self) -> &[(Symbol, &'tcx hir::FnDecl, &'a hir::Body)] {
         self.rpcs.as_slice()
     }
 }
 
-impl<'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx> for AnalyzedRpcCollector<'tcx> {
+impl<'a, 'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx> for AnalyzedRpcCollector<'a, 'tcx> {
     fn visit_item(&mut self, item: &'tcx hir::Item) {
         if let hir::ItemKind::Impl(_, _, _, _, None /* `trait_ref` */, ty, _) = &item.node {
             if let hir::TyKind::Path(hir::QPath::Resolved(_, path)) = &ty.node {
@@ -319,13 +321,14 @@ impl<'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx> for AnalyzedRpcCollector<'t
     }
 
     fn visit_impl_item(&mut self, impl_item: &'tcx hir::ImplItem) {
-        if let hir::ImplItemKind::Method(hir::MethodSig { decl, .. }, _) = &impl_item.node {
+        if let hir::ImplItemKind::Method(hir::MethodSig { decl, .. }, body_id) = &impl_item.node {
             if impl_item.vis.node.is_pub()
                 && self
                     .rpc_impls
                     .contains(&self.tcx.hir().get_parent_item(impl_item.hir_id))
             {
-                self.rpcs.push((impl_item.ident.name, &decl));
+                let body = self.krate.body(*body_id);
+                self.rpcs.push((impl_item.ident.name, &decl, body));
             }
         }
     }

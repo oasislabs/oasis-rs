@@ -1,5 +1,12 @@
+#![feature(box_syntax)]
+
 #[macro_use]
 extern crate serde;
+
+#[cfg(feature = "importer")]
+mod importer;
+#[cfg(feature = "importer")]
+pub use importer::Importer;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
 pub struct Interface {
@@ -31,6 +38,10 @@ impl Interface {
         let mut encoder = libflate::deflate::Encoder::new(Vec::new());
         serde_json::to_writer(&mut encoder, self)?;
         Ok(encoder.finish().into_result()?)
+    }
+
+    pub fn to_string(&self) -> Result<String, failure::Error> {
+        Ok(serde_json::to_string_pretty(self)?)
     }
 }
 

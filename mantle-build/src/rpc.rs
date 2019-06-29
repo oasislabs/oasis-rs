@@ -155,21 +155,13 @@ fn convert_function(
 
     let output = match &decl.output {
         hir::FunctionRetTy::DefaultReturn(_) => None,
-        hir::FunctionRetTy::Return(ty) => match &ty.node {
-            hir::TyKind::Path(hir::QPath::Resolved(_, path)) => {
-                let result_ty = crate::utils::get_type_args(&path)[0];
-                match convert_ty(tcx, &result_ty) {
-                    Ok(ret_ty) => match &ret_ty {
-                        Type::Tuple(tys) if tys.is_empty() => None,
-                        _ => Some(ret_ty),
-                    },
-                    Err(err) => {
-                        errs.push(err);
-                        None
-                    }
-                }
+        hir::FunctionRetTy::Return(ty) => match convert_ty(tcx, &ty) {
+            Ok(Type::Tuple(ref tys)) if tys.is_empty() => None,
+            Ok(ty) => Some(ty),
+            Err(err) => {
+                errs.push(err);
+                None
             }
-            _ => unreachable!("Syntax pass ensures that RPC `fn` returns `Result`"),
         },
     };
 
@@ -199,7 +191,7 @@ fn convert_arg(tcx: TyCtxt, pat: &hir::Pat, ty: &hir::Ty) -> Result<Field, Unsup
 
 // this is a macro because it's difficult to convince rustc that `T` \in {`Ty`, `TyS`}`
 macro_rules! convert_def {
-    ($tcx:ident, $did:expr, $owner_did:expr, $converter:expr, $arg_at:expr, $vec_is_bytes:expr) => {{
+    ($tcx:ident, $did:expr, $owner_did:expr, $arg_at:expr) => {{
         let (crate_name, def_path_comps) = crate::utils::def_path($tcx, $did);
         let ty_str = def_path_comps.last().cloned().unwrap_or_default();
 
@@ -207,21 +199,18 @@ macro_rules! convert_def {
             if ty_str == "String" {
                 Type::String
             } else if ty_str == "Vec" {
-                let vec_ty = $arg_at(0);
-                if $vec_is_bytes(vec_ty) {
-                    Type::Bytes
-                } else {
-                    Type::List(box $converter($tcx, $did, &vec_ty)?)
+                match $arg_at(0)? {
+                    Type::U8 => Type::Bytes,
+                    ty => Type::List(box ty),
                 }
             } else if ty_str == "Option" {
-                Type::Optional(box $converter($tcx, $did, $arg_at(0))?)
+                Type::Optional(box $arg_at(0)?)
+            } else if ty_str == "Result" {
+                Type::Result(box $arg_at(0)?, box $arg_at(1)?)
             } else if ty_str == "HashMap" || ty_str == "BTreeMap" {
-                Type::Map(
-                    box $converter($tcx, $did, $arg_at(0))?,
-                    box $converter($tcx, $did, $arg_at(1))?,
-                )
+                Type::Map(box $arg_at(0)?, box $arg_at(1)?)
             } else if ty_str == "HashSet" || ty_str == "BTreeSet" {
-                Type::Set(box $converter($tcx, $did, $arg_at(0))?)
+                Type::Set(box $arg_at(0)?)
             } else if ty_str == "Address" {
                 Type::Address
             } else {
@@ -266,31 +255,29 @@ fn convert_ty(tcx: TyCtxt, ty: &hir::Ty) -> Result<Type, UnsupportedTypeError> {
         ),
         TyKind::Path(hir::QPath::Resolved(_, path)) => {
             use hir::def::{DefKind, Res};
+            let type_args = crate::utils::get_type_args(&path);
             match path.res {
-                Res::Def(kind, id) => match kind {
+                Res::Def(kind, did) => match kind {
                     DefKind::Struct
                     | DefKind::Union
                     | DefKind::Enum
                     | DefKind::Variant
-                    | DefKind::TyAlias
                     | DefKind::Const => {
-                        let type_args = crate::utils::get_type_args(&path);
-                        let is_vec_u8 = |vec_ty: &hir::Ty| match vec_ty.node {
-                            hir::TyKind::Path(hir::QPath::Resolved(_, ref path))
-                                if path.to_string() == "u8" =>
-                            {
-                                true
-                            }
-                            _ => false,
-                        };
-                        convert_def!(
-                            tcx,
-                            id,
-                            ty.hir_id.owner_local_def_id().to_def_id(),
-                            |tcx, _, ty| convert_ty(tcx, ty),
-                            |i| { type_args[i] },
-                            is_vec_u8
-                        )?
+                        convert_def!(tcx, did, ty.hir_id.owner_local_def_id().to_def_id(), |i| {
+                            convert_ty(tcx, type_args[i])
+                        })?
+                    }
+                    DefKind::TyAlias => {
+                        convert_sty_with_arg_at(tcx, did, tcx.type_of(did), |substs, i| {
+                            // Use the HIR type parameter, if it exists.
+                            // Otherwise, the TyS has extra generics that were defined
+                            // in the alias as concrete types (and will be present in the
+                            // TyS substs).
+                            type_args
+                                .get(i)
+                                .map(|ty| convert_ty(tcx, ty))
+                                .unwrap_or_else(|| convert_sty(tcx, did, substs.type_at(i)))
+                        })?
                     }
                     _ => {
                         return Err(UnsupportedTypeError::NotReprC(
@@ -329,6 +316,17 @@ fn convert_sty<'tcx>(
     did: DefId,
     ty: &'tcx TyS,
 ) -> Result<Type, UnsupportedTypeError> {
+    convert_sty_with_arg_at(tcx, did, ty, |substs, i| {
+        convert_sty(tcx, did, substs.type_at(i))
+    })
+}
+
+fn convert_sty_with_arg_at<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    did: DefId,
+    ty: &'tcx TyS,
+    arg_at: impl Fn(ty::subst::SubstsRef<'tcx>, usize) -> Result<Type, UnsupportedTypeError>,
+) -> Result<Type, UnsupportedTypeError> {
     use ty::TyKind::*;
     Ok(match ty.sty {
         Bool => Type::Bool,
@@ -336,23 +334,7 @@ fn convert_sty<'tcx>(
         Int(ty) => convert_int(ty, tcx.def_span(did))?,
         Uint(ty) => convert_uint(ty, tcx.def_span(did))?,
         Float(ty) => convert_float(ty, tcx.def_span(did))?,
-        Adt(AdtDef { did, .. }, substs) => {
-            let is_vec_u8 = |vec_ty: &TyS| {
-                if let Uint(syntax::ast::UintTy::U8) = vec_ty.sty {
-                    true
-                } else {
-                    false
-                }
-            };
-            convert_def!(
-                tcx,
-                *did,
-                *did,
-                &convert_sty,
-                |i| substs.type_at(i),
-                is_vec_u8
-            )?
-        }
+        Adt(AdtDef { did, .. }, substs) => convert_def!(tcx, *did, *did, |i| arg_at(substs, i))?,
         Str => Type::String,
         Array(ty, len) => Type::Array(box convert_sty(tcx, did, ty)?, len.unwrap_usize(tcx)),
         Slice(ty) => Type::List(box convert_sty(tcx, did, ty)?),

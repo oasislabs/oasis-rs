@@ -66,7 +66,7 @@ impl TestService {
         unimplemented!()
     }
 
-    pub fn void(&self, ctx: &Context) -> Result<()> {
+    pub fn void(&self, ctx: &Context) {
         let event = TestEvent2::default();
         let event_ref = &event;
         Event::emit(&*event_ref);
@@ -81,7 +81,7 @@ impl TestService {
         unimplemented!()
     }
 
-    pub fn default(&mut self, ctx: &Context, nondefault_arg: u32) -> Result<()> {
+    pub fn default(&mut self, ctx: &Context) {
         unimplemented!()
     }
 }

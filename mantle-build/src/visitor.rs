@@ -221,32 +221,25 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector {
                         }
                     }
 
-                    match crate::utils::result_ty(&msig.decl.output) {
-                        Some(result_ty) => {
-                            if is_ctor
-                                && (match &result_ty.node {
-                                    syntax::ast::TyKind::Path(_, path) => {
-                                        path.segments.last().unwrap().ident.name
-                                            != Symbol::intern("Self")
-                                    }
-                                    _ => true,
-                                } && format!("{:?}", result_ty.node) // Ty doesn't impl PartialEq <_<
-                                    != format!("{:?}", service_ty.node))
-                            {
-                                errors.push(RpcError::BadCtorReturn {
-                                    self_ty: service_ty.clone().into_inner(),
-                                    span: msig.decl.output.span(),
-                                });
-                            }
-                        }
-                        None => errors.push(if is_ctor {
-                            RpcError::BadCtorReturn {
+                    let output_ty = crate::utils::unpack_syntax_ret(&msig.decl.output);
+
+                    if is_ctor {
+                        let output_ty_is_self = match &output_ty {
+                            Some(output_ty) => match &output_ty.node {
+                                syntax::ast::TyKind::Path(_, path) => {
+                                    path.segments.len() == 1
+                                        && path.segments[0].ident.name == Symbol::intern("Self")
+                                }
+                                _ => false,
+                            },
+                            None => false,
+                        };
+                        if !output_ty_is_self {
+                            errors.push(RpcError::BadCtorReturn {
                                 self_ty: service_ty.clone().into_inner(),
                                 span: msig.decl.output.span(),
-                            }
-                        } else {
-                            RpcError::MissingOutput(msig.decl.output.span())
-                        }),
+                            });
+                        }
                     }
 
                     if errors.is_empty() {

@@ -40,7 +40,7 @@ pub fn get_type_args(path: &hir::Path) -> Vec<&hir::Ty> {
         .unwrap_or_default()
 }
 
-pub fn result_ty(ty: &syntax::ast::FunctionRetTy) -> Option<syntax::ast::Ty> {
+pub fn unpack_syntax_ret(ty: &syntax::ast::FunctionRetTy) -> Option<syntax::ast::Ty> {
     match ty {
         syntax::ast::FunctionRetTy::Ty(ty) => match &ty.node {
             syntax::ast::TyKind::Path(_, path) => {

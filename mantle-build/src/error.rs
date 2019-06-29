@@ -46,7 +46,6 @@ pub enum RpcError {
         from_ctor: bool,
         span: Span,
     },
-    MissingOutput(Span),
     MissingSelf(Span),
     Unsafe(Span),
 }
@@ -87,7 +86,6 @@ impl std::fmt::Display for RpcError {
                 f,
                 "RPC method must take `&self` or `&mut self` as its first argument."
             ),
-            MissingOutput(..) => write!(f, "RPC method must return `Result`."),
             Unsafe(..) => write!(f, "RPC method cannot be unsafe."),
         }
     }
@@ -105,7 +103,6 @@ impl RpcError {
             | HasAsync(span)
             | HasGenerics(span)
             | MissingContext { span, .. }
-            | MissingOutput(span)
             | MissingSelf(span)
             | Unsafe(span) => *span,
         }

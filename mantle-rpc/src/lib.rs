@@ -42,9 +42,8 @@ pub struct Function {
     pub mutability: StateMutability,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub inputs: Vec<Field>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub output: Option<Type>,
-    // throws: Option<Type>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
@@ -62,7 +61,6 @@ pub enum TypeDef {
         name: Ident,
         fields: Vec<IndexedField>,
     },
-    // TODO: unions and exceptions
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
@@ -129,4 +127,5 @@ pub enum Type {
     Set(Box<Type>),
     Map(Box<Type>, Box<Type>),
     Optional(Box<Type>),
+    Result(Box<Type>, Box<Type>),
 }

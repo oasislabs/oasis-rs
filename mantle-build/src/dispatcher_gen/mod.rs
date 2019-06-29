@@ -227,8 +227,8 @@ fn is_default_fn(rpc: &(Symbol, MethodSig)) -> bool {
         [zelf, ctx] if zelf.is_self() && crate::utils::is_context_ref(&ctx.ty) => (),
         _ => return false,
     }
-    match &crate::utils::result_ty(&msig.decl.output) {
-        Some(ty) if ty.node.is_unit() => true,
-        _ => false,
+    match &crate::utils::unpack_syntax_ret(&msig.decl.output) {
+        Some(_) => false,
+        None => true,
     }
 }

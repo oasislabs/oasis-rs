@@ -6,18 +6,18 @@ extern crate serde;
 use mantle::{Context, Service};
 
 #[derive(Service)]
-pub struct DefaultFnService {}
+pub struct NonDefaultFnService {}
 
 impl DefaultFnService {
-    pub fn new(ctx: &Context) -> Self {
+    pub fn new(ctx: &Context) -> Result<Self, String> {
         unimplemented!()
     }
 
-    pub fn default(&mut self, ctx: &Context) -> Result<(), ()> {
+    pub fn default(&mut self, ctx: &Context, extra_arg: u8) {
         unimplemented!()
     }
 }
 
 fn main() {
-    mantle::service!(DefaultFnService);
+    mantle::service!(NonDefaultFnService);
 }

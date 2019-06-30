@@ -11,5 +11,6 @@ use syn::spanned::Spanned as _;
 
 // per rustc: "functions tagged with `#[proc_macro]` must currently reside in the root of the crate"
 include!("utils.rs");
-include!("service_derive.rs");
+include!("default_attr.rs");
 include!("event_derive.rs");
+include!("service_derive.rs");

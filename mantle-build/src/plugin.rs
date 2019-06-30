@@ -141,7 +141,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
         };
         let (ctor, rpcs): (Vec<_>, Vec<_>) = rpcs
             .into_iter()
-            .partition(|(name, _)| *name == syntax_pos::symbol::Symbol::intern("new"));
+            .partition(|rpc| rpc.kind == crate::visitor::ParsedRpcKind::Ctor);
         let ctor_sig = match ctor.as_slice() {
             [] => {
                 sess.span_err(
@@ -150,16 +150,35 @@ impl rustc_driver::Callbacks for BuildPlugin {
                 );
                 return false;
             }
-            [(_, sig)] => sig,
+            [rpc] => &rpc.sig,
             _ => return true, // Multiply defined `new` function. Let the compiler catch this.
         };
+
+        let default_fn_spans = rpcs
+            .iter()
+            .filter_map(|rpc| {
+                if let crate::visitor::ParsedRpcKind::Default(default_span) = rpc.kind {
+                    Some(vec![default_span, rpc.span])
+                } else {
+                    None
+                }
+            })
+            .flat_map(|spans| spans)
+            .collect::<Vec<_>>();
+        if default_fn_spans.len() > 1 {
+            sess.span_err(
+                default_fn_spans,
+                "Only one RPC method can be marked with `#[default]`",
+            );
+            return false;
+        }
 
         crate::dispatcher_gen::generate_and_insert(
             &mut parse,
             &gen_dir,
             &crate_name,
             service_name,
-            ctor_sig,
+            &ctor_sig,
             rpcs,
         );
 

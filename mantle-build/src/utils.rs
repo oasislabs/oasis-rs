@@ -88,6 +88,13 @@ pub fn unpack_syntax_ret(ty: &syntax::ast::FunctionRetTy) -> SyntaxReturnType {
     ret_ty
 }
 
+pub fn is_self_ref(ty: &syntax::ast::Ty) -> bool {
+    match &ty.node {
+        syntax::ast::TyKind::Rptr(_, mut_ty) => mut_ty.ty.node.is_implicit_self(),
+        _ => false,
+    }
+}
+
 pub fn is_context_ref(ty: &syntax::ast::Ty) -> bool {
     match &ty.node {
         syntax::ast::TyKind::Rptr(_, mut_ty) => match &mut_ty.ty.node {

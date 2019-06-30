@@ -92,3 +92,18 @@ impl Context {
         self
     }
 }
+
+#[derive(Serialize, Deserialize)]
+pub enum RpcError<T> {
+    /// There was no service at the requested address.
+    NoService,
+
+    /// The caller does not have enough balance to cover the sent value.
+    InsufficientBalance,
+
+    /// The caller did not provide enough gas to complete the transaction.
+    InsufficientGas,
+
+    /// The application returned an error.
+    Exec(T),
+}

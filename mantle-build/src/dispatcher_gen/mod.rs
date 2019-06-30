@@ -7,7 +7,10 @@ use syntax::{
 };
 use syntax_pos::symbol::Symbol;
 
-use crate::parse;
+use crate::{
+    parse,
+    visitor::{ParsedRpc, ParsedRpcKind},
+};
 
 pub fn generate_and_insert(
     krate: &mut Crate,
@@ -15,17 +18,15 @@ pub fn generate_and_insert(
     crate_name: &str,
     service_name: Symbol,
     ctor: &MethodSig,
-    rpcs: Vec<(Symbol, MethodSig)>,
+    rpcs: Vec<ParsedRpc>,
 ) {
-    let (default_fn, rpcs): (Vec<_>, Vec<_>) = rpcs.into_iter().partition(is_default_fn);
-
-    let default_fn_returns_result = default_fn
-        .get(0)
-        .map(|(_, sig)| crate::utils::unpack_syntax_ret(&sig.decl.output).is_result);
+    let default_fn = rpcs.iter().find(|rpc| match rpc.kind {
+        ParsedRpcKind::Default(_) => true,
+        _ => false,
+    });
 
     if !rpcs.is_empty() {
-        let rpcs_dispatcher =
-            generate_rpc_dispatcher(service_name, &rpcs, default_fn_returns_result);
+        let rpcs_dispatcher = generate_rpc_dispatcher(service_name, &rpcs, default_fn);
         let rpcs_include_file = out_dir.join(format!("{}_dispatcher.rs", crate_name));
         std::fs::write(
             &rpcs_include_file,
@@ -57,16 +58,16 @@ pub fn generate_and_insert(
 
 fn generate_rpc_dispatcher(
     service_name: Symbol,
-    rpcs: &[(Symbol, MethodSig)],
-    default_fn_returns_result: Option<bool>,
+    rpcs: &[ParsedRpc],
+    default_fn: Option<&ParsedRpc>,
 ) -> P<Block> {
     let rpc_payload_variants = rpcs // e.g., `fn_name { input1: String, input2: Option<u64> }`
         .iter()
-        .map(|(name, sig)| {
+        .map(|rpc| {
             format!(
                 "{} {{ {} }}",
-                name,
-                structify_args(&sig.decl.inputs[2..]).join(", ")
+                rpc.name,
+                structify_args(&rpc.sig.decl.inputs[2..]).join(", ")
             )
         })
         .collect::<Vec<_>>()
@@ -74,22 +75,24 @@ fn generate_rpc_dispatcher(
 
     let rpc_match_arms = rpcs
         .iter()
-        .map(|(name, sig)| {
-            let arg_names = sig.decl.inputs[2..]
+        .map(|rpc| {
+            let arg_names = rpc.sig.decl.inputs[2..]
                 .iter()
                 .map(|arg| pprust::pat_to_string(&arg.pat))
                 .collect::<Vec<_>>()
                 .join(", ");
-            if crate::utils::unpack_syntax_ret(&sig.decl.output).is_result {
+            if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
                 format!(
                     r#"RpcPayload::{name} {{ {arg_names} }} => {{
                         service.{name}(&ctx, {arg_names})
                             .map(|output| {{
                                 mantle::reexports::serde_cbor::to_vec(&output).unwrap()
                             }})
-                            .map_err(|err| format!("{{:?}}", err))
+                            .map_err(|err| {{
+                                mantle::reexports::serde_cbor::to_vec(&err).unwrap()
+                            }})
                     }}"#,
-                    name = name,
+                    name = rpc.name,
                     arg_names = arg_names,
                 )
             } else {
@@ -98,26 +101,36 @@ fn generate_rpc_dispatcher(
                         let output = service.{name}(&ctx, {arg_names});
                         Ok(mantle::reexports::serde_cbor::to_vec(&output).unwrap())
                     }}"#,
-                    name = name,
+                    name = rpc.name,
                     arg_names = arg_names,
                 )
             }
         })
         .collect::<String>();
 
-    let default_fn_arm = match default_fn_returns_result {
-        Some(true) => {
-            r#"_ => service.default(&ctx)
-            .map(|output| Vec::new())
-            .map_err(|err| format!("{:?}", err))"#
+    let default_fn_arm = if let Some(rpc) = default_fn {
+        if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
+            format!(
+                r#"_ => service.{name}(&ctx)
+                    .map(|output| {{
+                        mantle::reexports::serde_cbor::to_vec(&output).unwrap()
+                    }})
+                    .map_err(|err| {{
+                        mantle::reexports::serde_cbor::to_vec(&err).unwrap()
+                    }})"#,
+                name = rpc.name
+            )
+        } else {
+            format!(
+                r#"_ => {{
+                    let output = service.{name}(&ctx);
+                    Ok(mantle::reexports::serde_cbor::to_vec(&output).unwrap())
+                }}"#,
+                name = rpc.name
+            )
         }
-        Some(false) => {
-            r#"_ => {
-                service.default(&ctx);
-                Ok(Vec::new())
-            }"#
-        }
-        None => "",
+    } else {
+        String::new()
     };
 
     parse!(format!(r#"{{
@@ -256,20 +269,5 @@ fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
             parse!(format!("include!(\"{}\");", include_file.display()) => parse_stmt),
         );
         break;
-    }
-}
-
-fn is_default_fn(rpc: &(Symbol, MethodSig)) -> bool {
-    let (name, msig) = rpc;
-    if name.as_str() != "default" {
-        return false;
-    }
-    match msig.decl.inputs.as_slice() {
-        [zelf, ctx] if zelf.is_self() && crate::utils::is_context_ref(&ctx.ty) => (),
-        _ => return false,
-    }
-    match &crate::utils::unpack_syntax_ret(&msig.decl.output).ty {
-        crate::utils::ReturnType::None => true,
-        _ => false,
     }
 }

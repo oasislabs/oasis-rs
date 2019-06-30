@@ -10,8 +10,7 @@ use rustc::{
 use syntax_pos::symbol::Symbol;
 
 use mantle_rpc::{
-    Field, Function, Import, IndexedField, Interface, StateConstructor, StateMutability, Type,
-    TypeDef,
+    Constructor, Field, Function, Import, IndexedField, Interface, StateMutability, Type, TypeDef,
 };
 
 use crate::error::UnsupportedTypeError;
@@ -103,7 +102,7 @@ fn convert_state_ctor(
     tcx: TyCtxt,
     decl: &FnDecl,
     body: &Body,
-) -> Result<StateConstructor, Vec<UnsupportedTypeError>> {
+) -> Result<Constructor, Vec<UnsupportedTypeError>> {
     let mut errs = Vec::new();
 
     let mut inputs = Vec::with_capacity(decl.inputs.len());
@@ -119,10 +118,20 @@ fn convert_state_ctor(
         }
     }
 
+    let error = match &decl.output {
+        hir::FunctionRetTy::Return(ty) => match convert_ty(tcx, &ty) {
+            Ok(Type::Result(_, box error)) => Some(error),
+            _ => None,
+        },
+        hir::FunctionRetTy::DefaultReturn(_) => {
+            unreachable!("Syntax pass checks that ctor returns `Self`")
+        }
+    };
+
     if !errs.is_empty() {
         Err(errs)
     } else {
-        Ok(StateConstructor { inputs })
+        Ok(Constructor { inputs, error })
     }
 }
 

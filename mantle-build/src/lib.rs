@@ -7,7 +7,7 @@
 //!
 //! This library is used by registering `BuildPlugin` as a rustc callback.
 
-#![feature(box_syntax, rustc_private)]
+#![feature(box_patterns, box_syntax, inner_deref, rustc_private)]
 
 extern crate rustc;
 extern crate rustc_data_structures;

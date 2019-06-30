@@ -16,7 +16,7 @@ pub struct Interface {
     pub imports: Vec<Import>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub type_defs: Vec<TypeDef>,
-    pub constructor: StateConstructor,
+    pub constructor: Constructor,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub functions: Vec<Function>,
     #[serde(skip_serializing_if = "std::ops::Not::not", default)]
@@ -104,9 +104,9 @@ pub struct Import {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
-pub struct StateConstructor {
+pub struct Constructor {
     pub inputs: Vec<Field>,
-    // throws: Option<Type>,
+    pub error: Option<Type>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]

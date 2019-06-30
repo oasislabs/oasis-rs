@@ -221,20 +221,19 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector {
                         }
                     }
 
-                    let output_ty = crate::utils::unpack_syntax_ret(&msig.decl.output);
+                    let ret_ty = crate::utils::unpack_syntax_ret(&msig.decl.output);
 
                     if is_ctor {
-                        let output_ty_is_self = match &output_ty {
-                            Some(output_ty) => match &output_ty.node {
-                                syntax::ast::TyKind::Path(_, path) => {
-                                    path.segments.len() == 1
-                                        && path.segments[0].ident.name == Symbol::intern("Self")
-                                }
-                                _ => false,
-                            },
-                            None => false,
-                        };
-                        if !output_ty_is_self {
+                        let mut ret_ty_is_self = false;
+                        if let crate::utils::ReturnType::Known(syntax::ast::Ty {
+                            node: syntax::ast::TyKind::Path(_, path),
+                            ..
+                        }) = ret_ty.ty
+                        {
+                            ret_ty_is_self = path.segments.len() == 1
+                                && path.segments[0].ident.name == Symbol::intern("Self");
+                        }
+                        if !ret_ty_is_self {
                             errors.push(RpcError::BadCtorReturn {
                                 self_ty: service_ty.clone().into_inner(),
                                 span: msig.decl.output.span(),

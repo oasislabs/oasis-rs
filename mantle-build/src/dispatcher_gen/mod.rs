@@ -18,8 +18,14 @@ pub fn generate_and_insert(
     rpcs: Vec<(Symbol, MethodSig)>,
 ) {
     let (default_fn, rpcs): (Vec<_>, Vec<_>) = rpcs.into_iter().partition(is_default_fn);
+
+    let default_fn_returns_result = default_fn
+        .get(0)
+        .map(|(_, sig)| crate::utils::unpack_syntax_ret(&sig.decl.output).is_result);
+
     if !rpcs.is_empty() {
-        let rpcs_dispatcher = generate_rpc_dispatcher(service_name, &rpcs, !default_fn.is_empty());
+        let rpcs_dispatcher =
+            generate_rpc_dispatcher(service_name, &rpcs, default_fn_returns_result);
         let rpcs_include_file = out_dir.join(format!("{}_dispatcher.rs", crate_name));
         std::fs::write(
             &rpcs_include_file,
@@ -52,7 +58,7 @@ pub fn generate_and_insert(
 fn generate_rpc_dispatcher(
     service_name: Symbol,
     rpcs: &[(Symbol, MethodSig)],
-    has_default_function: bool,
+    default_fn_returns_result: Option<bool>,
 ) -> P<Block> {
     let rpc_payload_variants = rpcs // e.g., `fn_name { input1: String, input2: Option<u64> }`
         .iter()
@@ -74,26 +80,44 @@ fn generate_rpc_dispatcher(
                 .map(|arg| pprust::pat_to_string(&arg.pat))
                 .collect::<Vec<_>>()
                 .join(", ");
-            format!(
-                r#"RpcPayload::{name} {{ {arg_names} }} => {{
-                    service.{name}(&ctx, {arg_names})
-                        .map(|output| {{
-                            mantle::reexports::serde_cbor::to_vec(&output).unwrap()
-                        }})
-                        .map_err(|err| format!("{{:?}}", err))
-                }}"#,
-                name = name,
-                arg_names = arg_names,
-            )
+            if crate::utils::unpack_syntax_ret(&sig.decl.output).is_result {
+                format!(
+                    r#"RpcPayload::{name} {{ {arg_names} }} => {{
+                        service.{name}(&ctx, {arg_names})
+                            .map(|output| {{
+                                mantle::reexports::serde_cbor::to_vec(&output).unwrap()
+                            }})
+                            .map_err(|err| format!("{{:?}}", err))
+                    }}"#,
+                    name = name,
+                    arg_names = arg_names,
+                )
+            } else {
+                format!(
+                    r#"RpcPayload::{name} {{ {arg_names} }} => {{
+                        let output = service.{name}(&ctx, {arg_names});
+                        Ok(mantle::reexports::serde_cbor::to_vec(&output).unwrap())
+                    }}"#,
+                    name = name,
+                    arg_names = arg_names,
+                )
+            }
         })
         .collect::<String>();
 
-    let default_fn_arm = if has_default_function {
-        r#"_ => service.default(&ctx)
+    let default_fn_arm = match default_fn_returns_result {
+        Some(true) => {
+            r#"_ => service.default(&ctx)
             .map(|output| Vec::new())
-            .map_err(|err| format!("{{:?}}", err))"#
-    } else {
-        ""
+            .map_err(|err| format!("{:?}", err))"#
+        }
+        Some(false) => {
+            r#"_ => {
+                service.default(&ctx);
+                Ok(Vec::new())
+            }"#
+        }
+        None => "",
     };
 
     parse!(format!(r#"{{
@@ -113,7 +137,7 @@ fn generate_rpc_dispatcher(
             let payload: RpcPayload =
                 mantle::reexports::serde_cbor::from_slice(&mantle::backend::input()).unwrap();
             let output = match payload {{
-                {call_tree} // match arms return ABI-encoded vecs
+                {call_tree} // match arms return Result<Vec<u8>> (ABI-encoded bytes)
                 {default_fn_arm}
             }};
             match output {{
@@ -145,6 +169,29 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
     } else {
         String::new()
     };
+
+    let ctor_stmt = if crate::utils::unpack_syntax_ret(&ctor.decl.output).is_result {
+        format!(
+            r#"
+            match <{service_ident}>::new(&ctx, {ctor_arg_names}) {{
+                Ok(service) => service,
+                Err(err) => {{
+                    mantle::backend::err(&format!("{{:#?}}", err).into_bytes());
+                    return 1;
+                }}
+            }}
+            "#,
+            service_ident = service_name.as_str().get(),
+            ctor_arg_names = ctor_arg_names,
+        )
+    } else {
+        format!(
+            "<{service_ident}>::new(&ctx, {ctor_arg_names})",
+            service_ident = service_name.as_str().get(),
+            ctor_arg_names = ctor_arg_names
+        )
+    };
+
     parse!(format!(r#"
             #[allow(warnings)]
             #[no_mangle]
@@ -159,19 +206,13 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
                 }}
                 let ctx = mantle::Context::default(); // TODO(#33)
                 {ctor_payload_unpack}
-                let mut service = match <{service_ident}>::new(&ctx, {ctor_arg_names}) {{
-                    Ok(service) => service,
-                    Err(err) => {{
-                        mantle::backend::err(&format!("{{:#?}}", err).into_bytes());
-                        return 1;
-                    }}
-                }};
+                let mut service = {ctor_stmt};
                 <{service_ident}>::sunder(service);
                 return 0;
             }}
         "#,
+        ctor_stmt = ctor_stmt,
         ctor_payload_unpack = ctor_payload_unpack,
-        ctor_arg_names = ctor_arg_names,
         ctor_payload_types = structify_args(&ctor.decl.inputs[1..]).join(", "),
         service_ident = service_name.as_str().get(),
     ) => parse_item)
@@ -227,8 +268,8 @@ fn is_default_fn(rpc: &(Symbol, MethodSig)) -> bool {
         [zelf, ctx] if zelf.is_self() && crate::utils::is_context_ref(&ctx.ty) => (),
         _ => return false,
     }
-    match &crate::utils::unpack_syntax_ret(&msig.decl.output) {
-        Some(_) => false,
-        None => true,
+    match &crate::utils::unpack_syntax_ret(&msig.decl.output).ty {
+        crate::utils::ReturnType::None => true,
+        _ => false,
     }
 }

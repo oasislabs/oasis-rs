@@ -40,28 +40,52 @@ pub fn get_type_args(path: &hir::Path) -> Vec<&hir::Ty> {
         .unwrap_or_default()
 }
 
-pub fn unpack_syntax_ret(ty: &syntax::ast::FunctionRetTy) -> Option<syntax::ast::Ty> {
-    match ty {
-        syntax::ast::FunctionRetTy::Ty(ty) => match &ty.node {
+pub struct SyntaxReturnType {
+    pub is_result: bool,
+    pub ty: ReturnType,
+}
+
+pub enum ReturnType {
+    Known(syntax::ast::Ty),
+    Unknown, // created when `Result` is user-defined or has no generic
+    None,
+}
+
+/// Extracts the T from `-> T` or `-> Result<T, _>`
+pub fn unpack_syntax_ret(ty: &syntax::ast::FunctionRetTy) -> SyntaxReturnType {
+    let mut ret_ty = SyntaxReturnType {
+        is_result: false,
+        ty: ReturnType::None,
+    };
+    if let syntax::ast::FunctionRetTy::Ty(ty) = ty {
+        match &ty.node {
             syntax::ast::TyKind::Path(_, path) => {
                 let result = path.segments.last().unwrap();
-                if result.ident.name != Symbol::intern("Result") {
-                    return None;
+                ret_ty.is_result = result.ident.name == Symbol::intern("Result");
+                if !ret_ty.is_result {
+                    if !ty.node.is_unit() {
+                        ret_ty.ty = ReturnType::Known(ty.clone().into_inner());
+                    }
+                    return ret_ty;
                 }
-                match result.args.as_ref().map(|args| args.clone().into_inner()) {
-                    Some(syntax::ast::GenericArgs::AngleBracketed(
-                        syntax::ast::AngleBracketedArgs { args, .. },
-                    )) => args.into_iter().nth(0).and_then(|arg| match arg {
-                        syntax::ast::GenericArg::Type(p_ty) => Some(p_ty.into_inner()),
-                        _ => None,
-                    }),
-                    _ => None,
+                if result.args.is_none() {
+                    ret_ty.ty = ReturnType::Unknown;
+                    return ret_ty;
+                }
+                if let syntax::ast::GenericArgs::AngleBracketed(syntax::ast::AngleBracketedArgs {
+                    args,
+                    ..
+                }) = result.args.deref().as_ref().unwrap()
+                {
+                    if let syntax::ast::GenericArg::Type(p_ty) = &args[0] {
+                        ret_ty.ty = ReturnType::Known(p_ty.clone().into_inner())
+                    }
                 }
             }
-            _ => None,
-        },
-        _ => None,
-    }
+            _ => ret_ty.ty = ReturnType::Known(ty.clone().into_inner()),
+        }
+    };
+    ret_ty
 }
 
 pub fn is_context_ref(ty: &syntax::ast::Ty) -> bool {

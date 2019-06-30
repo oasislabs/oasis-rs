@@ -39,6 +39,8 @@ pub enum RpcError {
         self_ty: syntax::ast::Ty,
         span: Span,
     },
+    CtorIsDefault(Span),
+    DefaultFnHasArg(Span),
     HasAbi(Span),
     HasAsync(Span),
     HasGenerics(Span),
@@ -68,6 +70,10 @@ impl std::fmt::Display for RpcError {
                     "Service constructor must return `Self` (aka `{}`)",
                     &self_ty_str["type(".len()..(self_ty_str.len() - 1)]
                 )
+            }
+            CtorIsDefault(..) => write!(f, "Service constructor cannot be the default function."),
+            DefaultFnHasArg(..) => {
+                write!(f, "Default function cannot take arguments after `Context`.")
             }
             HasAbi(..) => write!(f, "RPC method cannot declare an ABI."),
             HasAsync(..) => write!(f, "RPC method cannot be async."),
@@ -99,6 +105,8 @@ impl RpcError {
             | BadArgTy { span, .. }
             | BadStruct(span)
             | BadCtorReturn { span, .. }
+            | CtorIsDefault(span)
+            | DefaultFnHasArg(span)
             | HasAbi(span)
             | HasAsync(span)
             | HasGenerics(span)

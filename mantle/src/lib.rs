@@ -6,6 +6,8 @@
 )]
 #![cfg_attr(target_os = "wasi", feature(wasi_ext))]
 
+#[macro_use]
+pub extern crate serde;
 extern crate mantle_macros;
 
 pub mod backend;
@@ -18,7 +20,7 @@ pub mod reexports {
     pub use tiny_keccak;
 }
 
-pub use mantle_macros::{Event, Service};
+pub use mantle_macros::{default, Event, Service};
 pub use mantle_types::Address;
 
 pub use crate::{error::Error, exe::*};

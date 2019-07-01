@@ -21,10 +21,10 @@ pub struct MessageBoard {
     posts: Vec<Post>,
 
     /// All accounts which have ever participated in this message board.
-    accounts: HashMap<UserId, Account>, // Strictly speaking, a `Vec` would probably be faster
-                                        // since it'd be short lived and algorithmically has
-                                        // smaller constant factors. The API of `HashMap` is
-                                        // better suited for this field, though.
+    accounts: HashMap<UserId, Account>, /* Strictly speaking, a `Vec` would probably be faster
+                                         * since it'd be short lived and algorithmically has
+                                         * smaller constant factors. The API of `HashMap` is
+                                         * better suited for this field, though. */
 }
 
 // Types used in the state struct must derive serde `Serialize` and `Deserialize`

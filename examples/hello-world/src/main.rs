@@ -31,9 +31,7 @@ impl HelloWorld {
         .map(|(lang, hello)| (lang.to_string(), hello.to_string()))
         .collect();
 
-        Ok(Self {
-            helloworlds,
-        })
+        Ok(Self { helloworlds })
     }
 
     /// Get hello world taking as input the desired language
@@ -85,7 +83,10 @@ mod tests {
         );
 
         // double unhappiness
-        eprintln!("In Samoan: {:?}", helloworld.say_hello(&ctx, "ws".to_string()));
+        eprintln!(
+            "In Samoan: {:?}",
+            helloworld.say_hello(&ctx, "ws".to_string())
+        );
         eprintln!(
             "{:?}",
             helloworld.add_hello(&ctx, "en".to_string(), "Zeno World!".to_string())
@@ -98,7 +99,7 @@ mod tests {
             "alofa fiafia i le lalolagi!".to_string(),
         ) {
             Err(_) => eprintln!("Attempt to insert a duplicate entry."),
-            Ok(_) => ()
+            Ok(_) => (),
         };
 
         // and test it

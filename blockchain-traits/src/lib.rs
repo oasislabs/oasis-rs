@@ -45,6 +45,7 @@ pub trait Block {
     /// The `caller` is charged `gas * gas_price` for the computation.
     /// A transaction that aborts (panics) will have its changes rolled back.
     /// This `transact` should be called by an Externally Owned Account (EOA).
+    #[allow(clippy::too_many_arguments)]
     fn transact(
         &mut self,
         caller: Self::Address,

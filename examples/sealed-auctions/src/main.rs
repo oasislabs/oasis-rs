@@ -60,7 +60,7 @@ impl AuctionMarket {
         let artifact = Artifact {
             base: ArtifactBase {
                 item_id: self.item_counter,
-                description: description,
+                description,
             },
             owner: ctx.sender(),
             provenance: Vec::new(),
@@ -68,12 +68,12 @@ impl AuctionMarket {
             transaction_time: Utc::now().to_rfc2822(),
         };
         self.artifacts.insert(self.item_counter, artifact.clone());
-        self.market_size = self.market_size + value;
+        self.market_size += value;
 
         // emit an event to notify watchers that a new item has been added and will
         // be available for auction soon
         Event::emit(&self.artifacts.get(&self.item_counter).unwrap().base);
-        self.item_counter = self.item_counter + 1;
+        self.item_counter += 1;
 
         Ok(artifact)
     }
@@ -124,7 +124,7 @@ impl AuctionMarket {
         let auction = Auction {
             item_id,
             seller: ctx.sender(),
-            reserve: reserve,
+            reserve,
             ..Default::default()
         };
         self.auctions.insert(item_id, auction.clone());
@@ -161,23 +161,16 @@ impl AuctionMarket {
         }
 
         // Create/update bid
-        if !auction.bids.contains_key(&ctx.sender()) {
-            auction.bids.insert(
-                ctx.sender(),
-                Bid {
-                    bidder: ctx.sender(),
-                    value: value,
-                },
-            );
-        } else {
-            let mut bid = auction.bids.get_mut(&ctx.sender()).unwrap();
-            if bid.value > value || value < auction.max_bid {
-                return Err(Error::NonMonotonicBid {
-                    value: std::cmp::max(bid.value, auction.max_bid),
-                });
-            }
-            bid.value = value;
+        let mut bid = auction.bids.entry(ctx.sender()).or_insert_with(|| Bid {
+            bidder: ctx.sender(),
+            value,
+        });
+        if bid.value > value || value < auction.max_bid {
+            return Err(Error::NonMonotonicBid {
+                value: std::cmp::max(bid.value, auction.max_bid),
+            });
         }
+        bid.value = value;
         auction.max_bid = value;
 
         Ok(())

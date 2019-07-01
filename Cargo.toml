@@ -2,6 +2,11 @@
 members = [
     "bcfs",
     "blockchain-traits",
+    "examples/ballot",
+    "examples/erc20",
+    "examples/hello-world",
+    "examples/messaging",
+    "examples/sealed-auctions",
     "mantle",
     "mantle-build",
     "mantle-macros",
@@ -10,7 +15,7 @@ members = [
     "mantle-types",
     "memchain",
 ]
-exclude = ["examples", "tests"]
+exclude = ["tests"]
 
 [profile.release]
 incremental = false

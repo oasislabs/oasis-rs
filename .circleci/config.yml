@@ -10,8 +10,11 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Checkstyle
+          name: Rustfmt
           command: cargo fmt -- --check
+      - run:
+          name: Clippy
+          command: cargo clippy -- -D clippy::all
       - run:
           name: Install mantle-build
           command: cargo install --path mantle-build
@@ -118,6 +121,10 @@ jobs:
           name: Test ERC20 example
           working_directory: examples/erc20
           command: cargo test --tests -- --test-threads 1
+      - run:
+          name: Test HelloWorld example
+          working_directory: examples/hello-world
+          command: cargo test
 
   test_idl:
     docker:

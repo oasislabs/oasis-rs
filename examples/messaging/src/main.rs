@@ -155,7 +155,10 @@ impl MessageBoard {
             return Err(Error::PermissionDenied);
         }
         let start = range.0.unwrap_or_default();
-        let stop = std::cmp::min(range.1.unwrap_or(self.posts.len()), self.posts.len());
+        let stop = std::cmp::min(
+            range.1.unwrap_or_else(|| self.posts.len()),
+            self.posts.len(),
+        );
         Ok(self
             .posts
             .get(start..stop)

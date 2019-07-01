@@ -1,39 +1,47 @@
 use std::path::PathBuf;
 
+fn find_deps(names: &[&str]) -> Vec<PathBuf> {
+    let libs = std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../target/debug/deps"))
+        .unwrap()
+        .filter_map(|de| {
+            let de = de.unwrap();
+            let p = de.path();
+            let fname = p.file_name().unwrap().to_str().unwrap();
+            match fname.split("-").collect::<Vec<_>>().as_slice() {
+                [lib_name, disambiguator] if disambiguator.ends_with(".rlib") => {
+                    Some((lib_name.to_string(), de.path()))
+                }
+                _ => None,
+            }
+        })
+        .collect::<std::collections::HashMap<String, PathBuf>>();
+    names
+        .iter()
+        .map(|name| {
+            libs.get(&format!("lib{}", name.replace("-", "_")))
+                .cloned()
+                .unwrap_or_else(|| PathBuf::from(name))
+        })
+        .collect()
+}
+
 fn run_mode(mode: &'static str) {
-    // Our serde conflicts with the serde in the sysroot.
-    let libserde_path =
-        std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../target/debug/deps"))
-            .unwrap()
-            .find_map(|maybe_dirent| {
-                maybe_dirent.ok().and_then(|dirent| {
-                    if dirent
-                        .file_name()
-                        .into_string()
-                        .unwrap()
-                        .starts_with("libserde")
-                    {
-                        Some(dirent.path())
-                    } else {
-                        None
-                    }
-                })
-            })
-            .unwrap_or_else(|| PathBuf::from("serde"));
+    let deps = &["mantle", "serde", "serde_derive", "serde_cbor"];
+    let externs = deps
+        .iter()
+        .zip(find_deps(deps).iter())
+        .map(|(dep, p)| format!("--extern {}={}", dep, p.display()))
+        .collect::<Vec<_>>()
+        .join(" ");
 
     let mut config = compiletest_rs::Config {
         mode: mode.parse().expect("Invalid mode."),
         src_base: PathBuf::from(format!("tests/{}", mode.replace("-", "_"))),
         target_rustcflags: Some(format!(
             "--edition=2018 \
-             -Z unstable-options \
              --cfg feature=\"mantle-build-compiletest\" \
-             --extern mantle \
-             --extern mantle_test \
-             --extern {} \
-             --extern serde_derive \
-             --extern serde_cbor",
-            libserde_path.display()
+             {}",
+            externs
         )),
         rustc_path: PathBuf::from("mantle-build"),
         ..Default::default()
@@ -41,7 +49,6 @@ fn run_mode(mode: &'static str) {
     .tempdir();
 
     config.link_deps();
-    config.clean_rmeta();
 
     compiletest_rs::run_tests(&config);
 }

@@ -208,7 +208,7 @@ impl ERC20Token {
         if !self.admins.contains(&ctx.sender()) {
             return Err(Error::AdminPrivilegesRequired);
         }
-        self.total_supply = self.total_supply + amount;
+        self.total_supply += self.total_supply;
         Ok(())
     }
 

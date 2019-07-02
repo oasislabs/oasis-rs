@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet}; // BTree for reproducability
+use std::collections::BTreeSet; // BTree for reproducability
 
 use rustc::{hir::intravisit::Visitor, util::nodemap::FxHashMap};
 use rustc_data_structures::sync::Once;
@@ -9,22 +9,10 @@ use crate::visitor::{
     ServiceDefFinder,
 };
 
-#[derive(Deserialize)]
-struct Lockfile {
-    package: Vec<LockfileEntry>,
-}
-
-#[derive(Deserialize)]
-struct LockfileEntry {
-    name: String,
-    version: String,
-}
-
 pub struct BuildPlugin {
     service_name: Once<Symbol>,
     event_indexed_fields: FxHashMap<Symbol, Vec<Symbol>>, // event_name -> field_name
     iface: Once<mantle_rpc::Interface>,
-    deps: Once<BTreeMap<String, LockfileEntry>>,
 }
 
 impl Default for BuildPlugin {
@@ -33,7 +21,6 @@ impl Default for BuildPlugin {
             service_name: Once::new(),
             event_indexed_fields: Default::default(),
             iface: Once::new(),
-            deps: Once::new(),
         }
     }
 }
@@ -43,42 +30,6 @@ impl BuildPlugin {
     /// Only valid after rustc callback has been executed. Panics if called before.
     pub fn try_get(&self) -> Option<&mantle_rpc::Interface> {
         self.iface.try_get()
-    }
-
-    /// Returns the (name, version) of a dependency.
-    fn crate_version<S: AsRef<str>>(&self, crate_name: S) -> String {
-        self.deps.init_locking(Self::load_deps);
-        let deps = self.deps.get();
-        deps.get(crate_name.as_ref())
-            .map(|pkg| pkg.version.to_string())
-            .unwrap_or_else(|| "*".to_string())
-    }
-
-    fn load_deps() -> BTreeMap<String, LockfileEntry> {
-        let mf_dir = std::path::PathBuf::from(
-            std::env::var_os("CARGO_MANIFEST_DIR").expect("`CARGO_MANIFEST_DIR` not set"),
-        );
-
-        let lockfile_path = mf_dir
-            .ancestors()
-            .map(|p| p.join("Cargo.lock"))
-            .skip_while(|p| !p.is_file())
-            .nth(0);
-
-        if let Some(lockfile_path) = lockfile_path {
-            let lockfile: Lockfile = toml::from_str(
-                &std::fs::read_to_string(lockfile_path).expect("Cargo.lock should exist"),
-            )
-            .expect("Cargo.lock should exist and be readable");
-
-            lockfile
-                .package
-                .into_iter()
-                .map(|pkg| (pkg.name.replace("-", "_"), pkg))
-                .collect()
-        } else {
-            BTreeMap::default()
-        }
     }
 }
 
@@ -223,8 +174,9 @@ impl rustc_driver::Callbacks for BuildPlugin {
                 if def.did.is_local() {
                     adt_defs.insert((def, is_event));
                 } else {
-                    let crate_name = tcx.original_crate_name(def.did.krate);
-                    imports.insert((crate_name, self.crate_version(crate_name.as_str())));
+                    unimplemented!("copy in types from external crates");
+                    // let crate_name = tcx.original_crate_name(def.did.krate);
+                    // imports.insert((crate_name, self.crate_version(crate_name.as_str())));
                 }
             }
 

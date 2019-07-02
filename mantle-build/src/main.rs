@@ -6,30 +6,13 @@
 extern crate rustc;
 extern crate rustc_driver;
 
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
+
 use colored::*;
-
-// This wrapper script is inspired by `clippy-driver`.
-// https://github.com/rust-lang/rust-clippy/blob/master/src/driver.rs
-fn arg_value<'a>(
-    args: impl IntoIterator<Item = &'a String>,
-    find_arg: &str,
-    pred: impl Fn(&str) -> bool,
-) -> Option<&'a str> {
-    let mut args = args.into_iter().map(String::as_str);
-
-    while let Some(arg) = args.next() {
-        let arg: Vec<_> = arg.splitn(2, '=').collect();
-        if arg.get(0) != Some(&find_arg) {
-            continue;
-        }
-
-        let value = arg.get(1).cloned().or_else(|| args.next());
-        if value.as_ref().map_or(false, |p| pred(p)) {
-            return value;
-        }
-    }
-    None
-}
+use rustc::util::common::ErrorReported;
 
 fn main() {
     rustc_driver::init_rustc_env_logger();
@@ -43,36 +26,43 @@ fn main() {
             args.remove(1); // `RUSTC_WRAPPER` is passed `rustc` as the first arg
         }
 
-        let sys_root = std::process::Command::new("rustc")
-            .args(&["--print", "sysroot"])
-            .output()
-            .ok()
-            .and_then(|out| String::from_utf8(out.stdout).ok())
-            .map(|s| s.trim().to_owned())
-            .expect("Could not determine rustc sysroot");
-
         args.push("--sysroot".to_string());
-        args.push(sys_root);
+        args.push(get_sysroot());
 
-        let crate_name = arg_value(&args, "--crate-name", |_| true);
-        let is_bin = arg_value(&args, "--crate-type", |ty| ty == "bin").is_some();
-        let is_testing = arg_value(&args, "--cfg", |ty| {
-            ty == "feature=\"mantle-build-compiletest\""
-        })
-        .is_some();
-        let do_gen = is_testing || (is_bin && crate_name != Some("build_script_build"));
+        let is_primary = std::env::var("CARGO_PRIMARY_PACKAGE")
+            .map(|p| p == "1")
+            .unwrap_or(false);
+        let is_testing = args
+            .iter()
+            .any(|arg| arg == "feature=\"mantle-build-compiletest\"");
 
         let mut idl8r = mantle_build::BuildPlugin::default();
-        let mut default = rustc_driver::DefaultCallbacks;
-        let callbacks: &mut (dyn rustc_driver::Callbacks + Send) =
-            if do_gen { &mut idl8r } else { &mut default };
+        let mut default_cbs = rustc_driver::DefaultCallbacks;
+        let callbacks: &mut (dyn rustc_driver::Callbacks + Send) = if is_primary || is_testing {
+            &mut idl8r
+        } else {
+            &mut default_cbs
+        };
+
+        if is_primary {
+            let mut manifest_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+            manifest_path.push("Cargo.toml");
+            let deps = match load_deps(&manifest_path) {
+                Ok(deps) => deps,
+                Err(err) => {
+                    eprintln!("    {} {}", "error:".red(), err);
+                    return Err(ErrorReported);
+                }
+            };
+        }
+
         rustc_driver::run_compiler(&args, callbacks, None, None)?;
 
-        if !do_gen || is_testing {
+        if !is_primary {
             return Ok(());
         }
 
-        let crate_name = crate_name.unwrap(); // `crate_name.is_some()` when `do_gen && !is_testing`
+        let crate_name = std::env::var("CARGO_PKG_NAME").unwrap();
 
         let rpc_iface = match idl8r.try_get() {
             Some(rpc_iface) => rpc_iface,
@@ -82,29 +72,17 @@ fn main() {
                     "warning:".yellow(),
                     crate_name
                 );
-                return Err(rustc::util::common::ErrorReported);
+                return Err(ErrorReported);
             }
         };
 
         let mut wasm_path =
-            std::path::PathBuf::from(match arg_value(&args, "--out-dir", |_| true) {
-                Some(out_dir) => out_dir,
-                None => return Ok(()),
-            });
+            PathBuf::from(&args[args.iter().position(|arg| arg == "--out-dir").unwrap() + 1]);
         wasm_path.push(format!("{}.wasm", crate_name));
 
-        if !wasm_path.is_file() {
-            return Ok(());
+        if wasm_path.is_file() {
+            pack_iface_into_wasm(&rpc_iface, &wasm_path)?;
         }
-
-        let mut module = walrus::Module::from_file(&wasm_path).unwrap();
-        module.customs.add(walrus::RawCustomSection {
-            name: "mantle-interface".to_string(),
-            data: rpc_iface
-                .to_vec()
-                .map_err(|_| rustc::util::common::ErrorReported)?,
-        });
-        module.emit_wasm_file(wasm_path).unwrap();
 
         Ok(())
     });
@@ -113,4 +91,53 @@ fn main() {
         Ok(_) => 0,
         Err(_) => 1,
     });
+}
+
+fn get_sysroot() -> String {
+    std::process::Command::new("rustc")
+        .args(&["--print", "sysroot"])
+        .output()
+        .ok()
+        .and_then(|out| String::from_utf8(out.stdout).ok())
+        .map(|s| s.trim().to_owned())
+        .expect("Could not determine rustc sysroot")
+}
+
+pub enum DependenciesError {
+    TomlParse(toml::de::Error),
+}
+
+impl std::fmt::Display for DependenciesError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use DependenciesError::*;
+        match self {
+            TomlParse(err) => write!(f, "Could not parse Mantle dependencies: {}", err),
+        }
+    }
+}
+
+fn load_deps(manifest_path: &Path) -> Result<BTreeMap<String, String>, DependenciesError> {
+    let cargo_toml: toml::Value = toml::from_slice(&std::fs::read(manifest_path).unwrap()).unwrap();
+    Ok(cargo_toml
+        .as_table()
+        .and_then(|c_t| c_t.get("package").and_then(toml::Value::as_table))
+        .and_then(|p| p.get("metadata").and_then(toml::Value::as_table))
+        .and_then(|m| m.get("mantle-dependencies"))
+        .cloned()
+        .map(|d| d.try_into::<BTreeMap<String, String>>())
+        .unwrap_or(Ok(BTreeMap::new()))
+        .map_err(|err| DependenciesError::TomlParse(err))?)
+}
+
+fn pack_iface_into_wasm(
+    iface: &mantle_rpc::Interface,
+    wasm_path: &Path,
+) -> Result<(), ErrorReported> {
+    let mut module = walrus::Module::from_file(&wasm_path).unwrap();
+    module.customs.add(walrus::RawCustomSection {
+        name: "mantle-interface".to_string(),
+        data: iface.to_vec().map_err(|_| ErrorReported)?,
+    });
+    module.emit_wasm_file(wasm_path).unwrap();
+    Ok(())
 }

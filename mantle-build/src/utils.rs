@@ -112,8 +112,8 @@ pub fn mk_parse_sess() -> syntax::parse::ParseSess {
 /// Returns whether `path` ends with `suffix`.
 /// e.g, `path_is_suffix(crate::mantle::service, ["mantle", "service"]) == true`
 pub fn path_ends_with(path: &syntax::ast::Path, suffix: &[&'static str]) -> bool {
-    for (pseg, fpseg) in path.segments.iter().rev().zip(suffix.iter().rev()) {
-        if pseg.ident.name != Symbol::intern(fpseg) {
+    for (path_seg, suffix_seg_str) in path.segments.iter().rev().zip(suffix.iter().rev()) {
+        if path_seg.ident.name != Symbol::intern(suffix_seg_str) {
             return false;
         }
     }

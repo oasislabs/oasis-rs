@@ -1,10 +1,7 @@
 use syntax_pos::{MultiSpan, Span};
 
-type TypeStr = String;
-
-#[derive(Debug)]
 pub enum UnsupportedTypeError {
-    NotReprC(TypeStr, MultiSpan),
+    NotReprC(String /* type name string */, MultiSpan),
     ComplexEnum(MultiSpan),
 }
 
@@ -27,7 +24,6 @@ impl UnsupportedTypeError {
     }
 }
 
-#[derive(Debug)]
 pub enum RpcError {
     BadArgPat(Span),
     BadArgTy {

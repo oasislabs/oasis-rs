@@ -11,10 +11,9 @@ keywords = ["idl", "interface", "rpc", "plugin"]
 
 [dependencies]
 colored = "1.8"
-mantle-rpc = { version = "0.1", path = "../mantle-rpc", features = ["saveload"] }
-serde = { version = "1.0", features = ["derive"] }
+mantle-rpc = { version = "0.1", path = "../mantle-rpc", features = ["import"] }
 serde_json = "1.0"
-toml = "0.4"
+toml = "0.5"
 walrus = "0.8"
 
 [dev-dependencies]

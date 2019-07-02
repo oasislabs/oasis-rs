@@ -1,9 +1,7 @@
-mod file_importer;
 mod error;
+mod file_importer;
 
-use crate::Interface;
-
-use error::ImporterError;
+pub use error::ImporterError;
 
 pub struct Importer {
     backend: Box<dyn ImporterBackend>,
@@ -45,24 +43,29 @@ impl Importer {
                                 ))
                             })?
                     };
-                    box file::FileImporter { path }
+                    box file_importer::FileImporter { path }
                 }
                 _ => return Err(ImporterError::NoImporter(url.scheme().to_string())),
             },
         })
     }
 
-    pub fn import(&self, name: &str) -> Result<Interface, ImporterError> {
+    pub fn import(&self, name: &str) -> Result<ImportedService, ImporterError> {
         self.backend.import(name)
     }
 
-    pub fn import_all(&self) -> Result<Vec<Interface>, ImporterError> {
+    pub fn import_all(&self) -> Result<Vec<ImportedService>, ImporterError> {
         self.backend.import_all()
     }
 }
 
-trait ImporterBackend {
-    fn import(&self, name: &str) -> Result<Interface, ImporterError>;
+pub struct ImportedService {
+    pub bytecode: Vec<u8>,
+    pub interface: crate::Interface,
+}
 
-    fn import_all(&self) -> Result<Vec<Interface>, ImporterError>;
+trait ImporterBackend {
+    fn import(&self, name: &str) -> Result<ImportedService, ImporterError>;
+
+    fn import_all(&self) -> Result<Vec<ImportedService>, ImporterError>;
 }

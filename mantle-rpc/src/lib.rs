@@ -4,9 +4,7 @@
 extern crate serde;
 
 #[cfg(feature = "import")]
-mod import;
-#[cfg(feature = "import")]
-pub use import::Importer;
+pub mod import;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
 pub struct Interface {
@@ -70,6 +68,16 @@ pub enum TypeDef {
         name: Ident,
         fields: Vec<IndexedField>,
     },
+}
+
+impl TypeDef {
+    pub fn name(&self) -> &str {
+        match self {
+            TypeDef::Struct { name, .. }
+            | TypeDef::Enum { name, .. }
+            | TypeDef::Event { name, .. } => &name,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]

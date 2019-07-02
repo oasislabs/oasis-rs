@@ -3,10 +3,10 @@
 #[macro_use]
 extern crate serde;
 
-#[cfg(feature = "importer")]
-mod importer;
-#[cfg(feature = "importer")]
-pub use importer::Importer;
+#[cfg(feature = "import")]
+mod import;
+#[cfg(feature = "import")]
+pub use import::Importer;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
 pub struct Interface {

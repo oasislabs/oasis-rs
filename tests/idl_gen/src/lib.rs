@@ -16,7 +16,7 @@ fn test_mantle_interface(bin_name: &str, service_name: &str) {
         .expect("No custom")
         .data;
 
-    let actual = mantle_rpc::Interface::from_slice(iface_bytes).unwrap();
+    let actual = mantle_rpc::Interface::from_slice(&iface_bytes).unwrap();
 
     let mut json_path = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/res"));
     json_path.push(format!("{}.json", service_name));

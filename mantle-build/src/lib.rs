@@ -20,6 +20,7 @@ extern crate syntax_pos;
 
 mod dispatcher_gen;
 mod error;
+mod import_gen;
 mod plugin;
 mod rpc;
 #[macro_use]

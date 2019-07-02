@@ -92,7 +92,6 @@ pub fn convert_interface(
             type_defs,
             constructor: ctor.unwrap(),
             functions,
-            has_default_function,
             mantle_build_version: env!("CARGO_PKG_VERSION").to_string(),
         })
     }

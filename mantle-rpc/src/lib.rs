@@ -19,8 +19,6 @@ pub struct Interface {
     pub constructor: Constructor,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub functions: Vec<Function>,
-    #[serde(skip_serializing_if = "std::ops::Not::not", default)]
-    pub has_default_function: bool,
     pub mantle_build_version: String,
 }
 

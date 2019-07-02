@@ -62,15 +62,15 @@ fn main() {
             return Ok(());
         }
 
-        let crate_name = std::env::var("CARGO_PKG_NAME").unwrap();
+        let service_name = &args[args.iter().position(|arg| arg == "--crate-name").unwrap() + 1];
 
         let rpc_iface = match idl8r.try_get() {
             Some(rpc_iface) => rpc_iface,
             None => {
                 eprintln!(
-                    "    {} No service defined in crate: `{}`",
+                    "    {} No service defined in binary: `{}`",
                     "warning:".yellow(),
-                    crate_name
+                    service_name
                 );
                 return Err(ErrorReported);
             }
@@ -78,7 +78,7 @@ fn main() {
 
         let mut wasm_path =
             PathBuf::from(&args[args.iter().position(|arg| arg == "--out-dir").unwrap() + 1]);
-        wasm_path.push(format!("{}.wasm", crate_name));
+        wasm_path.push(format!("{}.wasm", service_name));
 
         if wasm_path.is_file() {
             pack_iface_into_wasm(&rpc_iface, &wasm_path)?;

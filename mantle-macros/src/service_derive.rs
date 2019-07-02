@@ -48,22 +48,13 @@ fn get_serde(
         .enumerate()
         .map(|(index, field)| {
             let (struct_idx, key) = match &field.ident {
-                Some(ident) => (parse_quote!(#ident): syn::Member, keccak_key(ident)),
+                Some(ident) => (
+                    parse_quote!(#ident): syn::Member,
+                    proc_macro2::Literal::string(&ident.to_string()),
+                ),
                 None => {
-                    // this is a hack for rustc nightly which quotes a bogus suffix onto index
-                    let struct_index: proc_macro2::TokenStream = quote! { #index }
-                        .into_iter()
-                        .map(|itm| match itm {
-                            proc_macro2::TokenTree::Literal(_) => {
-                                proc_macro2::Literal::usize_unsuffixed(index).into()
-                            }
-                            _ => itm,
-                        })
-                        .collect();
-                    (
-                        parse_quote!(#struct_index): syn::Member,
-                        quote! { #index.to_le_bytes().as_ref() },
-                    )
+                    let struct_index = proc_macro2::Literal::usize_unsuffixed(index);
+                    (parse_quote!(#struct_index): syn::Member, struct_index)
                 }
             };
             let (ser, de) = get_type_serde(&field.ty, struct_idx, key);
@@ -90,7 +81,7 @@ fn get_serde(
 fn get_type_serde(
     ty: &syn::Type,
     struct_idx: syn::Member,
-    key: proc_macro2::TokenStream,
+    key: proc_macro2::Literal,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
     use syn::Type::*;
     match ty {
@@ -99,12 +90,13 @@ fn get_type_serde(
         Array(_) | Tuple(_) | Path(_) => (
             quote! {
                 mantle::backend::write(
-                    &#key,
+                    #key.as_bytes(),
                     &mantle::reexports::serde_cbor::to_vec(&service.#struct_idx).unwrap()
                 )
             },
             quote! {
-                mantle::reexports::serde_cbor::from_slice(&mantle::backend::read(&#key)).unwrap()
+                mantle::reexports::serde_cbor::from_slice(
+                    &mantle::backend::read(#key.as_bytes())).unwrap()
             },
         ),
         ty => {

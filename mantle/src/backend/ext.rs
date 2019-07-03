@@ -1,6 +1,6 @@
 use mantle_types::{Address, ExtStatusCode};
 
-use crate::error::Error;
+use super::Error;
 
 /// @see the `blockchain-traits` crate for descriptions of these methods.
 extern "C" {

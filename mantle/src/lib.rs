@@ -23,7 +23,7 @@ pub mod reexports {
 pub use mantle_macros::{default, Event, Service};
 pub use mantle_types::Address;
 
-pub use crate::{error::Error, exe::*};
+pub use crate::exe::*;
 
 /// This macro is used to define the "main" service.
 ///
@@ -40,7 +40,7 @@ macro_rules! service {
 }
 
 pub trait AddressExt {
-    fn transfer(&self, value: u64) -> Result<(), crate::error::Error>;
+    fn transfer(&self, value: u64) -> Result<(), crate::backend::Error>;
 
     fn balance(&self) -> u64;
 
@@ -48,7 +48,7 @@ pub trait AddressExt {
 }
 
 impl AddressExt for Address {
-    fn transfer(&self, value: u64) -> Result<(), crate::error::Error> {
+    fn transfer(&self, value: u64) -> Result<(), crate::backend::Error> {
         crate::backend::transact(self, value, &[]).map(|_| ())
     }
 

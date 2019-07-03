@@ -73,6 +73,7 @@ fn generate_rpc_dispatcher(
         .collect::<Vec<_>>()
         .join(", ");
 
+    let mut any_rpc_returns_result = false;
     let rpc_match_arms = rpcs
         .iter()
         .map(|rpc| {
@@ -82,6 +83,7 @@ fn generate_rpc_dispatcher(
                 .collect::<Vec<_>>()
                 .join(", ");
             if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
+                any_rpc_returns_result = true;
                 format!(
                     r#"RpcPayload::{name} {{ {arg_names} }} => {{
                         service.{name}(&ctx, {arg_names})
@@ -110,6 +112,7 @@ fn generate_rpc_dispatcher(
 
     let default_fn_arm = if let Some(rpc) = default_fn {
         if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
+            any_rpc_returns_result = true;
             format!(
                 r#"_ => service.{name}(&ctx)
                     .map(|output| {{
@@ -133,6 +136,12 @@ fn generate_rpc_dispatcher(
         String::new()
     };
 
+    let output_err_ty = if any_rpc_returns_result {
+        "Vec<u8>"
+    } else {
+        "()"
+    };
+
     parse!(format!(r#"{{
         #[allow(warnings)]
         {{
@@ -149,7 +158,7 @@ fn generate_rpc_dispatcher(
             let mut service = <{service_ident}>::coalesce();
             let payload: RpcPayload =
                 mantle::reexports::serde_cbor::from_slice(&mantle::backend::input()).unwrap();
-            let output = match payload {{
+            let output: Result<Vec<u8>, {output_err_ty}> = match payload {{
                 {call_tree} // match arms return Result<Vec<u8>> (ABI-encoded bytes)
                 {default_fn_arm}
             }};
@@ -164,6 +173,7 @@ fn generate_rpc_dispatcher(
         service_ident = service_name.as_str().get(),
         call_tree = rpc_match_arms,
         default_fn_arm = default_fn_arm,
+        output_err_ty = output_err_ty
     ) => parse_block)
 }
 

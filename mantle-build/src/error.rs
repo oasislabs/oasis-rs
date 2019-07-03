@@ -1,5 +1,7 @@
 use syntax_pos::{MultiSpan, Span};
 
+// NB: `failure` won't work on these errors because `Span` isn't `Send`.
+
 pub enum UnsupportedTypeError {
     NotReprC(String /* type name string */, MultiSpan),
     ComplexEnum(MultiSpan),

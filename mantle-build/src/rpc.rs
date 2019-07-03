@@ -32,6 +32,7 @@ pub fn convert_interface(
         .map(|(name, version)| Import {
             name: name.to_string(),
             version,
+            registry: None, // TODO
         })
         .collect();
 
@@ -60,7 +61,6 @@ pub fn convert_interface(
 
     let mut ctor = None;
     let mut functions = Vec::with_capacity(fns.len());
-    let mut has_default_function = false;
     for (name, decl, body) in fns.iter() {
         if name.as_str() == "new" {
             match convert_state_ctor(tcx, decl, body) {
@@ -69,13 +69,6 @@ pub fn convert_interface(
             }
         } else {
             match convert_function(tcx, *name, decl, body) {
-                Ok(ref rpc_fn)
-                    if name.as_str() == "default"
-                        && rpc_fn.inputs.is_empty()
-                        && rpc_fn.output.is_none() =>
-                {
-                    has_default_function = true;
-                }
                 Ok(rpc_fn) => functions.push(rpc_fn),
                 Err(mut errz) => errs.append(&mut errz),
             }

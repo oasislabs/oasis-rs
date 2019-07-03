@@ -1,5 +1,11 @@
-use std::{path::Path, str::FromStr};
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash as _, Hasher as _},
+    path::Path,
+    str::FromStr,
+};
 
+use colored::*;
 use heck::{CamelCase, SnakeCase};
 use mantle_rpc::import::ImportedService;
 use proc_macro2::{Ident, Literal, Span, TokenStream};
@@ -20,20 +26,45 @@ fn sanitize_ident(ident: &str) -> String {
 
 pub fn build(
     top_level_deps: impl IntoIterator<Item = (String, String)>,
-    gen_dir: &Path,
+    gen_dir: impl AsRef<Path>,
+    out_dir: impl AsRef<Path>,
     mut rustc_args: Vec<String>,
 ) -> Result<Vec<String>, failure::Error> {
+    let out_dir = out_dir.as_ref();
+
     let services = mantle_rpc::import::Resolver::new(
         top_level_deps.into_iter().collect(),
         std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()),
     )
     .resolve()?;
-    let mut mod_names = Vec::with_capacity(services.len());
+
+    let mut extern_args = Vec::with_capacity(services.len() * 2);
+    //^ (--extern foo=/path/to/libfoo.rlib)+
 
     rustc_args.push("--crate-name".to_string());
 
     for service in services {
-        let mod_name_str = sanitize_ident(&service.interface.namespace).to_snake_case();
+        let mut hasher = DefaultHasher::new();
+        service.interface.hash(&mut hasher);
+        let interface_hash = hasher.finish();
+
+        let mod_name = sanitize_ident(&service.interface.namespace).to_snake_case();
+        let mod_path = gen_dir.as_ref().join(format!("{}.rs", mod_name));
+        let lib_path = out_dir.join(format!("lib{}-{:016x}.rlib", mod_name, interface_hash));
+
+        extern_args.push("--extern".to_string());
+        extern_args.push(format!("{}={}", mod_name, lib_path.display()));
+
+        if lib_path.is_file() {
+            eprintln!(
+                "       {} {name} v{version} ({path})",
+                "Fresh".green(),
+                name = mod_name,
+                version = service.interface.version,
+                path = mod_path.display()
+            );
+            continue;
+        }
 
         let def_tys = gen_def_tys(&service.interface.type_defs);
         let client = gen_client(&service);
@@ -49,20 +80,28 @@ pub fn build(
             #client
         };
 
-        let mod_path = gen_dir.join(format!("{}.rs", mod_name_str));
         std::fs::write(&mod_path, service_toks.to_string())
-            .unwrap_or_else(|err| panic!("Could not generate `{}`: {}", mod_name_str, err));
+            .unwrap_or_else(|err| panic!("Could not generate `{}`: {}", mod_name, err));
 
-        rustc_args.push(mod_name_str);
+        eprintln!(
+            "   {} {name} v{version} ({path})",
+            "Compiling".green(),
+            name = mod_name,
+            version = service.interface.version,
+            path = mod_path.display()
+        );
+        rustc_args.push(mod_name);
         rustc_args.push(mod_path.display().to_string());
+        rustc_args.push(format!("-Cextra-filename=-{:016x}", interface_hash));
         rustc_driver::run_compiler(&rustc_args, &mut rustc_driver::DefaultCallbacks, None, None)
             .map_err(|_| {
                 failure::format_err!("Could not build `{}`", rustc_args.last().unwrap())
             })?;
         rustc_args.pop();
-        mod_names.push(rustc_args.pop().unwrap());
+        rustc_args.pop();
+        rustc_args.pop();
     }
-    Ok(mod_names)
+    Ok(extern_args)
 }
 
 fn gen_def_tys<'a>(defs: &'a [mantle_rpc::TypeDef]) -> impl Iterator<Item = TokenStream> + 'a {

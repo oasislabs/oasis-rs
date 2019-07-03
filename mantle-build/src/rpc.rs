@@ -81,6 +81,7 @@ pub fn convert_interface(
         Ok(Interface {
             name: name.to_string(),
             namespace: tcx.crate_name.to_string(),
+            version: std::env::var("CARGO_PKG_VERSION").unwrap(),
             imports,
             type_defs,
             constructor: ctor.unwrap(),

@@ -42,34 +42,30 @@ fn main() {
             .iter()
             .position(|arg| arg == "--out-dir")
             .and_then(|p| args.get(p + 1))
-            .map(PathBuf::from);
-        let gen_dir = out_dir
-            .as_ref()
-            .map(|d| d.parent().unwrap().join("build/mantle_imports"));
+            .map(|p| {
+                let mut path = PathBuf::from(p);
+                path.push(""); // ensure trailing /
+                path
+            });
 
         if is_primary {
-            // && !gen_dir.as_ref().unwrap().is_dir() {
             let out_dir = out_dir.as_ref().unwrap();
 
-            let gen_dir = gen_dir.as_ref().unwrap();
+            let gen_dir = out_dir.parent().unwrap().join("build/mantle_imports");
             std::fs::create_dir_all(&gen_dir).unwrap();
 
             let mut manifest_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
             manifest_path.push("Cargo.toml");
             match load_deps(&manifest_path).and_then(|services| {
-                Ok(mantle_build::build_imports(
+                mantle_build::build_imports(
                     services,
-                    &gen_dir,
+                    gen_dir,
+                    out_dir,
                     collect_import_rustc_args(&args),
-                )?)
+                )
+                .map_err(Into::into)
             }) {
-                Ok(service_names) => {
-                    for name in service_names {
-                        args.push("--extern".to_string());
-                        let libname = format!("lib{}.rlib", name);
-                        args.push(format!("{}={}", name, out_dir.join(libname).display()))
-                    }
-                }
+                Ok(mut rustc_extern_args) => args.append(&mut rustc_extern_args),
                 Err(err) => {
                     eprintln!("    {} {}", "error:".red(), err);
                     return Err(ErrorReported);
@@ -89,8 +85,6 @@ fn main() {
         if !is_service {
             return Ok(());
         }
-
-        // std::fs::remove_dir(gen_dir.unwrap()).unwrap();
 
         let service_name = &args[args.iter().position(|arg| arg == "--crate-name").unwrap() + 1];
 

@@ -61,31 +61,19 @@ fn generate_rpc_dispatcher(
     rpcs: &[ParsedRpc],
     default_fn: Option<&ParsedRpc>,
 ) -> P<Block> {
-    let rpc_payload_variants = rpcs // e.g., `fn_name { input1: String, input2: Option<u64> }`
-        .iter()
-        .map(|rpc| {
-            format!(
-                "{} {{ {} }}",
-                rpc.name,
-                structify_args(&rpc.sig.decl.inputs[2..]).join(", ")
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
-
     let mut any_rpc_returns_result = false;
+    let mut rpc_payload_variants = Vec::with_capacity(rpcs.len());
     let rpc_match_arms = rpcs
         .iter()
         .map(|rpc| {
-            let arg_names = rpc.sig.decl.inputs[2..]
-                .iter()
-                .map(|arg| pprust::pat_to_string(&arg.pat))
-                .collect::<Vec<_>>()
-                .join(", ");
+            let (arg_names, arg_tys) = args_arr(&rpc.sig.decl.inputs[2..]);
+
+            rpc_payload_variants.push(format!("{}({})", rpc.name, arg_tys));
+
             if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
                 any_rpc_returns_result = true;
                 format!(
-                    r#"RpcPayload::{name} {{ {arg_names} }} => {{
+                    r#"RpcPayload::{name}({arg_names}) => {{
                         service.{name}(&ctx, {arg_names})
                             .map(|output| {{
                                 mantle::reexports::serde_cbor::to_vec(&output).unwrap()
@@ -99,7 +87,7 @@ fn generate_rpc_dispatcher(
                 )
             } else {
                 format!(
-                    r#"RpcPayload::{name} {{ {arg_names} }} => {{
+                    r#"RpcPayload::{name}({arg_names}) => {{
                         let output = service.{name}(&ctx, {arg_names});
                         Ok(mantle::reexports::serde_cbor::to_vec(&output).unwrap())
                     }}"#,
@@ -169,7 +157,7 @@ fn generate_rpc_dispatcher(
             }}
         }}
         }}"#,
-        rpc_payload_variants = rpc_payload_variants,
+        rpc_payload_variants = rpc_payload_variants.join(", "),
         service_ident = service_name.as_str().get(),
         call_tree = rpc_match_arms,
         default_fn_arm = default_fn_arm,
@@ -178,17 +166,13 @@ fn generate_rpc_dispatcher(
 }
 
 fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
-    let ctor_arg_names = ctor.decl.inputs[1..]
-        .iter()
-        .map(|arg| pprust::pat_to_string(&arg.pat))
-        .collect::<Vec<_>>()
-        .join(", ");
+    let (arg_names, arg_types) = args_arr(&ctor.decl.inputs[1..]);
 
     let ctor_payload_unpack = if ctor.decl.inputs.len() > 1 {
         format!(
-            "let CtorPayload {{ {} }} =
+            "let CtorPayload({}) =
                     mantle::reexports::serde_cbor::from_slice(&mantle::backend::input()).unwrap();",
-            ctor_arg_names
+            arg_names
         )
     } else {
         String::new()
@@ -197,7 +181,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
     let ctor_stmt = if crate::utils::unpack_syntax_ret(&ctor.decl.output).is_result {
         format!(
             r#"
-            match <{service_ident}>::new(&ctx, {ctor_arg_names}) {{
+            match <{service_ident}>::new(&ctx, {arg_names}) {{
                 Ok(service) => service,
                 Err(err) => {{
                     mantle::backend::err(&format!("{{:#?}}", err).into_bytes());
@@ -206,13 +190,13 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
             }}
             "#,
             service_ident = service_name.as_str().get(),
-            ctor_arg_names = ctor_arg_names,
+            arg_names = arg_names,
         )
     } else {
         format!(
-            "<{service_ident}>::new(&ctx, {ctor_arg_names})",
+            "<{service_ident}>::new(&ctx, {arg_names})",
             service_ident = service_name.as_str().get(),
-            ctor_arg_names = ctor_arg_names
+            arg_names = arg_names
         )
     };
 
@@ -225,9 +209,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
 
                 #[derive(Serialize, Deserialize)]
                 #[allow(non_camel_case_types)]
-                struct CtorPayload {{
-                    {ctor_payload_types}
-                }}
+                struct CtorPayload({ctor_payload_types});
                 let ctx = mantle::Context::default(); // TODO(#33)
                 {ctor_payload_unpack}
                 let mut service = {ctor_stmt};
@@ -237,22 +219,10 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
         "#,
         ctor_stmt = ctor_stmt,
         ctor_payload_unpack = ctor_payload_unpack,
-        ctor_payload_types = structify_args(&ctor.decl.inputs[1..]).join(", "),
+        ctor_payload_types = arg_types,
         service_ident = service_name.as_str().get(),
     ) => parse_item)
     .unwrap()
-}
-
-fn structify_args(args: &[Arg]) -> Vec<String> {
-    args.iter()
-        .map(|arg| {
-            let pat_ident = pprust::ident_to_string(match arg.pat.node {
-                syntax::ast::PatKind::Ident(_, ident, _) => ident,
-                _ => unreachable!("Checked during visitation."),
-            });
-            format!("{}: {}", pat_ident, pprust::ty_to_string(&arg.ty))
-        })
-        .collect()
 }
 
 fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
@@ -281,4 +251,18 @@ fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
         );
         break;
     }
+}
+
+fn args_arr(args: &[Arg]) -> (String, String) {
+    args.iter()
+        .map(|arg| {
+            (
+                pprust::ident_to_string(match arg.pat.node {
+                    syntax::ast::PatKind::Ident(_, ident, _) => ident,
+                    _ => unreachable!("Checked during visitation."),
+                }) + ",",
+                pprust::ty_to_string(&arg.ty) + ",",
+            )
+        })
+        .unzip()
 }

@@ -11,7 +11,6 @@ pub extern crate serde;
 extern crate mantle_macros;
 
 pub mod backend;
-pub mod error;
 pub mod exe;
 
 pub mod reexports {

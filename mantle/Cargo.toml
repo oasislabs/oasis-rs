@@ -17,7 +17,7 @@ failure = "0.1"
 mantle-macros = { version = "0.2", path = "../mantle-macros" }
 mantle-types = { version = "0.2", path = "../mantle-types" }
 serde = { version = "1.0", features = ["derive"] }
-serde_cbor = "0.9"
+serde_cbor = "0.10"
 tiny-keccak = "1.4"
 
 [target.'cfg(target_os = "wasi")'.dependencies]

@@ -116,6 +116,7 @@ fn generate_rpc_dispatcher(
                 {call_tree} // match arms return ABI-encoded vecs
                 {default_fn_arm}
             }};
+            <{service_ident}>::sunder(service);
             match output {{
                 Ok(output) => mantle::backend::ret(&output),
                 Err(err) => mantle::backend::err(&format!("{{:#?}}", err).into_bytes()),

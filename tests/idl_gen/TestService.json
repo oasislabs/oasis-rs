@@ -1,0 +1,309 @@
+{
+  "name": "TestService",
+  "namespace": "types",
+  "imports": [
+    {
+      "name": "testlib",
+      "version": "0.1.0"
+    }
+  ],
+  "type_defs": [
+    {
+      "type": "enum",
+      "name": "InnerTy",
+      "variants": [
+        "Field1",
+        "Field2"
+      ]
+    },
+    {
+      "type": "event",
+      "name": "TestEvent",
+      "fields": [
+        {
+          "name": "indexed",
+          "type": {
+            "type": "defined",
+            "params": {
+              "type": "DefTy"
+            }
+          }
+        },
+        {
+          "name": "non_indexed",
+          "type": {
+            "type": "tuple",
+            "params": [
+              {
+                "type": "u32"
+              },
+              {
+                "type": "u32"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "struct",
+      "name": "DefTy",
+      "fields": [
+        {
+          "name": "f1",
+          "type": {
+            "type": "optional",
+            "params": {
+              "type": "i64"
+            }
+          }
+        },
+        {
+          "name": "f2",
+          "type": {
+            "type": "list",
+            "params": {
+              "type": "optional",
+              "params": {
+                "type": "defined",
+                "params": {
+                  "type": "DefTy"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "f3",
+          "type": {
+            "type": "map",
+            "params": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "defined",
+                "params": {
+                  "type": "InnerTy"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "f4",
+          "type": {
+            "type": "tuple",
+            "params": [
+              {
+                "type": "address"
+              },
+              {
+                "type": "u64"
+              },
+              {
+                "type": "address"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "name": "TestEvent2",
+      "fields": [
+        {
+          "name": "indexed1",
+          "type": {
+            "type": "u32"
+          }
+        },
+        {
+          "name": "indexed2",
+          "type": {
+            "type": "u32"
+          }
+        }
+      ]
+    }
+  ],
+  "constructor": {
+    "inputs": [
+      {
+        "name": "name",
+        "type": {
+          "type": "string"
+        }
+      }
+    ]
+  },
+  "functions": [
+    {
+      "name": "the",
+      "mutability": "immutable",
+      "inputs": [
+        {
+          "name": "arg1",
+          "type": {
+            "type": "list",
+            "params": {
+              "type": "defined",
+              "params": {
+                "type": "DefTy"
+              }
+            }
+          }
+        },
+        {
+          "name": "arg2",
+          "type": {
+            "type": "bytes"
+          }
+        }
+      ],
+      "output": {
+        "type": "result",
+        "params": [
+          {
+            "type": "set",
+            "params": {
+              "type": "address"
+            }
+          },
+          {
+            "type": "tuple",
+            "params": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "it",
+      "mutability": "mutable",
+      "inputs": [
+        {
+          "name": "a1",
+          "type": {
+            "type": "map",
+            "params": [
+              {
+                "type": "bool"
+              },
+              {
+                "type": "array",
+                "params": [
+                  {
+                    "type": "u32"
+                  },
+                  12
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "a3",
+          "type": {
+            "type": "set",
+            "params": {
+              "type": "i64"
+            }
+          }
+        }
+      ],
+      "output": {
+        "type": "result",
+        "params": [
+          {
+            "type": "tuple",
+            "params": []
+          },
+          {
+            "type": "tuple",
+            "params": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "void",
+      "mutability": "immutable",
+      "output": {
+        "type": "result",
+        "params": [
+          {
+            "type": "tuple",
+            "params": []
+          },
+          {
+            "type": "tuple",
+            "params": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "import",
+      "mutability": "mutable",
+      "inputs": [
+        {
+          "name": "imported",
+          "type": {
+            "type": "defined",
+            "params": {
+              "namespace": "testlib",
+              "type": "RpcType"
+            }
+          }
+        }
+      ],
+      "output": {
+        "type": "result",
+        "params": [
+          {
+            "type": "tuple",
+            "params": [
+              {
+                "type": "bool"
+              },
+              {
+                "type": "i8"
+              }
+            ]
+          },
+          {
+            "type": "tuple",
+            "params": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "default",
+      "mutability": "mutable",
+      "inputs": [
+        {
+          "name": "nondefault_arg",
+          "type": {
+            "type": "u32"
+          }
+        }
+      ],
+      "output": {
+        "type": "result",
+        "params": [
+          {
+            "type": "tuple",
+            "params": []
+          },
+          {
+            "type": "tuple",
+            "params": []
+          }
+        ]
+      }
+    }
+  ],
+  "mantle_build_version": "0.2.2"
+}

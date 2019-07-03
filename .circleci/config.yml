@@ -144,6 +144,28 @@ jobs:
           working_directory: tests/idl_gen
           command: ./run_tests.sh
 
+  test_imports:
+    docker:
+      - image: oasislabs/rust:latest
+        environment:
+          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
+          MANTLE_BLOCKCHAIN_NAME: oasis
+    resource_class: xlarge
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - mantle-build-{{ .Revision }}
+      - run:
+          name: Build dependency
+          working_directory: tests/xcc-b
+          command: cargo build --target wasm32-wasi
+      - run:
+          name: Build toplevel
+          working_directory: tests/xcc-a
+          command: cargo build --target wasm32-wasi
+
 workflows:
   version: 2
   test:
@@ -156,6 +178,9 @@ workflows:
           requires:
             - init
       - test_idl:
+          requires:
+            - init
+      - test_imports:
           requires:
             - init
       - test_ballot_example:

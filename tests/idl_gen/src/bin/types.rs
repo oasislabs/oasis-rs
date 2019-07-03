@@ -33,6 +33,9 @@ pub struct DefTy {
     f4: Tuple,
 }
 
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct TupleStruct(pub String, pub String, pub i32);
+
 #[derive(Serialize, Deserialize, Event, Default)]
 pub struct TestEvent2 {
     #[indexed]
@@ -44,7 +47,7 @@ pub struct TestEvent2 {
 type Result<T> = std::result::Result<T, ()>;
 
 impl TestService {
-    pub fn new(ctx: &Context, name: String) -> Result<Self> {
+    pub fn new(ctx: &Context, tuple_struct: TupleStruct) -> Self {
         unimplemented!()
     }
 
@@ -61,7 +64,7 @@ impl TestService {
         unimplemented!()
     }
 
-    fn private(&self, ctx: &Context, arg: String) -> Result<u64> {
+    fn private(&self, ctx: &Context, arg: String) -> u64 {
         TestEvent::default().emit();
         unimplemented!()
     }
@@ -73,15 +76,8 @@ impl TestService {
         unimplemented!()
     }
 
-    pub fn import(&mut self, ctx: &Context, imported: testlib::RpcType) -> Result<(bool, char)> {
-        Event::emit(&testlib::RandomEvent {
-            the_topic: "hello".to_string(),
-            the_data: "world".to_string(),
-        });
-        unimplemented!()
-    }
-
-    pub fn default(&mut self, ctx: &Context) {
+    #[mantle::default]
+    pub fn default(&mut self, ctx: &Context) -> Option<u64> {
         unimplemented!()
     }
 }

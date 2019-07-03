@@ -107,6 +107,8 @@ pub enum StateMutability {
 pub struct Import {
     pub name: Ident,
     pub version: String,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub registry: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd)]
@@ -133,8 +135,8 @@ pub enum Type {
     String,
     Address,
     Defined {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        namespace: Option<Ident>,
+        #[serde(skip_serializing_if = "Option::is_none", default)]
+        namespace: Option<Ident>, // `None` if local, otherwise refers to an entry in `Imports`
         #[serde(rename = "type")]
         ty: Ident,
     },

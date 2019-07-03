@@ -18,5 +18,6 @@ url = { version = "1.7", optional = true }
 walrus = { version = "0.8", optional = true }
 
 [features]
+resolve = ["import"]
 import = ["saveload", "url", "walrus"]
 saveload = ["libflate", "serde_json", "failure"]

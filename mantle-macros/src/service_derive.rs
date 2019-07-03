@@ -49,13 +49,16 @@ fn get_serde(
         .map(|(index, field)| {
             let (struct_idx, key) = match &field.ident {
                 Some(ident) => (
-                    parse_quote!(#ident): syn::Member,
+                    syn::Member::Named(ident.clone()),
                     proc_macro2::Literal::string(&ident.to_string()),
                 ),
-                None => {
-                    let struct_index = proc_macro2::Literal::usize_unsuffixed(index);
-                    (parse_quote!(#struct_index): syn::Member, struct_index)
-                }
+                None => (
+                    syn::Member::Unnamed(syn::Index {
+                        index: index as u32,
+                        span: proc_macro2::Span::call_site(),
+                    }),
+                    proc_macro2::Literal::string(&index.to_string()),
+                ),
             };
             let (ser, de) = get_type_serde(&field.ty, struct_idx, key);
             let de = match &field.ident {

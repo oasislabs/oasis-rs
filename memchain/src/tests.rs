@@ -50,7 +50,6 @@ extern "C" fn subtx_main(
     let subtx = ptx.transact(ADDR_1, 0 /* value */, &ptx.input().to_vec());
 
     if subtx.reverted() {
-        dbg!(subtx.outcome());
         ptx.ret(b"error");
         return 1;
     }

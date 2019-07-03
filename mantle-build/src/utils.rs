@@ -105,10 +105,6 @@ pub fn is_context_ref(ty: &syntax::ast::Ty) -> bool {
     }
 }
 
-pub fn mk_parse_sess() -> syntax::parse::ParseSess {
-    syntax::parse::ParseSess::new(syntax::source_map::FilePathMapping::empty())
-}
-
 /// Returns whether `path` ends with `suffix`.
 /// e.g, `path_is_suffix(crate::mantle::service, ["mantle", "service"]) == true`
 pub fn path_ends_with(path: &syntax::ast::Path, suffix: &[&'static str]) -> bool {
@@ -118,6 +114,10 @@ pub fn path_ends_with(path: &syntax::ast::Path, suffix: &[&'static str]) -> bool
         }
     }
     true
+}
+
+pub fn mk_parse_sess() -> syntax::parse::ParseSess {
+    syntax::parse::ParseSess::new(syntax::source_map::FilePathMapping::empty())
 }
 
 #[macro_export]

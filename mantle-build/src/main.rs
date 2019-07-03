@@ -32,35 +32,65 @@ fn main() {
         let is_primary = std::env::var("CARGO_PRIMARY_PACKAGE")
             .map(|p| p == "1")
             .unwrap_or(false);
+        let is_service = is_primary
+            && args[args.iter().position(|arg| arg == "--crate-type").unwrap() + 1] == "bin";
         let is_testing = args
             .iter()
             .any(|arg| arg == "feature=\"mantle-build-compiletest\"");
 
-        let mut idl8r = mantle_build::BuildPlugin::default();
-        let mut default_cbs = rustc_driver::DefaultCallbacks;
-        let callbacks: &mut (dyn rustc_driver::Callbacks + Send) = if is_primary || is_testing {
-            &mut idl8r
-        } else {
-            &mut default_cbs
-        };
+        let out_dir = args
+            .iter()
+            .position(|arg| arg == "--out-dir")
+            .and_then(|p| args.get(p + 1))
+            .map(PathBuf::from);
+        let gen_dir = out_dir
+            .as_ref()
+            .map(|d| d.parent().unwrap().join("build/mantle_imports"));
 
         if is_primary {
+            // && !gen_dir.as_ref().unwrap().is_dir() {
+            let out_dir = out_dir.as_ref().unwrap();
+
+            let gen_dir = gen_dir.as_ref().unwrap();
+            std::fs::create_dir_all(&gen_dir).unwrap();
+
             let mut manifest_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
             manifest_path.push("Cargo.toml");
-            let deps = match load_deps(&manifest_path) {
-                Ok(deps) => deps,
+            match load_deps(&manifest_path).and_then(|services| {
+                Ok(mantle_build::build_imports(
+                    services,
+                    &gen_dir,
+                    collect_import_rustc_args(&args),
+                )?)
+            }) {
+                Ok(service_names) => {
+                    for name in service_names {
+                        args.push("--extern".to_string());
+                        let libname = format!("lib{}.rlib", name);
+                        args.push(format!("{}={}", name, out_dir.join(libname).display()))
+                    }
+                }
                 Err(err) => {
                     eprintln!("    {} {}", "error:".red(), err);
                     return Err(ErrorReported);
                 }
-            };
+            }
         }
 
+        let mut idl8r = mantle_build::BuildPlugin::default();
+        let mut default_cbs = rustc_driver::DefaultCallbacks;
+        let callbacks: &mut (dyn rustc_driver::Callbacks + Send) = if is_service || is_testing {
+            &mut idl8r
+        } else {
+            &mut default_cbs
+        };
         rustc_driver::run_compiler(&args, callbacks, None, None)?;
 
-        if !is_primary {
+        if !is_service {
             return Ok(());
         }
+
+        // std::fs::remove_dir(gen_dir.unwrap()).unwrap();
 
         let service_name = &args[args.iter().position(|arg| arg == "--crate-name").unwrap() + 1];
 
@@ -76,10 +106,8 @@ fn main() {
             }
         };
 
-        let mut wasm_path =
-            PathBuf::from(&args[args.iter().position(|arg| arg == "--out-dir").unwrap() + 1]);
-        wasm_path.push(format!("{}.wasm", service_name));
-
+        let out_dir = out_dir.as_ref().unwrap();
+        let wasm_path = out_dir.join(format!("{}.wasm", service_name));
         if wasm_path.is_file() {
             pack_iface_into_wasm(&rpc_iface, &wasm_path)?;
         }
@@ -103,20 +131,32 @@ fn get_sysroot() -> String {
         .expect("Could not determine rustc sysroot")
 }
 
-pub enum DependenciesError {
-    TomlParse(toml::de::Error),
-}
-
-impl std::fmt::Display for DependenciesError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use DependenciesError::*;
-        match self {
-            TomlParse(err) => write!(f, "Could not parse Mantle dependencies: {}", err),
+fn collect_import_rustc_args(args: &[String]) -> Vec<String> {
+    let mut import_args = Vec::with_capacity(args.len());
+    let mut skip = true; // skip `rustc`
+    for arg in args {
+        if skip {
+            skip = false;
+            continue;
+        }
+        if arg == "-C" {
+            skip = true;
+        } else if arg == "--crate-type" {
+            import_args.push(arg.clone());
+            import_args.push("rlib".to_string());
+            skip = true;
+        } else if arg == "--crate-name" {
+            skip = true;
+        } else if arg.ends_with(".rs") {
+            continue;
+        } else {
+            import_args.push(arg.clone());
         }
     }
+    import_args
 }
 
-fn load_deps(manifest_path: &Path) -> Result<BTreeMap<String, String>, DependenciesError> {
+fn load_deps(manifest_path: &Path) -> Result<BTreeMap<String, String>, failure::Error> {
     let cargo_toml: toml::Value = toml::from_slice(&std::fs::read(manifest_path).unwrap()).unwrap();
     Ok(cargo_toml
         .as_table()
@@ -125,8 +165,8 @@ fn load_deps(manifest_path: &Path) -> Result<BTreeMap<String, String>, Dependenc
         .and_then(|m| m.get("mantle-dependencies"))
         .cloned()
         .map(|d| d.try_into::<BTreeMap<String, String>>())
-        .unwrap_or(Ok(BTreeMap::new()))
-        .map_err(|err| DependenciesError::TomlParse(err))?)
+        .unwrap_or_else(|| Ok(BTreeMap::new()))
+        .map_err(|err| failure::format_err!("Could not parse Mantle dependencies: {}", err))?)
 }
 
 fn pack_iface_into_wasm(

@@ -28,3 +28,5 @@ mod utils;
 mod visitor;
 
 pub use plugin::BuildPlugin;
+
+pub use import_gen::build as build_imports;

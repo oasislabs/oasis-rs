@@ -1,5 +1,6 @@
 use std::{path::Path, str::FromStr};
 
+use heck::{CamelCase, SnakeCase};
 use mantle_rpc::import::ImportedService;
 use proc_macro2::{Ident, Literal, Span, TokenStream};
 use proc_quote::quote;
@@ -17,31 +18,54 @@ fn sanitize_ident(ident: &str) -> String {
         .collect()
 }
 
-pub fn generate(services: &[ImportedService], out_dir: &Path) {
+pub fn build(
+    top_level_deps: impl IntoIterator<Item = (String, String)>,
+    gen_dir: &Path,
+    mut rustc_args: Vec<String>,
+) -> Result<Vec<String>, failure::Error> {
+    let services = mantle_rpc::import::Resolver::new(
+        top_level_deps.into_iter().collect(),
+        std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()),
+    )
+    .resolve()?;
+    let mut mod_names = Vec::with_capacity(services.len());
+
+    rustc_args.push("--crate-name".to_string());
+
     for service in services {
         let mod_name_str = sanitize_ident(&service.interface.namespace).to_snake_case();
-        let mod_ident = format_ident!("{}", mod_name_str);
 
         let def_tys = gen_def_tys(&service.interface.type_defs);
         let client = gen_client(&service);
 
         let service_toks = quote! {
-            mod #mod_ident {
-                #(#def_tys)*
+            #![allow(warnings)]
 
-                #client
-            }
+            #[macro_use]
+            extern crate serde;
+
+            #(#def_tys)*
+
+            #client
         };
 
-        std::fs::write(
-            out_dir.join(format!("{}.rs", mod_name_str)),
-            service_toks.to_string(),
-        )
-        .unwrap();
+        let mod_path = gen_dir.join(format!("{}.rs", mod_name_str));
+        std::fs::write(&mod_path, service_toks.to_string())
+            .unwrap_or_else(|err| panic!("Could not generate `{}`: {}", mod_name_str, err));
+
+        rustc_args.push(mod_name_str);
+        rustc_args.push(mod_path.display().to_string());
+        rustc_driver::run_compiler(&rustc_args, &mut rustc_driver::DefaultCallbacks, None, None)
+            .map_err(|_| {
+                failure::format_err!("Could not build `{}`", rustc_args.last().unwrap())
+            })?;
+        rustc_args.pop();
+        mod_names.push(rustc_args.pop().unwrap());
     }
+    Ok(mod_names)
 }
 
-fn gen_def_tys<'a>(defs: &'a Vec<mantle_rpc::TypeDef>) -> impl Iterator<Item = TokenStream> + 'a {
+fn gen_def_tys<'a>(defs: &'a [mantle_rpc::TypeDef]) -> impl Iterator<Item = TokenStream> + 'a {
     defs.iter().map(|def| {
         let name = format_ident!("{}", def.name());
         match def {
@@ -106,11 +130,8 @@ fn gen_client(service: &ImportedService) -> TokenStream {
 
     let client_ident = format_ident!("{}Client", sanitize_ident(&interface.name).to_camel_case());
 
-    let def_tys = gen_def_tys(&interface.type_defs);
-
-    let (rpcs, payload_variants): (TokenStream, TokenStream) =
-        gen_rpcs(&interface.functions).unzip();
-    let ctors = gen_ctors(&interface.constructor);
+    let (rpcs, payload_variants) = gen_rpcs(&interface.functions);
+    let (ctor_fns, ctor_payload) = gen_ctors(&interface.constructor, &bytecode);
 
     quote! {
         pub struct #client_ident {
@@ -120,80 +141,102 @@ fn gen_client(service: &ImportedService) -> TokenStream {
         #[derive(Serialize, Deserialize)]
         #[serde(tag = "method", content = "payload")]
         enum RpcPayload {
-            #payload_variants
+            #(#payload_variants),*
         }
 
+        #ctor_payload
+
         impl #client_ident {
-            #ctors
+            #ctor_fns
 
             #(#rpcs)*
         }
     }
 }
 
-fn gen_rpcs<'a>(
-    functions: &'a Vec<mantle_rpc::Function>,
-) -> impl Iterator<Item = (TokenStream, TokenStream)> + 'a {
-    functions.iter().map(|func| {
-        let fn_name = format_ident!("{}", func.name);
+fn gen_rpcs(functions: &[mantle_rpc::Function]) -> (Vec<TokenStream>, Vec<TokenStream>) {
+    functions
+        .iter()
+        .map(|func| {
+            let fn_name = format_ident!("{}", func.name);
 
-        let self_ref = match func.mutability {
-            mantle_rpc::StateMutability::Immutable => quote! { &self },
-            mantle_rpc::StateMutability::Mutable => quote! { &mut self },
-        };
+            let self_ref = match func.mutability {
+                mantle_rpc::StateMutability::Immutable => quote! { &self },
+                mantle_rpc::StateMutability::Mutable => quote! { &mut self },
+            };
 
-        let (arg_names, arg_tys): (Vec<Ident>, Vec<TokenStream>) = func.inputs.iter().map(|field| {
-            (format_ident!("{}", field.name), quote_borrow(&field.ty))
-        }).unzip();
+            let (arg_names, arg_tys): (Vec<Ident>, Vec<TokenStream>) = func
+                .inputs
+                .iter()
+                .map(|field| (format_ident!("{}", field.name), quote_borrow(&field.ty)))
+                .unzip();
 
-        let (output_ty, err_ty) = match &func.output {
-            Some(mantle_rpc::Type::Result(ok_ty, err_ty)) => (quote_ty(ok_ty), quote_ty(err_ty)),
-            Some(ty) => (quote_ty(ty), quote!(())),
-            None => (quote!(()), quote!(())),
-        };
-
-        let rpc_toks = quote! {
-            pub fn #fn_name(
-                #self_ref,
-                ctx: &mantle::Context,
-                #(#arg_names: #arg_tys),*
-           ) -> Result<#output_ty, mantle::RpcError<#err_ty>> {
-                let payload = RpcPayload::#fn_name { #(#arg_names),* };
-                #[cfg(target_os = "wasi")] {
-                    mantle::transact(self.address, ctx.value.unwrap_or(0), &mantle::reexports::serde_cbor::to_vec(&payload).unwrap())
+            let (output_ty, err_ty) = match &func.output {
+                Some(mantle_rpc::Type::Result(ok_ty, err_ty)) => {
+                    (quote_ty(ok_ty), quote_ty(err_ty))
                 }
-                #[cfg(not(target_os = "wasi"))] {
-                    compile_error!("Native client not yet implemented.")
+                Some(ty) => (quote_ty(ty), quote!(())),
+                None => (quote!(()), quote!(())),
+            };
+
+            let rpc_toks = quote! {
+                pub fn #fn_name(
+                    #self_ref,
+                    ctx: &mantle::Context,
+                    #(#arg_names: #arg_tys),*
+               ) -> Result<#output_ty, mantle::RpcError<#err_ty>> {
+                    let payload = RpcPayload::#fn_name { #(#arg_names),* };
+                    #[cfg(target_os = "wasi")] {
+                        let output = mantle::backend::transact(
+                            &self.address,
+                            ctx.value.unwrap_or(0),
+                            &mantle::reexports::serde_cbor::to_vec(&payload).unwrap()
+                        )?;
+                        Ok(mantle::reexports::serde_cbor::from_slice(&output)
+                           .map_err(|_| mantle::RpcError::InvalidOutput(output))?)
+                    }
+                    #[cfg(not(target_os = "wasi"))] {
+                        compile_error!("Native client not yet implemented.")
+                    }
                 }
-            }
-        };
+            };
 
-        let payload_variant = quote! {
-            #fn_name {
-                #(#arg_names: #arg_tys),*
-            }
-        };
+            let payload_variant = quote! {
+                #fn_name {
+                    #(#arg_names: #arg_tys),*
+                }
+            };
 
-        (rpc_toks, payload_variant)
-    })
+            (rpc_toks, payload_variant)
+        })
+        .unzip()
 }
 
-fn gen_ctors(ctor: &mantle_rpc::Constructor) -> TokenStream {
+fn gen_ctors(ctor: &mantle_rpc::Constructor, bytecode: &[u8]) -> (TokenStream, TokenStream) {
     let error_ty = if let Some(error) = &ctor.error {
         quote_ty(&error)
     } else {
-        quote!()
+        quote!(())
     };
     let (arg_names, arg_tys): (Vec<Ident>, Vec<TokenStream>) = ctor
         .inputs
         .iter()
         .map(|inp| (format_ident!("{}", inp.name), quote_ty(&inp.ty)))
         .unzip();
-    quote! {
+
+    let ctor_payload = quote! {
+        #[derive(Serialize, Deserialize)]
+        struct CtorPayload {
+            #(#arg_names: #arg_tys),*
+        }
+    };
+
+    let ctor_fns = quote! {
         pub fn new(
-            ctx: &Context,
+            ctx: &mantle::Context,
             #(#arg_names: #arg_tys)*
         ) -> Result<Self, mantle::RpcError<#error_ty>> {
+            let bytecode = &[#(#bytecode),*];
             unimplemented!()
         }
 
@@ -202,7 +245,9 @@ fn gen_ctors(ctor: &mantle_rpc::Constructor) -> TokenStream {
                 address
             }
         }
-    }
+    };
+
+    (ctor_fns, ctor_payload)
 }
 
 fn quote_ty(ty: &mantle_rpc::Type) -> TokenStream {

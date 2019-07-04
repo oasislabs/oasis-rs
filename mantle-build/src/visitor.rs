@@ -102,7 +102,7 @@ pub struct ParsedRpcCollector {
     service_name: Symbol,
     rpcs: Vec<ParsedRpc>,
     errors: Vec<RpcError>,
-    struct_span: Span,
+    struct_span: Option<Span>,
 }
 
 impl ParsedRpcCollector {
@@ -111,11 +111,11 @@ impl ParsedRpcCollector {
             service_name,
             rpcs: Vec::new(),
             errors: Vec::new(),
-            struct_span: Default::default(),
+            struct_span: None,
         }
     }
 
-    pub fn struct_span(&self) -> Span {
+    pub fn struct_span(&self) -> Option<Span> {
         self.struct_span
     }
 
@@ -136,7 +136,7 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector {
                     self.errors.push(RpcError::HasGenerics(generics.span))
                 }
 
-                self.struct_span = item.span;
+                self.struct_span = Some(item.span);
             }
             syntax::ast::ItemKind::Impl(_, _, _, _, None, service_ty, impl_items)
                 if match &service_ty.node {

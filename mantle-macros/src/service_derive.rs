@@ -1,5 +1,8 @@
 #[proc_macro_derive(Service)]
 pub fn service_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    if std::env::var("MANTLE_BUILD_NO_SERVICE_DERIVE").is_ok() {
+        return proc_macro::TokenStream::new();
+    }
     let input = parse_macro_input!(input as syn::DeriveInput);
     let service = &input.ident;
     proc_macro::TokenStream::from(match get_serde(&input) {

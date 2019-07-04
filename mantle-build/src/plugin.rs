@@ -33,6 +33,13 @@ impl BuildPlugin {
     }
 }
 
+macro_rules! ret_err {
+    () => {{
+        std::env::set_var("MANTLE_BUILD_NO_SERVICE_DERIVE", "1");
+        return true; // Always return success so that compiler catches other errors.
+    }};
+}
+
 impl rustc_driver::Callbacks for BuildPlugin {
     fn after_parsing(&mut self, compiler: &rustc_interface::interface::Compiler) -> bool {
         let gen_dir = compiler
@@ -63,14 +70,14 @@ impl rustc_driver::Callbacks for BuildPlugin {
         self.event_indexed_fields = event_indexed_fields;
 
         let main_service = match services.as_slice() {
-            [] => return false,
+            [] => return true, // No services defined. Do nothing.
             [main_service] => main_service,
             _ => {
                 sess.span_err(
                     services[1].span,
                     "Multiple invocations of `mantle::service!`. Second occurrence here:",
                 );
-                return false;
+                ret_err!();
             }
         };
         let service_name = main_service.name;
@@ -79,7 +86,16 @@ impl rustc_driver::Callbacks for BuildPlugin {
         let mut parsed_rpc_collector = ParsedRpcCollector::new(service_name);
         syntax::visit::walk_crate(&mut parsed_rpc_collector, &parse);
 
-        let struct_span = parsed_rpc_collector.struct_span();
+        let struct_span = match parsed_rpc_collector.struct_span() {
+            Some(s) => s,
+            None => {
+                sess.span_err(
+                    main_service.span,
+                    &format!("Could not find state struct for `{}`", service_name),
+                );
+                ret_err!();
+            }
+        };
 
         let rpcs = match parsed_rpc_collector.into_rpcs() {
             Ok(rpcs) => rpcs,
@@ -87,7 +103,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
                 for err in errs {
                     sess.span_err(err.span(), &format!("{}", err));
                 }
-                return false;
+                ret_err!();
             }
         };
         let (ctor, rpcs): (Vec<_>, Vec<_>) = rpcs
@@ -99,10 +115,10 @@ impl rustc_driver::Callbacks for BuildPlugin {
                     struct_span,
                     &format!("Missing definition of `{}::new`.", service_name),
                 );
-                return false;
+                ret_err!();
             }
             [rpc] => &rpc.sig,
-            _ => return true, // Multiply defined `new` function. Let the compiler catch this.
+            _ => ret_err!(), // Multiply defined `new` function. Let the compiler catch this.
         };
 
         let default_fn_spans = rpcs
@@ -123,7 +139,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
                     .collect::<Vec<_>>(),
                 "Only one RPC method can be marked with `#[default]`",
             );
-            return false;
+            ret_err!();
         }
 
         crate::dispatcher_gen::generate_and_insert(
@@ -144,7 +160,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
 
         let service_name = match self.service_name.try_get() {
             Some(service_name) => service_name,
-            None => return false,
+            None => return true, // No service defined. Do nothing.
         };
 
         global_ctxt.enter(|tcx| {

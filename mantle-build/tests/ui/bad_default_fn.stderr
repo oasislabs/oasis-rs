@@ -1,0 +1,8 @@
+error: Default function cannot take arguments after `Context`.
+  --> $DIR/bad_default_fn.rs:12:51
+   |
+12 |     pub fn bad_default(&mut self, _ctx: &Context, arg: u8) {}
+   |                                                   ^^^^^^^
+
+error: aborting due to previous error
+

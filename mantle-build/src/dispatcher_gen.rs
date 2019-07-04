@@ -96,6 +96,12 @@ fn generate_rpc_dispatcher(
         "()"
     };
 
+    let err_returner = if any_rpc_returns_result {
+        "mantle::backend::err(&err_output)"
+    } else {
+        r#"unreachable!("No RPC function returns Err")"#
+    };
+
     parse!(format!(r#"{{
         #[allow(warnings)]
         {{
@@ -119,7 +125,7 @@ fn generate_rpc_dispatcher(
             <{service_ident}>::sunder(service);
             match output {{
                 Ok(output) => mantle::backend::ret(&output),
-                Err(err_output) => mantle::backend::err(&err_output),
+                Err(err_output) => {err_returner},
             }}
         }}
         }}"#,
@@ -127,7 +133,8 @@ fn generate_rpc_dispatcher(
         service_ident = service_name.as_str().get(),
         call_tree = rpc_match_arms,
         default_fn_arm = default_fn_arm,
-        output_err_ty = output_err_ty
+        output_err_ty = output_err_ty,
+        err_returner = err_returner
     ) => parse_block)
 }
 
@@ -144,7 +151,7 @@ fn gen_result_dispatch(name: Symbol, arg_name_csv: impl AsRef<str>) -> String {
 
 fn gen_dispatch(name: Symbol, arg_name_csv: impl AsRef<str>) -> String {
     format!(
-        r#"RpcPayload::{name}(&ctx, {args}) => {{
+        r#"RpcPayload::{name}({args}) => {{
             Ok(mantle::reexports::serde_cbor::to_vec(&service.{name}(&ctx, {args})).unwrap())
         }}"#,
         name = name,

@@ -1,7 +1,5 @@
 #![cfg(test)]
 
-use std::io::Read as _;
-
 fn test_mantle_interface(bin_name: &str, service_name: &str) {
     let mut wasm_path = std::path::PathBuf::from(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -32,6 +30,6 @@ fn test_mantle_build() {
 }
 
 #[test]
-fn test_default_fn() {
-    test_mantle_interface("default_fn", "DefaultFnService");
+fn test_non_default_fn() {
+    test_mantle_interface("non_default_fn", "NonDefaultFnService");
 }

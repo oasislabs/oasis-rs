@@ -1,3 +1,2 @@
 #!/bin/bash
-cargo build --target wasm32-wasi
-cargo test
+cargo build --target wasm32-wasi --bins && cargo test

@@ -60,7 +60,7 @@ impl TestService {
         ctx: &Context,
         a1: BTreeMap<bool, [u32; 12]>,
         a3: BTreeSet<i64>,
-    ) -> Result<()> {
+    ) -> std::result::Result<Vec<u8>, String> {
         unimplemented!()
     }
 
@@ -77,7 +77,7 @@ impl TestService {
     }
 
     #[mantle::default]
-    pub fn default(&mut self, ctx: &Context) -> Option<u64> {
+    pub fn the_default_fn(&mut self, ctx: &Context) -> std::result::Result<Option<u64>, String> {
         unimplemented!()
     }
 }

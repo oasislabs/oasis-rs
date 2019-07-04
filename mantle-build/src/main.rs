@@ -33,7 +33,11 @@ fn main() {
             .map(|p| p == "1")
             .unwrap_or(false);
         let is_service = is_primary
-            && args[args.iter().position(|arg| arg == "--crate-type").unwrap() + 1] == "bin";
+            && args
+                .iter()
+                .position(|arg| arg == "--crate-type")
+                .map(|pos| args[pos + 1] == "bin")
+                .unwrap_or_default();
         let is_testing = args
             .iter()
             .any(|arg| arg == "feature=\"mantle-build-compiletest\"");

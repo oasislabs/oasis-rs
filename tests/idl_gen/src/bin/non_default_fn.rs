@@ -8,12 +8,13 @@ use mantle::{Context, Service};
 #[derive(Service)]
 pub struct NonDefaultFnService {}
 
-impl DefaultFnService {
+impl NonDefaultFnService {
     pub fn new(ctx: &Context) -> Result<Self, String> {
         unimplemented!()
     }
 
-    pub fn default(&mut self, ctx: &Context, extra_arg: u8) {
+    // NB: no #[default]
+    pub fn default(&self, _ctx: &Context) {
         unimplemented!()
     }
 }

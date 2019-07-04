@@ -56,7 +56,6 @@ impl Importer {
     }
 }
 
-#[derive(Debug)]
 pub struct ImportedService {
     pub bytecode: Vec<u8>,
     pub interface: crate::Interface,

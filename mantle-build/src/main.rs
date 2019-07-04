@@ -46,7 +46,7 @@ fn main() {
             path
         });
 
-        if is_primary {
+        let imports = if is_primary {
             let out_dir = out_dir.as_ref().unwrap();
 
             let gen_dir = out_dir.parent().unwrap().join("build/mantle_imports");
@@ -63,15 +63,24 @@ fn main() {
                 )
                 .map_err(Into::into)
             }) {
-                Ok(mut rustc_extern_args) => args.append(&mut rustc_extern_args),
+                Ok(imports) => {
+                    for import in imports.iter() {
+                        args.push("--extern".to_string());
+                        args.push(format!("{}={}", import.name, import.lib_path.display()));
+                    }
+                    imports
+                }
                 Err(err) => {
                     eprintln!("    {} {}", "error:".red(), err);
                     return Err(ErrorReported);
                 }
             }
-        }
+        } else {
+            Vec::new()
+        };
 
-        let mut idl8r = mantle_build::BuildPlugin::default();
+        let mut idl8r =
+            mantle_build::BuildPlugin::new(imports.into_iter().map(|imp| (imp.name, imp.version)));
         let mut default_cbs = rustc_driver::DefaultCallbacks;
         let callbacks: &mut (dyn rustc_driver::Callbacks + Send) = if is_service || is_testing {
             &mut idl8r

@@ -10,22 +10,22 @@ use crate::visitor::{
 };
 
 pub struct BuildPlugin {
+    imports: FxHashMap<String, String>, // crate_name -> version
     service_name: Once<Symbol>,
     event_indexed_fields: FxHashMap<Symbol, Vec<Symbol>>, // event_name -> field_name
     iface: Once<mantle_rpc::Interface>,
 }
 
-impl Default for BuildPlugin {
-    fn default() -> Self {
+impl BuildPlugin {
+    pub fn new(imports: impl IntoIterator<Item = (String, String)>) -> Self {
         Self {
+            imports: imports.into_iter().collect(),
             service_name: Once::new(),
             event_indexed_fields: Default::default(),
             iface: Once::new(),
         }
     }
-}
 
-impl BuildPlugin {
     /// Returns the generated interface.
     /// Only valid after rustc callback has been executed. Panics if called before.
     pub fn try_get(&self) -> Option<&mantle_rpc::Interface> {
@@ -176,9 +176,18 @@ impl rustc_driver::Callbacks for BuildPlugin {
                 if def.did.is_local() {
                     adt_defs.insert((def, is_event));
                 } else {
-                    unimplemented!("copy in types from external crates");
-                    // let crate_name = tcx.original_crate_name(def.did.krate);
-                    // imports.insert((crate_name, self.crate_version(crate_name.as_str())));
+                    let crate_name = tcx.original_crate_name(def.did.krate);
+                    match self.imports.get(crate_name.as_str().get()) {
+                        Some(version) => {
+                            imports.insert((crate_name, version.to_string()));
+                        }
+                        None => {
+                            sess.span_err(
+                                tcx.def_span(def.did),
+                                "Cannot use types not defined in an RPC interface",
+                            );
+                        }
+                    };
                 }
             }
 

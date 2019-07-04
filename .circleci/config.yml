@@ -141,8 +141,8 @@ jobs:
             - mantle-build-{{ .Revision }}
       - run:
           name: Test IDL generation
-          working_directory: tests/idl_gen
-          command: ./run_tests.sh
+          working_directory: tests/idl-gen
+          command: cargo build --target wasm32-wasi --bins && cargo test --lib
 
   test_imports:
     docker:
@@ -160,11 +160,11 @@ jobs:
       - run:
           name: Build dependency
           working_directory: tests/xcc-b
-          command: cargo build --target wasm32-wasi
+          command: cargo build --target wasm32-wasi --bins
       - run:
           name: Build toplevel
           working_directory: tests/xcc-a
-          command: cargo build --target wasm32-wasi
+          command: cargo build --target wasm32-wasi --bins && cargo test --lib
 
 workflows:
   version: 2

@@ -1,0 +1,49 @@
+{
+  "name": "ServiceA",
+  "namespace": "xcc_a",
+  "version": "0.1.0",
+  "imports": [
+    {
+      "name": "xcc_b",
+      "version": "0.1.1"
+    }
+  ],
+  "constructor": {
+    "inputs": [],
+    "error": null
+  },
+  "functions": [
+    {
+      "name": "call_b",
+      "mutability": "immutable",
+      "inputs": [
+        {
+          "name": "b_addr",
+          "type": {
+            "type": "address"
+          }
+        }
+      ],
+      "output": {
+        "type": "result",
+        "params": [
+          {
+            "type": "list",
+            "params": {
+              "type": "defined",
+              "params": {
+                "namespace": "xcc_b",
+                "type": "Number"
+              }
+            }
+          },
+          {
+            "type": "tuple",
+            "params": []
+          }
+        ]
+      }
+    }
+  ],
+  "mantle_build_version": "0.2.2"
+}

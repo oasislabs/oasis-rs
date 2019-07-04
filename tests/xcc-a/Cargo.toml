@@ -8,7 +8,9 @@ publish = false
 [dependencies]
 mantle = { version = "0.2", path = "../../mantle" }
 serde = { version = "1.0", features = ["derive"] }
-testlib = { version = "0.1", path = "../testlib" }
+
+[dev-dependencies]
+idl-gen = { path = "../idl-gen" }
 
 [package.metadata.mantle-dependencies]
-xcc-b = "file:///../xcc-b/target/wasm32-wasi/debug/xcc-b.wasm?version=0.1"
+xcc-b = "file:///../target/wasm32-wasi/debug/xcc-b.wasm?version=0.1"

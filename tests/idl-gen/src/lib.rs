@@ -1,11 +1,6 @@
-#![cfg(test)]
-
-fn test_mantle_interface(bin_name: &str, service_name: &str) {
-    let mut wasm_path = std::path::PathBuf::from(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/target/wasm32-wasi/debug"
-    ));
-    wasm_path.push(format!("{}.wasm", bin_name));
+pub fn test_mantle_interface(bin_name: &str, service_name: &str) {
+    let mf_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());;
+    let wasm_path = mf_dir.join(format!("../target/wasm32-wasi/debug/{}.wasm", bin_name));
 
     let iface_bytes = walrus::Module::from_file(wasm_path)
         .expect("No wasm")
@@ -16,8 +11,7 @@ fn test_mantle_interface(bin_name: &str, service_name: &str) {
 
     let actual = mantle_rpc::Interface::from_slice(&iface_bytes).unwrap();
 
-    let mut json_path = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/res"));
-    json_path.push(format!("{}.json", service_name));
+    let json_path = mf_dir.join(format!("res/{}.json", service_name));
     let expected: mantle_rpc::Interface =
         serde_json::from_slice(&std::fs::read(json_path).expect("No json")).expect("Bad json");
 

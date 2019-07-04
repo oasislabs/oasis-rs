@@ -14,7 +14,7 @@ jobs:
           command: cargo fmt -- --check
       - run:
           name: Clippy
-          command: cargo clippy -- -D clippy::all
+          command: cargo clippy --all-features -- -D clippy::all
       - run:
           name: Install mantle-build
           command: cargo install --path mantle-build

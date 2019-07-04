@@ -90,13 +90,11 @@ pub fn build(
             version = service.interface.version,
             path = mod_path.display()
         );
-        rustc_args.push(mod_name);
+        rustc_args.push(mod_name.clone());
         rustc_args.push(mod_path.display().to_string());
         rustc_args.push(format!("-Cextra-filename=-{:016x}", interface_hash));
         rustc_driver::run_compiler(&rustc_args, &mut rustc_driver::DefaultCallbacks, None, None)
-            .map_err(|_| {
-                failure::format_err!("Could not build `{}`", rustc_args.last().unwrap())
-            })?;
+            .map_err(|_| failure::format_err!("Could not build `{}`", mod_name))?;
         rustc_args.pop();
         rustc_args.pop();
         rustc_args.pop();
@@ -107,6 +105,7 @@ pub fn build(
 fn gen_def_tys<'a>(defs: &'a [mantle_rpc::TypeDef]) -> impl Iterator<Item = TokenStream> + 'a {
     defs.iter().map(|def| {
         let name = format_ident!("{}", def.name());
+        let derives = quote!(Serialize, Deserialize, Debug, Clone, PartialEq, Hash);
         match def {
             mantle_rpc::TypeDef::Struct { fields, .. } => {
                 let is_newtype = fields
@@ -116,12 +115,13 @@ fn gen_def_tys<'a>(defs: &'a [mantle_rpc::TypeDef]) -> impl Iterator<Item = Toke
                 let tys = fields.iter().map(|f| quote_ty(&f.ty));
                 if is_newtype {
                     quote! {
-                        pub struct #name(#(#tys),*)
+                        #[derive(#derives)]
+                        pub struct #name(#(#tys),*);
                     }
                 } else {
                     let field_names = fields.iter().map(|f| format_ident!("{}", f.name));
                     quote! {
-                        #[derive(Serialize, Deserialize)]
+                        #[derive(#derives)]
                         pub struct #name {
                             #(#field_names: #tys),*
                         }
@@ -131,7 +131,7 @@ fn gen_def_tys<'a>(defs: &'a [mantle_rpc::TypeDef]) -> impl Iterator<Item = Toke
             mantle_rpc::TypeDef::Enum { variants, .. } => {
                 let variants = variants.iter().map(|v| format_ident!("{}", v));
                 quote! {
-                    #[derive(Serialize, Deserialize)]
+                    #[derive(#derives)]
                     pub enum #name {
                         #(#variants),*
                     }
@@ -151,7 +151,7 @@ fn gen_def_tys<'a>(defs: &'a [mantle_rpc::TypeDef]) -> impl Iterator<Item = Toke
                     }
                 });
                 quote! {
-                    #[derive(Serialize, Deserialize, Event)]
+                    #[derive(#derives, Event)]
                     pub struct #name {
                         #(#indexeds #field_names: #tys),*
                     }
@@ -177,7 +177,7 @@ fn gen_client(service: &ImportedService) -> TokenStream {
             pub address: mantle::Address,
         }
 
-        #[derive(Serialize, Deserialize)]
+        #[derive(Serialize)]
         #[serde(tag = "method", content = "payload")]
         enum RpcPayload {
             #(#payload_variants),*
@@ -252,11 +252,6 @@ fn gen_rpcs(functions: &[mantle_rpc::Function]) -> (Vec<TokenStream>, Vec<TokenS
 }
 
 fn gen_ctors(ctor: &mantle_rpc::Constructor, bytecode: &[u8]) -> (TokenStream, TokenStream) {
-    let error_ty = if let Some(error) = &ctor.error {
-        quote_ty(&error)
-    } else {
-        quote!(())
-    };
     let (arg_names, arg_tys): (Vec<Ident>, Vec<TokenStream>) = ctor
         .inputs
         .iter()
@@ -268,6 +263,12 @@ fn gen_ctors(ctor: &mantle_rpc::Constructor, bytecode: &[u8]) -> (TokenStream, T
         struct CtorPayload {
             #(#arg_names: #arg_tys),*
         }
+    };
+
+    let error_ty = if let Some(error) = &ctor.error {
+        quote_ty(&error)
+    } else {
+        quote!(())
     };
 
     let ctor_fns = quote! {

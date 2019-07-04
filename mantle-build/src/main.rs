@@ -32,25 +32,19 @@ fn main() {
         let is_primary = std::env::var("CARGO_PRIMARY_PACKAGE")
             .map(|p| p == "1")
             .unwrap_or(false);
-        let is_service = is_primary
-            && args
-                .iter()
-                .position(|arg| arg == "--crate-type")
-                .map(|pos| args[pos + 1] == "bin")
-                .unwrap_or_default();
+        let is_bin = get_arg("--crate-type", &args)
+            .map(|t| t == "bin")
+            .unwrap_or(false);
+        let is_service = is_primary && is_bin;
         let is_testing = args
             .iter()
             .any(|arg| arg == "feature=\"mantle-build-compiletest\"");
 
-        let out_dir = args
-            .iter()
-            .position(|arg| arg == "--out-dir")
-            .and_then(|p| args.get(p + 1))
-            .map(|p| {
-                let mut path = PathBuf::from(p);
-                path.push(""); // ensure trailing /
-                path
-            });
+        let out_dir = get_arg("--out-dir", &args).map(|p| {
+            let mut path = PathBuf::from(p);
+            path.push(""); // ensure trailing /
+            path
+        });
 
         if is_primary {
             let out_dir = out_dir.as_ref().unwrap();
@@ -90,7 +84,7 @@ fn main() {
             return Ok(());
         }
 
-        let service_name = &args[args.iter().position(|arg| arg == "--crate-name").unwrap() + 1];
+        let service_name = get_arg("--crate-name", &args).unwrap();
 
         let rpc_iface = match idl8r.try_get() {
             Some(rpc_iface) => rpc_iface,
@@ -117,6 +111,12 @@ fn main() {
         Ok(_) => 0,
         Err(_) => 1,
     });
+}
+
+fn get_arg<'a>(arg: &str, args: &'a [String]) -> Option<&'a String> {
+    args.iter()
+        .position(|a| a == arg)
+        .and_then(|p| args.get(p + 1))
 }
 
 fn get_sysroot() -> String {

@@ -66,34 +66,15 @@ fn generate_rpc_dispatcher(
     let rpc_match_arms = rpcs
         .iter()
         .map(|rpc| {
-            let (arg_names, arg_tys) = args_arr(&rpc.sig.decl.inputs[2..]);
+            let (arg_name_csv, arg_ty_csv) = args_csv(&rpc.sig.decl.inputs[2..]);
 
-            rpc_payload_variants.push(format!("{}({})", rpc.name, arg_tys));
+            rpc_payload_variants.push(format!("{}({})", rpc.name, arg_ty_csv));
 
             if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
                 any_rpc_returns_result = true;
-                format!(
-                    r#"RpcPayload::{name}({arg_names}) => {{
-                        service.{name}(&ctx, {arg_names})
-                            .map(|output| {{
-                                mantle::reexports::serde_cbor::to_vec(&output).unwrap()
-                            }})
-                            .map_err(|err| {{
-                                mantle::reexports::serde_cbor::to_vec(&err).unwrap()
-                            }})
-                    }}"#,
-                    name = rpc.name,
-                    arg_names = arg_names,
-                )
+                gen_result_dispatch(rpc.name, arg_name_csv)
             } else {
-                format!(
-                    r#"RpcPayload::{name}({arg_names}) => {{
-                        let output = service.{name}(&ctx, {arg_names});
-                        Ok(mantle::reexports::serde_cbor::to_vec(&output).unwrap())
-                    }}"#,
-                    name = rpc.name,
-                    arg_names = arg_names,
-                )
+                gen_dispatch(rpc.name, arg_name_csv)
             }
         })
         .collect::<String>();
@@ -101,24 +82,9 @@ fn generate_rpc_dispatcher(
     let default_fn_arm = if let Some(rpc) = default_fn {
         if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
             any_rpc_returns_result = true;
-            format!(
-                r#"_ => service.{name}(&ctx)
-                    .map(|output| {{
-                        mantle::reexports::serde_cbor::to_vec(&output).unwrap()
-                    }})
-                    .map_err(|err| {{
-                        mantle::reexports::serde_cbor::to_vec(&err).unwrap()
-                    }})"#,
-                name = rpc.name
-            )
+            gen_result_dispatch(rpc.name, "")
         } else {
-            format!(
-                r#"_ => {{
-                    let output = service.{name}(&ctx);
-                    Ok(mantle::reexports::serde_cbor::to_vec(&output).unwrap())
-                }}"#,
-                name = rpc.name
-            )
+            gen_dispatch(rpc.name, "")
         }
     } else {
         String::new()
@@ -146,14 +112,14 @@ fn generate_rpc_dispatcher(
             let mut service = <{service_ident}>::coalesce();
             let payload: RpcPayload =
                 mantle::reexports::serde_cbor::from_slice(&mantle::backend::input()).unwrap();
-            let output: Result<Vec<u8>, {output_err_ty}> = match payload {{
-                {call_tree} // match arms return Result<Vec<u8>> (ABI-encoded bytes)
+            let output: std::result::Result<Vec<u8>, {output_err_ty}> = match payload {{
+                {call_tree}
                 {default_fn_arm}
             }};
             <{service_ident}>::sunder(service);
             match output {{
                 Ok(output) => mantle::backend::ret(&output),
-                Err(err) => mantle::backend::err(&format!("{{:#?}}", err).into_bytes()),
+                Err(err_output) => mantle::backend::err(&err_output),
             }}
         }}
         }}"#,
@@ -165,8 +131,29 @@ fn generate_rpc_dispatcher(
     ) => parse_block)
 }
 
+fn gen_result_dispatch(name: Symbol, arg_name_csv: impl AsRef<str>) -> String {
+    format!(
+        r#"RpcPayload::{name}({args}) => match service.{name}(&ctx, {args}) {{
+            Ok(output) => Ok(mantle::reexports::serde_cbor::to_vec(&output).unwrap()),
+            Err(err) => Err(mantle::reexports::serde_cbor::to_vec(&err).unwrap()),
+        }}"#,
+        name = name,
+        args = arg_name_csv.as_ref(),
+    )
+}
+
+fn gen_dispatch(name: Symbol, arg_name_csv: impl AsRef<str>) -> String {
+    format!(
+        r#"RpcPayload::{name}(&ctx, {args}) => {{
+            Ok(mantle::reexports::serde_cbor::to_vec(&service.{name}(&ctx, {args})).unwrap())
+        }}"#,
+        name = name,
+        args = arg_name_csv.as_ref(),
+    )
+}
+
 fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
-    let (arg_names, arg_types) = args_arr(&ctor.decl.inputs[1..]);
+    let (arg_names, arg_types) = args_csv(&ctor.decl.inputs[1..]);
 
     let ctor_payload_unpack = if ctor.decl.inputs.len() > 1 {
         format!(
@@ -253,7 +240,7 @@ fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
     }
 }
 
-fn args_arr(args: &[Arg]) -> (String, String) {
+fn args_csv(args: &[Arg]) -> (String, String) {
     args.iter()
         .map(|arg| {
             (

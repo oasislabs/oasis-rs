@@ -76,7 +76,10 @@ impl<'ast> syntax::visit::Visitor<'ast> for ServiceDefFinder {
         // Why not parse the `TokenStream`, you ask? Because the `TokenStream`
         // refers to sourcemap info not held by the anonymous `ParseSess` used
         // for one-off parsing.
-        let service_ident = parse!(format!("{}", mac_.tts) => parse_ident);
+        let service_ident = match try_parse!(format!("{}", mac_.tts) => parse_ident) {
+            Ok(ident) => ident,
+            Err(_) => return,
+        };
         self.services.push(Service {
             span: mac.span,
             name: service_ident.name,

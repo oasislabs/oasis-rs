@@ -121,7 +121,7 @@ pub fn mk_parse_sess() -> syntax::parse::ParseSess {
 }
 
 #[macro_export]
-macro_rules! parse {
+macro_rules! try_parse {
     ($src:expr => $parse_fn:ident) => {{
         let sess = crate::utils::mk_parse_sess();
         let mut parser = syntax::parse::new_parser_from_source_str(
@@ -129,6 +129,15 @@ macro_rules! parse {
             syntax::source_map::FileName::Custom(String::new()),
             $src.to_string(),
         );
-        parser.$parse_fn().unwrap()
+        parser
+            .$parse_fn()
+            .map_err(|mut diagnostic| diagnostic.cancel() /* drop sess */)
     }};
+}
+
+#[macro_export]
+macro_rules! parse {
+    ($src:expr => $parse_fn:ident) => {
+        crate::try_parse!($src => $parse_fn).unwrap()
+    }
 }

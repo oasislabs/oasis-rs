@@ -1,0 +1,4 @@
+fn main() {
+    mantle::service!();
+}
+

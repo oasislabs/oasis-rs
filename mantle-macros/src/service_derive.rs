@@ -27,9 +27,9 @@ fn get_serde(
     input: &syn::DeriveInput,
 ) -> Option<(proc_macro2::TokenStream, proc_macro2::TokenStream)> {
     if input.generics.type_params().count() > 0 {
-        err!(input.generics: "Service cannot contain generic types.");
         // early return because `impl Service` won't have generics which will
         // result in additional, confusing error messages.
+        // No error because mantle-build will warn about this.
         return None;
     }
 

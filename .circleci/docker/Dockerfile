@@ -15,4 +15,5 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly && 
     . /root/.cargo/env && \
     rustup component add rustfmt clippy && \
     rustup target add wasm32-wasi wasm32-unknown-unknown && \
+    cargo install mdbook && \
     echo "source ~/.cargo/env" >> ~/.bashrc

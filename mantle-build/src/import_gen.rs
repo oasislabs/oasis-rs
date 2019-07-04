@@ -20,7 +20,7 @@ macro_rules! format_ident {
 fn sanitize_ident(ident: &str) -> String {
     ident
         .chars()
-        .filter(|ch| ch.is_alphanumeric() || *ch == '_' || *ch == '-')
+        .filter(|ch| ch.is_ascii_alphanumeric() || *ch == '_' || *ch == '-')
         .collect()
 }
 
@@ -379,8 +379,10 @@ fn quote_borrow(ty: &mantle_rpc::Type) -> TokenStream {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn sanitize_ident() {
+    fn test_sanitize_ident() {
         assert_eq!(&sanitize_ident("../../../../bin/bash"), "binbash");
         assert_eq!(&sanitize_ident("snake_case"), "snake_case");
         assert_eq!(&sanitize_ident("kebab-case"), "kebab-case");

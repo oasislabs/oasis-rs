@@ -7,7 +7,10 @@ use syntax::{
 };
 use syntax_pos::symbol::Symbol;
 
-use crate::parse;
+use crate::{
+    parse,
+    visitor::{ParsedRpc, ParsedRpcKind},
+};
 
 pub fn generate_and_insert(
     krate: &mut Crate,
@@ -15,11 +18,15 @@ pub fn generate_and_insert(
     crate_name: &str,
     service_name: Symbol,
     ctor: &MethodSig,
-    rpcs: Vec<(Symbol, MethodSig)>,
+    rpcs: Vec<ParsedRpc>,
 ) {
-    let (default_fn, rpcs): (Vec<_>, Vec<_>) = rpcs.into_iter().partition(is_default_fn);
+    let default_fn = rpcs.iter().find(|rpc| match rpc.kind {
+        ParsedRpcKind::Default(_) => true,
+        _ => false,
+    });
+
     if !rpcs.is_empty() {
-        let rpcs_dispatcher = generate_rpc_dispatcher(service_name, &rpcs, !default_fn.is_empty());
+        let rpcs_dispatcher = generate_rpc_dispatcher(service_name, &rpcs, default_fn);
         let rpcs_include_file = out_dir.join(format!("{}_dispatcher.rs", crate_name));
         std::fs::write(
             &rpcs_include_file,
@@ -51,49 +58,48 @@ pub fn generate_and_insert(
 
 fn generate_rpc_dispatcher(
     service_name: Symbol,
-    rpcs: &[(Symbol, MethodSig)],
-    has_default_function: bool,
+    rpcs: &[ParsedRpc],
+    default_fn: Option<&ParsedRpc>,
 ) -> P<Block> {
-    let rpc_payload_variants = rpcs // e.g., `fn_name { input1: String, input2: Option<u64> }`
-        .iter()
-        .map(|(name, sig)| {
-            format!(
-                "{} {{ {} }}",
-                name,
-                structify_args(&sig.decl.inputs[2..]).join(", ")
-            )
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
-
+    let mut any_rpc_returns_result = false;
+    let mut rpc_payload_variants = Vec::with_capacity(rpcs.len());
     let rpc_match_arms = rpcs
         .iter()
-        .map(|(name, sig)| {
-            let arg_names = sig.decl.inputs[2..]
-                .iter()
-                .map(|arg| pprust::pat_to_string(&arg.pat))
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!(
-                r#"RpcPayload::{name} {{ {arg_names} }} => {{
-                    service.{name}(&ctx, {arg_names})
-                        .map(|output| {{
-                            mantle::reexports::serde_cbor::to_vec(&output).unwrap()
-                        }})
-                        .map_err(|err| format!("{{:?}}", err))
-                }}"#,
-                name = name,
-                arg_names = arg_names,
-            )
+        .map(|rpc| {
+            let (arg_name_csv, arg_ty_csv) = args_csv(&rpc.sig.decl.inputs[2..]);
+
+            rpc_payload_variants.push(format!("{}({})", rpc.name, arg_ty_csv));
+
+            if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
+                any_rpc_returns_result = true;
+                gen_result_dispatch(rpc.name, arg_name_csv)
+            } else {
+                gen_dispatch(rpc.name, arg_name_csv)
+            }
         })
         .collect::<String>();
 
-    let default_fn_arm = if has_default_function {
-        r#"_ => service.default(&ctx)
-            .map(|output| Vec::new())
-            .map_err(|err| format!("{{:?}}", err))"#
+    let default_fn_arm = if let Some(rpc) = default_fn {
+        if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
+            any_rpc_returns_result = true;
+            gen_result_dispatch(rpc.name, "")
+        } else {
+            gen_dispatch(rpc.name, "")
+        }
     } else {
-        ""
+        String::new()
+    };
+
+    let output_err_ty = if any_rpc_returns_result {
+        "Vec<u8>"
+    } else {
+        "()"
+    };
+
+    let err_returner = if any_rpc_returns_result {
+        "mantle::backend::err(&err_output)"
+    } else {
+        r#"unreachable!("No RPC function returns Err")"#
     };
 
     parse!(format!(r#"{{
@@ -112,40 +118,82 @@ fn generate_rpc_dispatcher(
             let mut service = <{service_ident}>::coalesce();
             let payload: RpcPayload =
                 mantle::reexports::serde_cbor::from_slice(&mantle::backend::input()).unwrap();
-            let output = match payload {{
-                {call_tree} // match arms return ABI-encoded vecs
+            let output: std::result::Result<Vec<u8>, {output_err_ty}> = match payload {{
+                {call_tree}
                 {default_fn_arm}
             }};
             <{service_ident}>::sunder(service);
             match output {{
                 Ok(output) => mantle::backend::ret(&output),
-                Err(err) => mantle::backend::err(&format!("{{:#?}}", err).into_bytes()),
+                Err(err_output) => {err_returner},
             }}
         }}
         }}"#,
-        rpc_payload_variants = rpc_payload_variants,
+        rpc_payload_variants = rpc_payload_variants.join(", "),
         service_ident = service_name.as_str().get(),
         call_tree = rpc_match_arms,
         default_fn_arm = default_fn_arm,
+        output_err_ty = output_err_ty,
+        err_returner = err_returner
     ) => parse_block)
 }
 
+fn gen_result_dispatch(name: Symbol, arg_name_csv: impl AsRef<str>) -> String {
+    format!(
+        r#"RpcPayload::{name}({args}) => match service.{name}(&ctx, {args}) {{
+            Ok(output) => Ok(mantle::reexports::serde_cbor::to_vec(&output).unwrap()),
+            Err(err) => Err(mantle::reexports::serde_cbor::to_vec(&err).unwrap()),
+        }}"#,
+        name = name,
+        args = arg_name_csv.as_ref(),
+    )
+}
+
+fn gen_dispatch(name: Symbol, arg_name_csv: impl AsRef<str>) -> String {
+    format!(
+        r#"RpcPayload::{name}({args}) => {{
+            Ok(mantle::reexports::serde_cbor::to_vec(&service.{name}(&ctx, {args})).unwrap())
+        }}"#,
+        name = name,
+        args = arg_name_csv.as_ref(),
+    )
+}
+
 fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
-    let ctor_arg_names = ctor.decl.inputs[1..]
-        .iter()
-        .map(|arg| pprust::pat_to_string(&arg.pat))
-        .collect::<Vec<_>>()
-        .join(", ");
+    let (arg_names, arg_types) = args_csv(&ctor.decl.inputs[1..]);
 
     let ctor_payload_unpack = if ctor.decl.inputs.len() > 1 {
         format!(
-            "let CtorPayload {{ {} }} =
+            "let CtorPayload({}) =
                     mantle::reexports::serde_cbor::from_slice(&mantle::backend::input()).unwrap();",
-            ctor_arg_names
+            arg_names
         )
     } else {
         String::new()
     };
+
+    let ctor_stmt = if crate::utils::unpack_syntax_ret(&ctor.decl.output).is_result {
+        format!(
+            r#"
+            match <{service_ident}>::new(&ctx, {arg_names}) {{
+                Ok(service) => service,
+                Err(err) => {{
+                    mantle::backend::err(&format!("{{:#?}}", err).into_bytes());
+                    return 1;
+                }}
+            }}
+            "#,
+            service_ident = service_name.as_str().get(),
+            arg_names = arg_names,
+        )
+    } else {
+        format!(
+            "<{service_ident}>::new(&ctx, {arg_names})",
+            service_ident = service_name.as_str().get(),
+            arg_names = arg_names
+        )
+    };
+
     parse!(format!(r#"
             #[allow(warnings)]
             #[no_mangle]
@@ -155,40 +203,20 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
 
                 #[derive(Serialize, Deserialize)]
                 #[allow(non_camel_case_types)]
-                struct CtorPayload {{
-                    {ctor_payload_types}
-                }}
+                struct CtorPayload({ctor_payload_types});
                 let ctx = mantle::Context::default(); // TODO(#33)
                 {ctor_payload_unpack}
-                let mut service = match <{service_ident}>::new(&ctx, {ctor_arg_names}) {{
-                    Ok(service) => service,
-                    Err(err) => {{
-                        mantle::backend::err(&format!("{{:#?}}", err).into_bytes());
-                        return 1;
-                    }}
-                }};
+                let mut service = {ctor_stmt};
                 <{service_ident}>::sunder(service);
                 return 0;
             }}
         "#,
+        ctor_stmt = ctor_stmt,
         ctor_payload_unpack = ctor_payload_unpack,
-        ctor_arg_names = ctor_arg_names,
-        ctor_payload_types = structify_args(&ctor.decl.inputs[1..]).join(", "),
+        ctor_payload_types = arg_types,
         service_ident = service_name.as_str().get(),
     ) => parse_item)
     .unwrap()
-}
-
-fn structify_args(args: &[Arg]) -> Vec<String> {
-    args.iter()
-        .map(|arg| {
-            let pat_ident = pprust::ident_to_string(match arg.pat.node {
-                syntax::ast::PatKind::Ident(_, ident, _) => ident,
-                _ => unreachable!("Checked during visitation."),
-            });
-            format!("{}: {}", pat_ident, pprust::ty_to_string(&arg.ty))
-        })
-        .collect()
 }
 
 fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
@@ -219,17 +247,16 @@ fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
     }
 }
 
-fn is_default_fn(rpc: &(Symbol, MethodSig)) -> bool {
-    let (name, msig) = rpc;
-    if name.as_str() != "default" {
-        return false;
-    }
-    match msig.decl.inputs.as_slice() {
-        [zelf, ctx] if zelf.is_self() && crate::utils::is_context_ref(&ctx.ty) => (),
-        _ => return false,
-    }
-    match &crate::utils::result_ty(&msig.decl.output) {
-        Some(ty) if ty.node.is_unit() => true,
-        _ => false,
-    }
+fn args_csv(args: &[Arg]) -> (String, String) {
+    args.iter()
+        .map(|arg| {
+            (
+                pprust::ident_to_string(match arg.pat.node {
+                    syntax::ast::PatKind::Ident(_, ident, _) => ident,
+                    _ => unreachable!("Checked during visitation."),
+                }) + ",",
+                pprust::ty_to_string(&arg.ty) + ",",
+            )
+        })
+        .unzip()
 }

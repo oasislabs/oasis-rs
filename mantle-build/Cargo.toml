@@ -11,15 +11,16 @@ keywords = ["idl", "interface", "rpc", "plugin"]
 
 [dependencies]
 colored = "1.8"
-libflate = "0.1"
-mantle-rpc = { version = "0.1", path = "../mantle-rpc" }
-serde = { version = "1.0", features = ["derive"] }
+failure = "0.1"
+heck = "0.3"
+mantle-rpc = { version = "0.1", path = "../mantle-rpc", features = ["resolve"] }
+proc-macro2 = "0.4"
+proc-quote = "0.2"
 serde_json = "1.0"
-toml = "0.4"
+toml = "0.5"
 walrus = "0.8"
 
 [dev-dependencies]
 compiletest_rs = { version = "0.3", features = ["tmp"] }
 mantle = { version = "0.2", path = "../mantle" }
 serde = { version = "1.0", features = ["derive"] }
-serde_cbor = "0.9"

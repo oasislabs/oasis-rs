@@ -1,0 +1,15 @@
+error: Only one RPC method can be marked with `#[default]`
+  --> $DIR/multiple_defaults.rs:13:5
+   |
+13 |     #[default]
+   |     ^^^^^^^^^^
+14 |     pub fn default1(&mut self, _ctx: &Context) -> Result<(), ()> {
+   |            ^^^^^^^^
+...
+19 |     #[default]
+   |     ^^^^^^^^^^
+20 |     pub fn default2(&self, _ctx: &Context) -> &[String] {
+   |            ^^^^^^^^
+
+error: aborting due to previous error
+

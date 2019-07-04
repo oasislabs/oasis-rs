@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet}; // BTree for reproducability
+use std::collections::BTreeSet; // BTree for reproducability
 
 use rustc::{hir::intravisit::Visitor, util::nodemap::FxHashMap};
 use rustc_data_structures::sync::Once;
@@ -9,77 +9,35 @@ use crate::visitor::{
     ServiceDefFinder,
 };
 
-#[derive(Deserialize)]
-struct Lockfile {
-    package: Vec<LockfileEntry>,
-}
-
-#[derive(Deserialize)]
-struct LockfileEntry {
-    name: String,
-    version: String,
-}
-
 pub struct BuildPlugin {
+    imports: FxHashMap<String, String>, // crate_name -> version
     service_name: Once<Symbol>,
     event_indexed_fields: FxHashMap<Symbol, Vec<Symbol>>, // event_name -> field_name
     iface: Once<mantle_rpc::Interface>,
-    deps: Once<BTreeMap<String, LockfileEntry>>,
-}
-
-impl Default for BuildPlugin {
-    fn default() -> Self {
-        Self {
-            service_name: Once::new(),
-            event_indexed_fields: Default::default(),
-            iface: Once::new(),
-            deps: Once::new(),
-        }
-    }
 }
 
 impl BuildPlugin {
+    pub fn new(imports: impl IntoIterator<Item = (String, String)>) -> Self {
+        Self {
+            imports: imports.into_iter().collect(),
+            service_name: Once::new(),
+            event_indexed_fields: Default::default(),
+            iface: Once::new(),
+        }
+    }
+
     /// Returns the generated interface.
     /// Only valid after rustc callback has been executed. Panics if called before.
     pub fn try_get(&self) -> Option<&mantle_rpc::Interface> {
         self.iface.try_get()
     }
+}
 
-    /// Returns the (name, version) of a dependency.
-    fn crate_version<S: AsRef<str>>(&self, crate_name: S) -> String {
-        self.deps.init_locking(Self::load_deps);
-        let deps = self.deps.get();
-        deps.get(crate_name.as_ref())
-            .map(|pkg| pkg.version.to_string())
-            .unwrap_or_else(|| "*".to_string())
-    }
-
-    fn load_deps() -> BTreeMap<String, LockfileEntry> {
-        let mf_dir = std::path::PathBuf::from(
-            std::env::var_os("CARGO_MANIFEST_DIR").expect("`CARGO_MANIFEST_DIR` not set"),
-        );
-
-        let lockfile_path = mf_dir
-            .ancestors()
-            .map(|p| p.join("Cargo.lock"))
-            .skip_while(|p| !p.is_file())
-            .nth(0);
-
-        if let Some(lockfile_path) = lockfile_path {
-            let lockfile: Lockfile = toml::from_str(
-                &std::fs::read_to_string(lockfile_path).expect("Cargo.lock should exist"),
-            )
-            .expect("Cargo.lock should exist and be readable");
-
-            lockfile
-                .package
-                .into_iter()
-                .map(|pkg| (pkg.name.replace("-", "_"), pkg))
-                .collect()
-        } else {
-            BTreeMap::default()
-        }
-    }
+macro_rules! ret_err {
+    () => {{
+        std::env::set_var("MANTLE_BUILD_NO_SERVICE_DERIVE", "1");
+        return true; // Always return success so that compiler catches other errors.
+    }};
 }
 
 impl rustc_driver::Callbacks for BuildPlugin {
@@ -112,14 +70,14 @@ impl rustc_driver::Callbacks for BuildPlugin {
         self.event_indexed_fields = event_indexed_fields;
 
         let main_service = match services.as_slice() {
-            [] => return false,
+            [] => return true, // No services defined. Do nothing.
             [main_service] => main_service,
             _ => {
                 sess.span_err(
                     services[1].span,
                     "Multiple invocations of `mantle::service!`. Second occurrence here:",
                 );
-                return false;
+                ret_err!();
             }
         };
         let service_name = main_service.name;
@@ -128,7 +86,16 @@ impl rustc_driver::Callbacks for BuildPlugin {
         let mut parsed_rpc_collector = ParsedRpcCollector::new(service_name);
         syntax::visit::walk_crate(&mut parsed_rpc_collector, &parse);
 
-        let struct_span = parsed_rpc_collector.struct_span();
+        let struct_span = match parsed_rpc_collector.struct_span() {
+            Some(s) => s,
+            None => {
+                sess.span_err(
+                    main_service.span,
+                    &format!("Could not find state struct for `{}`", service_name),
+                );
+                ret_err!();
+            }
+        };
 
         let rpcs = match parsed_rpc_collector.into_rpcs() {
             Ok(rpcs) => rpcs,
@@ -136,30 +103,51 @@ impl rustc_driver::Callbacks for BuildPlugin {
                 for err in errs {
                     sess.span_err(err.span(), &format!("{}", err));
                 }
-                return false;
+                ret_err!();
             }
         };
         let (ctor, rpcs): (Vec<_>, Vec<_>) = rpcs
             .into_iter()
-            .partition(|(name, _)| *name == syntax_pos::symbol::Symbol::intern("new"));
+            .partition(|rpc| rpc.kind == crate::visitor::ParsedRpcKind::Ctor);
         let ctor_sig = match ctor.as_slice() {
             [] => {
                 sess.span_err(
                     struct_span,
                     &format!("Missing definition of `{}::new`.", service_name),
                 );
-                return false;
+                ret_err!();
             }
-            [(_, sig)] => sig,
-            _ => return true, // Multiply defined `new` function. Let the compiler catch this.
+            [rpc] => &rpc.sig,
+            _ => ret_err!(), // Multiply defined `new` function. Let the compiler catch this.
         };
+
+        let default_fn_spans = rpcs
+            .iter()
+            .filter_map(|rpc| {
+                if let crate::visitor::ParsedRpcKind::Default(default_span) = rpc.kind {
+                    Some(vec![default_span, rpc.span])
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        if default_fn_spans.len() > 1 {
+            sess.span_err(
+                default_fn_spans
+                    .into_iter()
+                    .flat_map(std::convert::identity)
+                    .collect::<Vec<_>>(),
+                "Only one RPC method can be marked with `#[default]`",
+            );
+            ret_err!();
+        }
 
         crate::dispatcher_gen::generate_and_insert(
             &mut parse,
             &gen_dir,
             &crate_name,
             service_name,
-            ctor_sig,
+            &ctor_sig,
             rpcs,
         );
 
@@ -172,7 +160,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
 
         let service_name = match self.service_name.try_get() {
             Some(service_name) => service_name,
-            None => return false,
+            None => return true, // No service defined. Do nothing.
         };
 
         global_ctxt.enter(|tcx| {
@@ -191,21 +179,32 @@ impl rustc_driver::Callbacks for BuildPlugin {
                 .krate()
                 .visit_all_item_likes(&mut event_collector.as_deep_visitor());
 
-            let all_adt_defs = defined_types.map(|def| (def, false /* is_import */)).chain(
-                event_collector
-                    .adt_defs()
-                    .into_iter()
-                    .map(|def| (def, true)),
-            );
+            let all_adt_defs = defined_types
+                .map(|(def, orig_span)| (def, orig_span, false /* is_import */))
+                .chain(
+                    event_collector
+                        .adt_defs()
+                        .map(|(def, orig_span)| (def, orig_span, true)),
+                );
 
             let mut imports = BTreeSet::default();
             let mut adt_defs = BTreeSet::default();
-            for (def, is_event) in all_adt_defs.into_iter() {
+            for (def, orig_span, is_event) in all_adt_defs {
                 if def.did.is_local() {
                     adt_defs.insert((def, is_event));
                 } else {
                     let crate_name = tcx.original_crate_name(def.did.krate);
-                    imports.insert((crate_name, self.crate_version(crate_name.as_str())));
+                    match self.imports.get(crate_name.as_str().get()) {
+                        Some(version) => {
+                            imports.insert((crate_name, version.to_string()));
+                        }
+                        None => {
+                            sess.span_err(
+                                orig_span,
+                                "Cannot use types not defined in an RPC interface",
+                            );
+                        }
+                    };
                 }
             }
 

@@ -33,6 +33,9 @@ pub struct DefTy {
     f4: Tuple,
 }
 
+#[derive(Serialize, Deserialize, Clone, Default)]
+pub struct TupleStruct(pub String, pub String, pub i32);
+
 #[derive(Serialize, Deserialize, Event, Default)]
 pub struct TestEvent2 {
     #[indexed]
@@ -44,7 +47,7 @@ pub struct TestEvent2 {
 type Result<T> = std::result::Result<T, ()>;
 
 impl TestService {
-    pub fn new(ctx: &Context, name: String) -> Result<Self> {
+    pub fn new(ctx: &Context, tuple_struct: TupleStruct) -> Self {
         unimplemented!()
     }
 
@@ -57,31 +60,24 @@ impl TestService {
         ctx: &Context,
         a1: BTreeMap<bool, [u32; 12]>,
         a3: BTreeSet<i64>,
-    ) -> Result<()> {
+    ) -> std::result::Result<Vec<u8>, String> {
         unimplemented!()
     }
 
-    fn private(&self, ctx: &Context, arg: String) -> Result<u64> {
+    fn private(&self, ctx: &Context, arg: String) -> u64 {
         TestEvent::default().emit();
         unimplemented!()
     }
 
-    pub fn void(&self, ctx: &Context) -> Result<()> {
+    pub fn void(&self, ctx: &Context) {
         let event = TestEvent2::default();
         let event_ref = &event;
         Event::emit(&*event_ref);
         unimplemented!()
     }
 
-    pub fn import(&mut self, ctx: &Context, imported: testlib::RpcType) -> Result<(bool, char)> {
-        Event::emit(&testlib::RandomEvent {
-            the_topic: "hello".to_string(),
-            the_data: "world".to_string(),
-        });
-        unimplemented!()
-    }
-
-    pub fn default(&mut self, ctx: &Context, nondefault_arg: u32) -> Result<()> {
+    #[mantle::default]
+    pub fn the_default_fn(&mut self, ctx: &Context) -> std::result::Result<Option<u64>, String> {
         unimplemented!()
     }
 }

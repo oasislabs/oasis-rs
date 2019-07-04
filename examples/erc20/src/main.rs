@@ -7,7 +7,7 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug, Eq, PartialEq, failure::Fail)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, failure::Fail)]
 pub enum Error {
     #[fail(display = "Unknown error occured.")]
     Unknown,
@@ -208,7 +208,7 @@ impl ERC20Token {
         if !self.admins.contains(&ctx.sender()) {
             return Err(Error::AdminPrivilegesRequired);
         }
-        self.total_supply += self.total_supply;
+        self.total_supply += amount;
         Ok(())
     }
 

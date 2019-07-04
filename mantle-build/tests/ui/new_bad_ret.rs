@@ -4,8 +4,8 @@ use mantle::Context;
 pub struct Counter(u32);
 
 impl Counter {
-    pub fn new(ctx: &Context, start_count: u32) -> Self {
-        Self(start_count)
+    pub fn new(ctx: &Context, start_count: u32) -> () {
+        Self(start_count);
     }
 }
 

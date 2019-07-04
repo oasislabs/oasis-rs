@@ -1,9 +1,9 @@
 use rustc::{
     hir::{self, intravisit, Crate},
     ty::{self, AdtDef, TyCtxt, TyS},
-    util::nodemap::{FxHashMap, FxHashSet, HirIdSet},
+    util::nodemap::{FxHashMap, HirIdSet},
 };
-use syntax::source_map::Span;
+use syntax::{source_map::Span, visit::Visitor as _};
 use syntax_pos::symbol::Symbol;
 
 use crate::error::RpcError;
@@ -76,7 +76,10 @@ impl<'ast> syntax::visit::Visitor<'ast> for ServiceDefFinder {
         // Why not parse the `TokenStream`, you ask? Because the `TokenStream`
         // refers to sourcemap info not held by the anonymous `ParseSess` used
         // for one-off parsing.
-        let service_ident = parse!(format!("{}", mac_.tts) => parse_ident);
+        let service_ident = match try_parse!(format!("{}", mac_.tts) => parse_ident) {
+            Ok(ident) => ident,
+            Err(_) => return,
+        };
         self.services.push(Service {
             span: mac.span,
             name: service_ident.name,
@@ -84,11 +87,25 @@ impl<'ast> syntax::visit::Visitor<'ast> for ServiceDefFinder {
     }
 }
 
+pub struct ParsedRpc {
+    pub name: Symbol,
+    pub sig: syntax::ast::MethodSig,
+    pub kind: ParsedRpcKind,
+    pub span: Span,
+}
+
+#[derive(PartialEq, Eq)]
+pub enum ParsedRpcKind {
+    Ctor,
+    Default(Span),
+    Normal,
+}
+
 pub struct ParsedRpcCollector {
     service_name: Symbol,
-    rpcs: Vec<(Symbol, syntax::ast::MethodSig)>,
+    rpcs: Vec<ParsedRpc>,
     errors: Vec<RpcError>,
-    struct_span: Span,
+    struct_span: Option<Span>,
 }
 
 impl ParsedRpcCollector {
@@ -97,26 +114,19 @@ impl ParsedRpcCollector {
             service_name,
             rpcs: Vec::new(),
             errors: Vec::new(),
-            struct_span: Default::default(),
+            struct_span: None,
         }
     }
 
-    pub fn struct_span(&self) -> Span {
+    pub fn struct_span(&self) -> Option<Span> {
         self.struct_span
     }
 
-    pub fn into_rpcs(self) -> Result<Vec<(Symbol, syntax::ast::MethodSig)>, Vec<RpcError>> {
+    pub fn into_rpcs(self) -> Result<Vec<ParsedRpc>, Vec<RpcError>> {
         if self.errors.is_empty() {
             Ok(self.rpcs)
         } else {
             Err(self.errors)
-        }
-    }
-
-    fn is_self_ref(ty: &syntax::ast::Ty) -> bool {
-        match &ty.node {
-            syntax::ast::TyKind::Rptr(_, mut_ty) => mut_ty.ty.node.is_implicit_self(),
-            _ => false,
         }
     }
 }
@@ -129,7 +139,7 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector {
                     self.errors.push(RpcError::HasGenerics(generics.span))
                 }
 
-                self.struct_span = item.span;
+                self.struct_span = Some(item.span);
             }
             syntax::ast::ItemKind::Impl(_, _, _, _, None, service_ty, impl_items)
                 if match &service_ty.node {
@@ -138,121 +148,10 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector {
                 } =>
             {
                 for impl_item in impl_items {
-                    let mut errors = Vec::new();
-
-                    let is_ctor = impl_item.ident.name == Symbol::intern("new");
-
-                    match impl_item.vis.node {
-                        syntax::ast::VisibilityKind::Public => (),
-                        _ if is_ctor => (),
-                        _ => continue,
-                    }
-
-                    let msig = match &impl_item.node {
-                        syntax::ast::ImplItemKind::Method(msig, _) => msig,
-                        _ => continue,
-                    };
-                    if !impl_item.generics.params.is_empty() {
-                        errors.push(RpcError::HasGenerics(impl_item.generics.span));
-                    }
-
-                    if let syntax::ast::IsAsync::Async { .. } = msig.header.asyncness.node {
-                        errors.push(RpcError::HasAsync(msig.header.asyncness.span));
-                    }
-
-                    if let syntax::ast::Unsafety::Unsafe = msig.header.unsafety {
-                        errors.push(RpcError::Unsafe(impl_item.span));
-                    }
-
-                    match msig.header.abi {
-                        rustc_target::spec::abi::Abi::Rust => (),
-                        _ => {
-                            // start from the `pub` to the fn ident
-                            // then slice from after the `pub ` to before the ` fn `
-                            let err_span = impl_item.span.until(impl_item.ident.span);
-                            let err_span = err_span.from_inner(syntax_pos::InnerSpan::new(
-                                4,
-                                (err_span.hi().0 - err_span.lo().0) as usize - 4,
-                            ));
-                            self.errors.push(RpcError::HasAbi(err_span));
-                        }
-                    }
-
-                    let mut args = msig.decl.inputs.iter();
-
-                    if !is_ctor {
-                        match args.next() {
-                            Some(arg) if !Self::is_self_ref(&arg.ty) => {
-                                errors.push(RpcError::MissingSelf(arg.pat.span.to(arg.pat.span)))
-                            }
-                            None => errors.push(RpcError::MissingSelf(impl_item.ident.span)),
-                            _ => (),
-                        }
-                    }
-                    match args.next() {
-                        Some(arg) if !crate::utils::is_context_ref(&arg.ty) => {
-                            self.errors.push(RpcError::MissingContext {
-                                from_ctor: is_ctor,
-                                span: arg.ty.span.to(arg.pat.span),
-                            })
-                        }
-                        None => errors.push(RpcError::MissingContext {
-                            from_ctor: is_ctor,
-                            span: impl_item.ident.span,
-                        }),
-                        _ => (),
-                    }
-                    for arg in args {
-                        match arg.pat.node {
-                            syntax::ast::PatKind::Ident(..) => (),
-                            _ => errors.push(RpcError::BadArgPat(arg.pat.span)),
-                        }
-
-                        let mut ref_checker = RefChecker::default();
-                        ref_checker.visit_ty(&*arg.ty);
-                        if ref_checker.has_ref {
-                            use syntax::mut_visit::MutVisitor as _;
-                            let mut suggested_ty = arg.ty.clone();
-                            Deborrower {}.visit_ty(&mut suggested_ty);
-                            errors.push(RpcError::BadArgTy {
-                                span: arg.ty.span,
-                                suggestion: syntax::print::pprust::ty_to_string(&suggested_ty),
-                            });
-                        }
-                    }
-
-                    match crate::utils::result_ty(&msig.decl.output) {
-                        Some(result_ty) => {
-                            if is_ctor
-                                && (match &result_ty.node {
-                                    syntax::ast::TyKind::Path(_, path) => {
-                                        path.segments.last().unwrap().ident.name
-                                            != Symbol::intern("Self")
-                                    }
-                                    _ => true,
-                                } && format!("{:?}", result_ty.node) // Ty doesn't impl PartialEq <_<
-                                    != format!("{:?}", service_ty.node))
-                            {
-                                errors.push(RpcError::BadCtorReturn {
-                                    self_ty: service_ty.clone().into_inner(),
-                                    span: msig.decl.output.span(),
-                                });
-                            }
-                        }
-                        None => errors.push(if is_ctor {
-                            RpcError::BadCtorReturn {
-                                self_ty: service_ty.clone().into_inner(),
-                                span: msig.decl.output.span(),
-                            }
-                        } else {
-                            RpcError::MissingOutput(msig.decl.output.span())
-                        }),
-                    }
-
-                    if errors.is_empty() {
-                        self.rpcs.push((impl_item.ident.name, msig.clone()));
-                    } else {
-                        self.errors.append(&mut errors);
+                    match check_parsed_rpc(&service_ty, impl_item) {
+                        Ok(Some(rpc)) => self.rpcs.push(rpc),
+                        Ok(None) => (),
+                        Err(errs) => self.errors.extend(errs),
                     }
                 }
             }
@@ -267,6 +166,149 @@ impl<'ast> syntax::visit::Visitor<'ast> for ParsedRpcCollector {
     fn visit_mac(&mut self, _mac: &'ast syntax::ast::Mac) {
         // The default implementation panics. They exist pre-expansion, but we don't need
         // to look at them. Hopefully nobody generates `Event` structs in a macro.
+    }
+}
+
+fn check_parsed_rpc(
+    service_ty: &syntax::ptr::P<syntax::ast::Ty>,
+    impl_item: &syntax::ast::ImplItem,
+) -> Result<Option<ParsedRpc>, Vec<RpcError>> {
+    let mut errors = Vec::new();
+
+    let is_ctor = impl_item.ident.name == Symbol::intern("new");
+
+    match impl_item.vis.node {
+        syntax::ast::VisibilityKind::Public => (),
+        _ if is_ctor => (),
+        _ => return Ok(None),
+    }
+
+    let msig = match &impl_item.node {
+        syntax::ast::ImplItemKind::Method(msig, _) => msig,
+        _ => return Ok(None),
+    };
+    if !impl_item.generics.params.is_empty() {
+        errors.push(RpcError::HasGenerics(impl_item.generics.span));
+    }
+
+    if let syntax::ast::IsAsync::Async { .. } = msig.header.asyncness.node {
+        errors.push(RpcError::HasAsync(msig.header.asyncness.span));
+    }
+
+    if let syntax::ast::Unsafety::Unsafe = msig.header.unsafety {
+        errors.push(RpcError::Unsafe(impl_item.span));
+    }
+
+    match msig.header.abi {
+        rustc_target::spec::abi::Abi::Rust => (),
+        _ => {
+            // start from the `pub` to the fn ident
+            // then slice from after the `pub ` to before the ` fn `
+            let err_span = impl_item.span.until(impl_item.ident.span);
+            let err_span = err_span.from_inner(syntax_pos::InnerSpan::new(
+                4,
+                (err_span.hi().0 - err_span.lo().0) as usize - 4,
+            ));
+            errors.push(RpcError::HasAbi(err_span));
+        }
+    }
+
+    let default_span = impl_item.attrs.iter().find_map(|attr| {
+        if crate::utils::path_ends_with(&attr.path, &["mantle", "default"]) {
+            Some(attr.span)
+        } else {
+            None
+        }
+    });
+
+    let mut args = msig.decl.inputs.iter();
+
+    if !is_ctor {
+        match args.next() {
+            Some(arg) if !crate::utils::is_self_ref(&arg.ty) => {
+                errors.push(RpcError::MissingSelf(arg.pat.span.to(arg.pat.span)))
+            }
+            None => errors.push(RpcError::MissingSelf(impl_item.ident.span)),
+            _ => (),
+        }
+    }
+    match args.next() {
+        Some(arg) if !crate::utils::is_context_ref(&arg.ty) => {
+            errors.push(RpcError::MissingContext {
+                from_ctor: is_ctor,
+                span: arg.ty.span.to(arg.pat.span),
+            })
+        }
+        None => errors.push(RpcError::MissingContext {
+            from_ctor: is_ctor,
+            span: impl_item.ident.span,
+        }),
+        _ => (),
+    }
+
+    if let Some(default_span) = default_span {
+        if is_ctor {
+            errors.push(RpcError::CtorIsDefault(default_span));
+        }
+        if let Some(arg) = args.next() {
+            errors.push(RpcError::DefaultFnHasArg(arg.pat.span.to(arg.ty.span)));
+        }
+    } else {
+        for arg in args {
+            match arg.pat.node {
+                syntax::ast::PatKind::Ident(..) => (),
+                _ => errors.push(RpcError::BadArgPat(arg.pat.span)),
+            }
+
+            let mut ref_checker = RefChecker::default();
+            ref_checker.visit_ty(&*arg.ty);
+            if ref_checker.has_ref {
+                use syntax::mut_visit::MutVisitor as _;
+                let mut suggested_ty = arg.ty.clone();
+                Deborrower {}.visit_ty(&mut suggested_ty);
+                errors.push(RpcError::BadArgTy {
+                    span: arg.ty.span,
+                    suggestion: syntax::print::pprust::ty_to_string(&suggested_ty),
+                });
+            }
+        }
+    }
+
+    let ret_ty = crate::utils::unpack_syntax_ret(&msig.decl.output);
+
+    if is_ctor {
+        let mut ret_ty_is_self = false;
+        if let crate::utils::ReturnType::Known(syntax::ast::Ty {
+            node: syntax::ast::TyKind::Path(_, path),
+            ..
+        }) = ret_ty.ty
+        {
+            ret_ty_is_self =
+                path.segments.len() == 1 && path.segments[0].ident.name == Symbol::intern("Self");
+        }
+        if !ret_ty_is_self {
+            errors.push(RpcError::BadCtorReturn {
+                self_ty: service_ty.clone().into_inner(),
+                span: msig.decl.output.span(),
+            });
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(Some(ParsedRpc {
+            name: impl_item.ident.name,
+            sig: msig.clone(),
+            kind: if is_ctor {
+                ParsedRpcKind::Ctor
+            } else if let Some(default_span) = default_span {
+                ParsedRpcKind::Default(default_span)
+            } else {
+                ParsedRpcKind::Normal
+            },
+            span: impl_item.ident.span,
+        }))
+    } else {
+        Err(errors)
     }
 }
 
@@ -340,34 +382,34 @@ impl<'a, 'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx> for AnalyzedRpcCollecto
 /// that are not in a standard library crate.
 pub struct DefinedTypeCollector<'tcx> {
     tcx: TyCtxt<'tcx>,
-    adt_defs: FxHashSet<&'tcx AdtDef>, // maintain a `Set` to handle recursive types
+    adt_defs: FxHashMap<&'tcx AdtDef, Span>, // maintain a `Set` to handle recursive types
 }
 
 impl<'tcx> DefinedTypeCollector<'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>) -> Self {
         Self {
             tcx,
-            adt_defs: FxHashSet::default(),
+            adt_defs: FxHashMap::default(),
         }
     }
 
-    pub fn adt_defs(self) -> Vec<&'tcx AdtDef> {
-        self.adt_defs.into_iter().collect()
+    pub fn adt_defs(self) -> impl Iterator<Item = (&'tcx AdtDef, Span)> {
+        self.adt_defs.into_iter()
     }
 
     // called by `<DefinedTypeCollector as intravisit::Visitor>::visit_ty`.
-    fn visit_sty(&mut self, ty: &'tcx TyS) {
-        if let rustc::ty::TyKind::Adt(ref adt_def, ..) = ty.sty {
+    fn visit_sty(&mut self, ty: &'tcx TyS, originating_span: Span) {
+        if let rustc::ty::TyKind::Adt(adt_def, ..) = ty.sty {
             if crate::utils::is_std(self.tcx.crate_name(adt_def.did.krate))
-                || self.adt_defs.contains(adt_def)
+                || self.adt_defs.contains_key(adt_def)
             {
                 return;
             }
-            self.adt_defs.insert(adt_def);
+            self.adt_defs.insert(adt_def, originating_span);
             if adt_def.did.is_local() {
                 for field in adt_def.all_fields() {
                     for inner_ty in self.tcx.type_of(field.did).walk() {
-                        self.visit_sty(inner_ty);
+                        self.visit_sty(inner_ty, originating_span);
                     }
                 }
             }
@@ -382,7 +424,7 @@ impl<'tcx> hir::intravisit::Visitor<'tcx> for DefinedTypeCollector<'tcx> {
             if let Res::Def(kind, id) = path.res {
                 match kind {
                     DefKind::Struct | DefKind::Union | DefKind::Enum | DefKind::TyAlias => {
-                        self.visit_sty(self.tcx.type_of(id));
+                        self.visit_sty(self.tcx.type_of(id), ty.span);
                     }
                     _ => (),
                 }
@@ -401,19 +443,19 @@ impl<'tcx> hir::intravisit::Visitor<'tcx> for DefinedTypeCollector<'tcx> {
 /// The only constraint is that any event must be emitted in the current crate.
 pub struct EventCollector<'tcx> {
     tcx: TyCtxt<'tcx>,
-    adt_defs: FxHashSet<&'tcx AdtDef>,
+    adt_defs: FxHashMap<&'tcx AdtDef, Span>,
 }
 
 impl<'tcx> EventCollector<'tcx> {
     pub fn new(tcx: TyCtxt<'tcx>) -> Self {
         Self {
             tcx,
-            adt_defs: FxHashSet::default(),
+            adt_defs: FxHashMap::default(),
         }
     }
 
-    pub fn adt_defs(self) -> Vec<&'tcx AdtDef> {
-        self.adt_defs.into_iter().collect()
+    pub fn adt_defs(self) -> impl Iterator<Item = (&'tcx AdtDef, Span)> {
+        self.adt_defs.into_iter()
     }
 }
 
@@ -451,10 +493,10 @@ impl<'tcx> hir::intravisit::Visitor<'tcx> for EventCollector<'tcx> {
                 _,
             ) = emit_arg_ty.sty
             {
-                self.adt_defs.insert(&adt_def);
+                self.adt_defs.insert(&adt_def, emit_arg.span);
             }
             if let Some(adt_def) = emit_arg_ty.ty_adt_def() {
-                self.adt_defs.insert(&adt_def);
+                self.adt_defs.insert(&adt_def, emit_arg.span);
             }
         }
         intravisit::walk_expr(self, expr);

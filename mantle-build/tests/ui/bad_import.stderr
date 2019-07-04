@@ -1,0 +1,8 @@
+error: Cannot use types not defined in an RPC interface
+ --> $DIR/bad_import.rs:9:63
+  |
+9 |     pub fn bad_import(&mut self, _ctx: &mantle::Context, arg: serde_cbor::Value) {}
+  |                                                               ^^^^^^^^^^^^^^^^^
+
+error: aborting due to previous error
+

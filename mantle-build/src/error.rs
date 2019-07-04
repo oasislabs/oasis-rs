@@ -1,10 +1,9 @@
 use syntax_pos::{MultiSpan, Span};
 
-type TypeStr = String;
+// NB: `failure` won't work on these errors because `Span` isn't `Send`.
 
-#[derive(Debug)]
 pub enum UnsupportedTypeError {
-    NotReprC(TypeStr, MultiSpan),
+    NotReprC(String /* type name string */, MultiSpan),
     ComplexEnum(MultiSpan),
 }
 
@@ -27,7 +26,6 @@ impl UnsupportedTypeError {
     }
 }
 
-#[derive(Debug)]
 pub enum RpcError {
     BadArgPat(Span),
     BadArgTy {
@@ -39,6 +37,8 @@ pub enum RpcError {
         self_ty: syntax::ast::Ty,
         span: Span,
     },
+    CtorIsDefault(Span),
+    DefaultFnHasArg(Span),
     HasAbi(Span),
     HasAsync(Span),
     HasGenerics(Span),
@@ -46,7 +46,6 @@ pub enum RpcError {
         from_ctor: bool,
         span: Span,
     },
-    MissingOutput(Span),
     MissingSelf(Span),
     Unsafe(Span),
 }
@@ -70,6 +69,10 @@ impl std::fmt::Display for RpcError {
                     &self_ty_str["type(".len()..(self_ty_str.len() - 1)]
                 )
             }
+            CtorIsDefault(..) => write!(f, "Service constructor cannot be the default function."),
+            DefaultFnHasArg(..) => {
+                write!(f, "Default function cannot take arguments after `Context`.")
+            }
             HasAbi(..) => write!(f, "RPC method cannot declare an ABI."),
             HasAsync(..) => write!(f, "RPC method cannot be async."),
             HasGenerics(..) => write!(f, "RPC definition cannot have generic parameters."),
@@ -87,7 +90,6 @@ impl std::fmt::Display for RpcError {
                 f,
                 "RPC method must take `&self` or `&mut self` as its first argument."
             ),
-            MissingOutput(..) => write!(f, "RPC method must return `Result`."),
             Unsafe(..) => write!(f, "RPC method cannot be unsafe."),
         }
     }
@@ -101,11 +103,12 @@ impl RpcError {
             | BadArgTy { span, .. }
             | BadStruct(span)
             | BadCtorReturn { span, .. }
+            | CtorIsDefault(span)
+            | DefaultFnHasArg(span)
             | HasAbi(span)
             | HasAsync(span)
             | HasGenerics(span)
             | MissingContext { span, .. }
-            | MissingOutput(span)
             | MissingSelf(span)
             | Unsafe(span) => *span,
         }

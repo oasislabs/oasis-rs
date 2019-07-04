@@ -92,3 +92,40 @@ impl Context {
         self
     }
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum RpcError<T> {
+    /// There was no service at the requested address.
+    NoAccount,
+
+    /// The caller does not have enough balance to cover the sent value.
+    InsufficientFunds,
+
+    /// The caller did not provide enough gas to complete the transaction.
+    InsufficientGas,
+
+    InvalidInput,
+
+    InvalidOutput(Vec<u8>),
+
+    /// The application returned an error.
+    Exec(T),
+}
+
+impl<T: serde::de::DeserializeOwned> From<crate::backend::Error> for RpcError<T> {
+    fn from(err: crate::backend::Error) -> Self {
+        use crate::backend::Error as BackendError;
+        match err {
+            BackendError::Unknown => panic!("Unknown error occured."),
+            BackendError::InsufficientFunds => RpcError::InsufficientFunds,
+            BackendError::InvalidInput => RpcError::InvalidInput,
+            BackendError::NoAccount => RpcError::NoAccount,
+            BackendError::Execution { payload, .. } => {
+                RpcError::Exec(match serde_cbor::from_slice::<T>(&payload) {
+                    Ok(t) => t,
+                    Err(_) => return RpcError::InvalidOutput(payload),
+                })
+            }
+        }
+    }
+}

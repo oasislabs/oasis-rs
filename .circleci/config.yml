@@ -14,7 +14,7 @@ jobs:
           command: cargo fmt -- --check
       - run:
           name: Clippy
-          command: cargo clippy -- -D clippy::all
+          command: cargo clippy --all-features -- -D clippy::all
       - run:
           name: Install mantle-build
           command: cargo install --path mantle-build
@@ -141,8 +141,30 @@ jobs:
             - mantle-build-{{ .Revision }}
       - run:
           name: Test IDL generation
-          working_directory: tests/idl_gen
-          command: ./run_tests.sh
+          working_directory: tests/idl-gen
+          command: cargo build --target wasm32-wasi --bins && cargo test --lib
+
+  test_imports:
+    docker:
+      - image: oasislabs/rust:latest
+        environment:
+          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
+          MANTLE_BLOCKCHAIN_NAME: oasis
+    resource_class: xlarge
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - mantle-build-{{ .Revision }}
+      - run:
+          name: Build dependency
+          working_directory: tests/xcc-b
+          command: cargo build --target wasm32-wasi --bins
+      - run:
+          name: Build toplevel
+          working_directory: tests/xcc-a
+          command: cargo build --target wasm32-wasi --bins && cargo test --lib
 
 workflows:
   version: 2
@@ -156,6 +178,9 @@ workflows:
           requires:
             - init
       - test_idl:
+          requires:
+            - init
+      - test_imports:
           requires:
             - init
       - test_ballot_example:

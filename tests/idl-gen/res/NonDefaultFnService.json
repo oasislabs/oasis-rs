@@ -1,0 +1,16 @@
+{
+  "name": "NonDefaultFnService",
+  "namespace": "non_default_fn",
+  "version": "0.1.0",
+  "constructor": {
+    "inputs": [],
+    "error": null
+  },
+  "functions": [
+    {
+      "name": "default",
+      "mutability": "immutable"
+    }
+  ],
+  "mantle_build_version": "0.2.2"
+}

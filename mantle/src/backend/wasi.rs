@@ -10,7 +10,7 @@ use blockchain_traits::Address as _;
 use libc::{__wasi_errno_t, __wasi_fd_t};
 use mantle_types::Address;
 
-use crate::Error;
+use super::Error;
 
 macro_rules! chain_dir {
     ($($ext:literal),*) => {
@@ -86,18 +86,22 @@ pub fn transact(callee: &Address, value: u64, input: &[u8]) -> Result<Vec<u8>, E
             &mut fd as *mut _,
         )
     };
+    let mut f_out = unsafe { fs::File::from_raw_fd(fd) };
+    let mut out = Vec::new();
+    f_out
+        .read_to_end(&mut out)
+        .unwrap_or_else(|err| panic!(err));
     match errno {
-        libc::__WASI_ESUCCESS => (),
+        libc::__WASI_ESUCCESS => Ok(out),
         libc::__WASI_EFAULT | libc::__WASI_EINVAL => return Err(Error::InvalidInput),
         libc::__WASI_ENOENT => return Err(Error::NoAccount),
         libc::__WASI_EDQUOT => return Err(Error::InsufficientFunds),
-        _ => return Err(Error::Unknown),
-    };
-    let mut f_out = unsafe { fs::File::from_raw_fd(fd) };
-    let mut out = Vec::new();
-    match f_out.read_to_end(&mut out) {
-        Ok(_) => Ok(out),
-        Err(err) => panic!(err), // TODO: how to interpret io::Error
+        _ => {
+            return Err(Error::Execution {
+                code: errno as u32,
+                payload: out,
+            })
+        }
     }
 }
 

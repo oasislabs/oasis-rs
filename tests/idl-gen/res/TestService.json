@@ -1,12 +1,7 @@
 {
   "name": "TestService",
   "namespace": "types",
-  "imports": [
-    {
-      "name": "testlib",
-      "version": "0.1.0"
-    }
-  ],
+  "version": "0.1.0",
   "type_defs": [
     {
       "type": "enum",
@@ -110,6 +105,30 @@
       ]
     },
     {
+      "type": "struct",
+      "name": "TupleStruct",
+      "fields": [
+        {
+          "name": "0",
+          "type": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "1",
+          "type": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "2",
+          "type": {
+            "type": "i32"
+          }
+        }
+      ]
+    },
+    {
       "type": "event",
       "name": "TestEvent2",
       "fields": [
@@ -131,12 +150,16 @@
   "constructor": {
     "inputs": [
       {
-        "name": "name",
+        "name": "tuple_struct",
         "type": {
-          "type": "string"
+          "type": "defined",
+          "params": {
+            "type": "TupleStruct"
+          }
         }
       }
-    ]
+    ],
+    "error": null
   },
   "functions": [
     {
@@ -163,10 +186,19 @@
         }
       ],
       "output": {
-        "type": "set",
-        "params": {
-          "type": "address"
-        }
+        "type": "result",
+        "params": [
+          {
+            "type": "set",
+            "params": {
+              "type": "address"
+            }
+          },
+          {
+            "type": "tuple",
+            "params": []
+          }
+        ]
       }
     },
     {
@@ -202,50 +234,40 @@
             }
           }
         }
-      ]
+      ],
+      "output": {
+        "type": "result",
+        "params": [
+          {
+            "type": "bytes"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      }
     },
     {
       "name": "void",
       "mutability": "immutable"
     },
     {
-      "name": "import",
+      "name": "the_default_fn",
       "mutability": "mutable",
-      "inputs": [
-        {
-          "name": "imported",
-          "type": {
-            "type": "defined",
-            "params": {
-              "namespace": "testlib",
-              "type": "RpcType"
-            }
-          }
-        }
-      ],
       "output": {
-        "type": "tuple",
+        "type": "result",
         "params": [
           {
-            "type": "bool"
+            "type": "optional",
+            "params": {
+              "type": "u64"
+            }
           },
           {
-            "type": "i8"
+            "type": "string"
           }
         ]
       }
-    },
-    {
-      "name": "default",
-      "mutability": "mutable",
-      "inputs": [
-        {
-          "name": "nondefault_arg",
-          "type": {
-            "type": "u32"
-          }
-        }
-      ]
     }
   ],
   "mantle_build_version": "0.2.2"

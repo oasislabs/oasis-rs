@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use mantle::{Address, Context, Event, Service};
 
 pub type UserId = Address;
-pub type PostId = usize;
+pub type PostId = u32;
 
 #[derive(Service)]
 pub struct MessageBoard {
@@ -154,9 +154,12 @@ impl MessageBoard {
         if !self.accounts.contains_key(&ctx.sender()) {
             return Err(Error::PermissionDenied);
         }
-        let start = range.0.unwrap_or_default();
+        let start = range.0.unwrap_or_default() as usize;
         let stop = std::cmp::min(
-            range.1.unwrap_or_else(|| self.posts.len()),
+            range
+                .1
+                .map(|s| s as usize)
+                .unwrap_or_else(|| self.posts.len()),
             self.posts.len(),
         );
         Ok(self
@@ -171,10 +174,10 @@ impl MessageBoard {
         if !self.accounts.contains_key(&ctx.sender()) {
             return Err(Error::PermissionDenied);
         }
-        if post_id >= self.posts.len() {
+        if post_id as usize >= self.posts.len() {
             return Err(Error::InvalidPostId);
         }
-        self.posts[post_id].comments.push(Message {
+        self.posts[post_id as usize].comments.push(Message {
             from: ctx.sender(),
             text,
         });

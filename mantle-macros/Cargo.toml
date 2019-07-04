@@ -1,13 +1,13 @@
 [package]
 name = "mantle-macros"
-version = "0.2.0"
+version = "0.2.1"
 license = "Apache-2.0"
 description = "Macros used internally by the Mantle framework."
 edition = "2018"
 repository = "https://github.com/oasislabs/mantle.git"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 readme = "README.md"
-keywords = ["mantle", "blockchain", "dsl"]
+keywords = ["mantle", "blockchain"]
 
 [dependencies]
 proc-macro2 = "0.4"

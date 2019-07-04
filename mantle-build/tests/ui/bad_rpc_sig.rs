@@ -4,17 +4,12 @@ use mantle::Context;
 pub struct Counter(u32);
 
 impl Counter {
-    pub fn new(ctx: &Context) -> Result<Self, ()> {
-        Ok(Self(42))
+    pub fn new(ctx: &Context) -> Self {
+        Self(Default::default())
     }
 
-    pub unsafe extern "C" fn wtf<T: std::fmt::Debug>(
-        &self,
-        ctx: &Context,
-        val: T,
-    ) -> Result<(), ()> {
+    pub unsafe extern "C" fn wtf<T: std::fmt::Debug>(&self, ctx: &Context, val: T) {
         println!("val: {:?}", val);
-        Ok(())
     }
 }
 

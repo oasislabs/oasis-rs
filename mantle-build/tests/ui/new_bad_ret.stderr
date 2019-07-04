@@ -1,8 +1,8 @@
 error: Service constructor must return `Self` (aka `Counter`)
  --> $DIR/new_bad_ret.rs:7:52
   |
-7 |     pub fn new(ctx: &Context, start_count: u32) -> Self {
-  |                                                    ^^^^
+7 |     pub fn new(ctx: &Context, start_count: u32) -> () {
+  |                                                    ^^
 
 error: aborting due to previous error
 

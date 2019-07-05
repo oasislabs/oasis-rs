@@ -1,0 +1,5 @@
+[book]
+authors = ["Nick Hynes"]
+multilingual = false
+src = "src"
+title = "The Mantle Book"

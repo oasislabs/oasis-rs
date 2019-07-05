@@ -192,3 +192,13 @@ workflows:
       - test_auctions_example:
           requires:
             - init
+  nightly:
+    triggers:
+      - schedule:
+        cron: "0 * * * *"
+        filters:
+          branches:
+            only:
+              -master
+    jobs:
+      - build-mantle-build

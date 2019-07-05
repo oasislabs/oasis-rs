@@ -5,11 +5,11 @@ RUN apt-get update && apt-get -qq install \
     git \
     build-essential \
     libssl-dev \
-    pkg-config
+    pkg-config \
+    awscli
 
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly && \
     . /root/.cargo/env && \
     rustup component add rustfmt clippy && \
-    rustup target add wasm32-unknown-unknown && \
-    rustup target add wasm32-wasi && \
+    rustup target add wasm32-wasi wasm32-unknown-unknown && \
     echo "source ~/.cargo/env" >> ~/.bashrc

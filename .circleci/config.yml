@@ -42,6 +42,19 @@ commands:
           working_directory: examples/<< parameters.example >>
           command: cargo test
 
+  update_toolstate:
+    steps:
+      - checkout
+      - run:
+          name: Build mantle-build
+          command: cargo build --release -p mantle-build
+      - run:
+          name: Push to S3 bucket
+          command: |
+            rustc_version=$(rustc --version | cut -d'(' -f 2 | cut -d')' -f 1 | tr ' ' '_')
+            llvm_target=$(rustc --print sysroot | cut -d'-' -f2-)
+            aws s3 cp target/release/mantle-build s3://mantle-framework/$rustc_version/$llvm_target/mantle-build
+
   docker_push:
     parameters:
       tag:
@@ -169,19 +182,26 @@ jobs:
       - docker_push:
           tag: pending
 
-  update_toolstate:
+  update_linux_toolstate:
     executor: rust_pending
     steps:
+      - update_toolstate
+
+  update_macos_toolstate:
+    environment:
+      PATH: /Users/distiller/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      LD_LIBRARY_PATH: /Users/distiller/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
+    macos:
+      xcode: "10.0.0"
+    steps:
+      - run:
+          name: Install Rust
+          command: curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
+      - run:
+          name: Install AWS CLI
+          command: pip install awscli
       - checkout
-      - run:
-          name: Build mantle-build
-          command: cargo build --release -p mantle-build
-      - run:
-          name: Push to S3 bucket
-          command: |
-            rustc_version=$(rustc --version | grep -Po '(?<=\().*?(?=\))' | tr ' ' '_')
-            llvm_target=$(rustc -Z unstable-options --print target-spec-json | jq -r '."llvm-target"')
-            aws s3 cp target/release/mantle-build s3://mantle-framework/$rustc_version/$llvm_target/mantle-build
+      - update_toolstate
 
   docker_publish:
     executor: docker_builder
@@ -244,9 +264,10 @@ workflows:
                 - master
     jobs:
       - docker_build
-      - update_toolstate:
+      - update_linux_toolstate:
           requires:
             - docker_build
+      - update_macos_toolstate
       - docker_publish:
           requires:
-            - update_toolstate
+            - update_linux_toolstate

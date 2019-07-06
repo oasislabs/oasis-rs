@@ -1,11 +1,13 @@
 FROM ubuntu:18.04
 
-RUN apt-get update && apt-get -qq install \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq install \
     curl \
     git \
     build-essential \
     libssl-dev \
     pkg-config \
+    python3 \
+    python3-pip \
     awscli
 
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly && \

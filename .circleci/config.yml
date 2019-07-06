@@ -150,6 +150,16 @@ jobs:
           working_directory: tests/xcc-a
           command: cargo build --target wasm32-wasi --bins && cargo test --lib
 
+  book:
+    executor: rust
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Build book
+          working_directory: doc
+          command: mdbook build
+
   docker_build:
     executor: docker_builder
     steps:
@@ -203,7 +213,7 @@ jobs:
 workflows:
   version: 2
 
-  test:
+  build_and_test:
     jobs:
       - init
       - unit_test:
@@ -233,6 +243,7 @@ workflows:
       - test_helloworld_example:
           requires:
             - init
+      - book
 
   nightly:
     triggers:

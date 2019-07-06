@@ -193,7 +193,6 @@ jobs:
       LD_LIBRARY_PATH: /Users/distiller/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
     macos:
       xcode: "10.0.0"
-    resource_class: large
     steps:
       - run:
           name: Install Rust
@@ -224,45 +223,45 @@ jobs:
 workflows:
   version: 2
 
-  # test:
-  #   jobs:
-  #     - init
-  #     - unit_test:
-  #         requires:
-  #           - init
-  #     - wasm_build:
-  #         requires:
-  #           - init
-  #     - test_idl:
-  #         requires:
-  #           - init
-  #     - test_imports:
-  #         requires:
-  #           - init
-  #     - test_ballot_example:
-  #         requires:
-  #           - init
-  #     - test_messaging_example:
-  #         requires:
-  #           - init
-  #     - test_auctions_example:
-  #         requires:
-  #           - init
-  #     - test_erc20_example:
-  #         requires:
-  #           - init
-  #     - test_helloworld_example:
-  #         requires:
-  #           - init
-
   test:
-    # triggers:
-    #   - schedule:
-    #       cron: "0 14 * * *"
-    #       filters:
-    #         branches:
-    #           only:
-    #             - master
+    jobs:
+      - init
+      - unit_test:
+          requires:
+            - init
+      - wasm_build:
+          requires:
+            - init
+      - test_idl:
+          requires:
+            - init
+      - test_imports:
+          requires:
+            - init
+      - test_ballot_example:
+          requires:
+            - init
+      - test_messaging_example:
+          requires:
+            - init
+      - test_auctions_example:
+          requires:
+            - init
+      - test_erc20_example:
+          requires:
+            - init
+      - test_helloworld_example:
+          requires:
+            - init
+
+  nightly:
+    triggers:
+      - schedule:
+          cron: "0 14 * * *"
+          filters:
+            branches:
+              only:
+                - master
     jobs:
       - docker_build
       - update_linux_toolstate:

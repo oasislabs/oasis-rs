@@ -1,12 +1,62 @@
-version: 2
+version: 2.1
+
+
+executors:
+  rust:
+    environment:
+      PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
+    docker:
+      - image: oasislabs/rust:latest
+    resource_class: xlarge
+
+  rust_pending:
+    environment:
+      PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
+    docker:
+      - image: oasislabs/rust:pending
+    resource_class: xlarge
+
+  docker_builder:
+    environment:
+      IMAGE_NAME: oasislabs/rust
+    docker:
+      - image: circleci/buildpack-deps:bionic
+
+
+commands:
+  build_test_example:
+    parameters:
+      example:
+        type: string
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - mantle-build-{{ .Revision }}
+      - run:
+          working_directory: examples/<< parameters.example >>
+          command: cargo build --target wasm32-wasi
+      - run:
+          working_directory: examples/<< parameters.example >>
+          command: cargo test
+
+  docker_push:
+    parameters:
+      tag:
+        type: string
+    steps:
+      - run:
+          name: Push to Docker Hub
+          command: |
+            echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            docker push oasislabs/rust:<< parameters.tag >>
+
 
 jobs:
   init:
-    docker:
-      - image: oasislabs/rust:latest
-        environment:
-          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
+    executor: rust
     steps:
       - checkout
       - run:
@@ -24,12 +74,7 @@ jobs:
             - /root/.cargo/bin/mantle-build
 
   wasm_build:
-    docker:
-      - image: oasislabs/rust:latest
-        environment:
-          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
-    resource_class: xlarge
+    executor: rust
     steps:
       - checkout
       - run:
@@ -37,12 +82,7 @@ jobs:
           command: cargo build --target wasm32-unknown-unknown --all-features -p memchain -p bcfs
 
   unit_test:
-    docker:
-      - image: oasislabs/rust:latest
-        environment:
-          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
-          MANTLE_BLOCKCHAIN_NAME: oasis
+    executor: rust
     steps:
       - checkout
       - restore_cache:
@@ -53,87 +93,37 @@ jobs:
           command: cargo test
 
   test_ballot_example:
-    docker:
-      - image: oasislabs/rust:latest
-        environment:
-          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
-          MANTLE_BLOCKCHAIN_NAME: oasis
-    resource_class: xlarge
+    executor: rust
     steps:
-      - checkout
-      - restore_cache:
-          keys:
-            - mantle-build-{{ .Revision }}
-      - run:
-          name: Build ballot example
-          working_directory: examples/ballot
-          command: cargo build --target wasm32-wasi
-      - run:
-          name: Test ballot example
-          working_directory: examples/ballot
-          command: cargo test
+      - build_test_example:
+          example: ballot
 
   test_messaging_example:
-    docker:
-      - image: oasislabs/rust:latest
-        environment:
-          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
-          MANTLE_BLOCKCHAIN_NAME: oasis
-    resource_class: xlarge
+    executor: rust
     steps:
-      - checkout
-      - restore_cache:
-          keys:
-            - mantle-build-{{ .Revision }}
-      - run:
-          name: Build messaging example
-          working_directory: examples/messaging
-          command: cargo build --target wasm32-wasi
-      - run:
-          name: Test messaging example
-          working_directory: examples/messaging
-          command: cargo test
+      - build_test_example:
+          example: messaging
 
   test_auctions_example:
-    docker:
-      - image: oasislabs/rust:latest
-        environment:
-          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
-          MANTLE_BLOCKCHAIN_NAME: oasis
-    resource_class: xlarge
+    executor: rust
     steps:
-      - checkout
-      - restore_cache:
-          keys:
-            - mantle-build-{{ .Revision }}
-      - run:
-          name: Build auctions example
-          working_directory: examples/sealed-auctions
-          command: cargo build --target wasm32-wasi
-      - run:
-          name: Test auctions example
-          working_directory: examples/sealed-auctions
-          command: cargo test
-      - run:
-          name: Test ERC20 example
-          working_directory: examples/erc20
-          command: cargo test --tests -- --test-threads 1
-      - run:
-          name: Test HelloWorld example
-          working_directory: examples/hello-world
-          command: cargo test
+      - build_test_example:
+          example: sealed-auctions
+
+  test_erc20_example:
+    executor: rust
+    steps:
+      - build_test_example:
+          example: erc20
+
+  test_helloworld_example:
+    executor: rust
+    steps:
+      - build_test_example:
+          example: hello-world
 
   test_idl:
-    docker:
-      - image: oasislabs/rust:latest
-        environment:
-          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
-          MANTLE_BLOCKCHAIN_NAME: oasis
-    resource_class: xlarge
+    executor: rust
     steps:
       - checkout
       - restore_cache:
@@ -145,13 +135,7 @@ jobs:
           command: cargo build --target wasm32-wasi --bins && cargo test --lib
 
   test_imports:
-    docker:
-      - image: oasislabs/rust:latest
-        environment:
-          PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-          LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
-          MANTLE_BLOCKCHAIN_NAME: oasis
-    resource_class: xlarge
+    executor: rust
     steps:
       - checkout
       - restore_cache:
@@ -166,8 +150,59 @@ jobs:
           working_directory: tests/xcc-a
           command: cargo build --target wasm32-wasi --bins && cargo test --lib
 
+  docker_build:
+    executor: docker_builder
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Build Docker image
+          command: docker build -t $IMAGE_NAME:pending .
+          working_directory: .circleci/docker
+      - run:
+          name: Archive Docker image
+          command: docker save -o image.tar $IMAGE_NAME
+      - persist_to_workspace:
+          root: .
+          paths:
+            - ./image.tar
+      - docker_push:
+          tag: pending
+
+  update_toolstate:
+    executor: rust_pending
+    steps:
+      - checkout
+      - run:
+          name: Build mantle-build
+          command: cargo build --release -p mantle-build
+      - run:
+          name: Push to S3 bucket
+          command: |
+            rustc_version=$(rustc --version | grep -Po '(?<=\().*?(?=\))' | tr ' ' '_')
+            llvm_target=$(rustc -Z unstable-options --print target-spec-json | jq -r '."llvm-target"')
+            aws s3 cp target/release/mantle-build s3://mantle-framework/$rustc_version/$llvm_target/mantle-build
+
+  docker_publish:
+    executor: docker_builder
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp/workspace
+      - setup_remote_docker
+      - run:
+          name: Load archived Docker image
+          command: docker load -i /tmp/workspace/image.tar
+      - run:
+          name: Tag image with latest
+          command: docker tag $IMAGE_NAME:pending $IMAGE_NAME:latest
+      - docker_push:
+          tag: latest
+
+
 workflows:
   version: 2
+
   test:
     jobs:
       - init
@@ -192,3 +227,26 @@ workflows:
       - test_auctions_example:
           requires:
             - init
+      - test_erc20_example:
+          requires:
+            - init
+      - test_helloworld_example:
+          requires:
+            - init
+
+  nightly:
+    triggers:
+      - schedule:
+          cron: "0 14 * * *"
+          filters:
+            branches:
+              only:
+                - master
+    jobs:
+      - docker_build
+      - update_toolstate:
+          requires:
+            - docker_build
+      - docker_publish:
+          requires:
+            - update_toolstate

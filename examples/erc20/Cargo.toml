@@ -1,5 +1,5 @@
 [package]
-name = "erc20token"
+name = "erc20"
 version = "0.1.0"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"

@@ -26,21 +26,25 @@ executors:
 
 
 commands:
-  build_test_example:
-    parameters:
-      example:
-        type: string
+  restore_mantle_build:
     steps:
-      - checkout
+      - checksum_mantle_build
       - restore_cache:
           keys:
-            - mantle-build-{{ .Revision }}
+            - mantle-build-{{ checksum "mantle-build.sums" }}
+      - install_mantle_build
+
+  checksum_mantle_build:
+    steps:
       - run:
-          working_directory: examples/<< parameters.example >>
-          command: cargo build --target wasm32-wasi
+          name: Checksum mantle-build
+          command: find mantle-build/src -type f -name "*.rs" | sort | xargs md5sum -t mantle-build/Cargo.toml > mantle-build.sums
+
+  install_mantle_build:
+    steps:
       - run:
-          working_directory: examples/<< parameters.example >>
-          command: cargo test
+          name: Install mantle-build
+          command: cp target/debug/mantle-build ~/.cargo/bin
 
   update_toolstate:
     steps:
@@ -75,16 +79,28 @@ jobs:
       - run:
           name: Rustfmt
           command: cargo fmt -- --check
+      - restore_mantle_build
+      - run:
+          name: Build mantle-build
+          command: stat target/debug/mantle-build || cargo build -p mantle-build
+      - install_mantle_build
+      - save_cache:
+          key: mantle-build-{{ checksum "mantle-build.sums" }}
+          paths:
+            - target/debug/mantle-build
+      - run:
+          name: Unit test
+          command: cargo test
+
+  clippy:
+    executor: rust
+    resource_class: medium
+    steps:
+      - checkout
       - run:
           name: Clippy
-          command: cargo clippy --all-features -- -D clippy::all
-      - run:
-          name: Install mantle-build
-          command: cargo install --path mantle-build
-      - save_cache:
-          key: mantle-build-{{ .Revision }}
-          paths:
-            - /root/.cargo/bin/mantle-build
+          command: |
+            (rustup component add clippy && cargo clippy --all-features -- -D clippy::all) || true
 
   wasm_build:
     executor: rust
@@ -94,54 +110,26 @@ jobs:
           name: Wasm build
           command: cargo build --target wasm32-unknown-unknown --all-features -p memchain -p bcfs
 
-  unit_test:
+  build_standalone_examples:
     executor: rust
     steps:
       - checkout
-      - restore_cache:
-          keys:
-            - mantle-build-{{ .Revision }}
+      - restore_mantle_build
       - run:
-          name: Unit tests
-          command: cargo test
-
-  test_ballot_example:
-    executor: rust
-    steps:
-      - build_test_example:
-          example: ballot
-
-  test_messaging_example:
-    executor: rust
-    steps:
-      - build_test_example:
-          example: messaging
-
-  test_auctions_example:
-    executor: rust
-    steps:
-      - build_test_example:
-          example: sealed-auctions
-
-  test_erc20_example:
-    executor: rust
-    steps:
-      - build_test_example:
-          example: erc20
-
-  test_helloworld_example:
-    executor: rust
-    steps:
-      - build_test_example:
-          example: hello-world
+          name: cargo build
+          command: |
+            RUSTC_WRAPPER=mantle-build cargo build --target=wasm32-wasi \
+              -p ballot \
+              -p erc20 \
+              -p hello-world \
+              -p messaging \
+              -p sealed-auctions
 
   test_idl:
     executor: rust
     steps:
       - checkout
-      - restore_cache:
-          keys:
-            - mantle-build-{{ .Revision }}
+      - restore_mantle_build
       - run:
           name: Test IDL generation
           working_directory: tests/idl-gen
@@ -151,9 +139,7 @@ jobs:
     executor: rust
     steps:
       - checkout
-      - restore_cache:
-          keys:
-            - mantle-build-{{ .Revision }}
+      - restore_mantle_build
       - run:
           name: Build dependency
           working_directory: tests/xcc-b
@@ -226,31 +212,15 @@ workflows:
   test:
     jobs:
       - init
-      - unit_test:
-          requires:
-            - init
-      - wasm_build:
-          requires:
-            - init
+      - clippy
+      - wasm_build
       - test_idl:
           requires:
             - init
       - test_imports:
           requires:
             - init
-      - test_ballot_example:
-          requires:
-            - init
-      - test_messaging_example:
-          requires:
-            - init
-      - test_auctions_example:
-          requires:
-            - init
-      - test_erc20_example:
-          requires:
-            - init
-      - test_helloworld_example:
+      - build_standalone_examples:
           requires:
             - init
 

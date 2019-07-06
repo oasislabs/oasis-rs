@@ -12,6 +12,6 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq install \
 
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly && \
     . /root/.cargo/env && \
-    rustup component add rustfmt clippy && \
+    rustup component add rustfmt && \
     rustup target add wasm32-wasi wasm32-unknown-unknown && \
     echo "source ~/.cargo/env" >> ~/.bashrc

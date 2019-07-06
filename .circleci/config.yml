@@ -23,7 +23,6 @@ executors:
       IMAGE_NAME: oasislabs/rust
     docker:
       - image: circleci/buildpack-deps:bionic
-    working_directory: .circleci/docker
 
 
 commands:
@@ -51,7 +50,7 @@ commands:
       - run:
           name: Push to Docker Hub
           command: |
-            echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
             docker push oasislabs/rust:<< parameters.tag >>
 
 
@@ -158,7 +157,8 @@ jobs:
       - setup_remote_docker
       - run:
           name: Build Docker image
-          command: docker build -t $IMAGE_NAME:latest .
+          command: docker build -t $IMAGE_NAME:pending .
+          working_directory: .circleci/docker
       - run:
           name: Archive Docker image
           command: docker save -o image.tar $IMAGE_NAME
@@ -178,65 +178,66 @@ jobs:
           command: cargo build --release -p mantle-build
       - run:
           name: Push to S3 bucket
-          command: |
-            mkdir -p ~/.aws
-            printf "[default]\nrole_arn = ${AWS_STAGING_ROLE_ARN}\ncredential_source = Environment\n" > ~/.aws/config
-            aws s3 cp target/release/mantle-build s3://mantle-framework/mantle-build
+          command: aws s3 cp target/release/mantle-build s3://mantle-framework/mantle-build
 
   docker_publish:
     executor: docker_builder
     steps:
+      - checkout
       - attach_workspace:
           at: /tmp/workspace
       - setup_remote_docker
       - run:
           name: Load archived Docker image
           command: docker load -i /tmp/workspace/image.tar
+      - run:
+          name: Tag image with latest
+          command: docker tag $IMAGE_NAME:pending $IMAGE_NAME:latest
       - docker_push:
           tag: latest
 
 
 workflows:
   version: 2
-  test:
-    jobs:
-      - init
-      - unit_test:
-          requires:
-            - init
-      - wasm_build:
-          requires:
-            - init
-      - test_idl:
-          requires:
-            - init
-      - test_imports:
-          requires:
-            - init
-      - test_ballot_example:
-          requires:
-            - init
-      - test_messaging_example:
-          requires:
-            - init
-      - test_auctions_example:
-          requires:
-            - init
-      - test_erc20_example:
-          requires:
-            - init
-      - test_helloworld_example:
-          requires:
-            - init
+  # test:
+  #   jobs:
+  #     - init
+  #     - unit_test:
+  #         requires:
+  #           - init
+  #     - wasm_build:
+  #         requires:
+  #           - init
+  #     - test_idl:
+  #         requires:
+  #           - init
+  #     - test_imports:
+  #         requires:
+  #           - init
+  #     - test_ballot_example:
+  #         requires:
+  #           - init
+  #     - test_messaging_example:
+  #         requires:
+  #           - init
+  #     - test_auctions_example:
+  #         requires:
+  #           - init
+  #     - test_erc20_example:
+  #         requires:
+  #           - init
+  #     - test_helloworld_example:
+  #         requires:
+  #           - init
 
-  nightly:
-    triggers:
-      - schedule:
-          cron: "0 14 * * *"
-          filters:
-            branches:
-              only:
-                - master
+  test:
+    # triggers:
+    #   - schedule:
+    #       cron: "0 14 * * *"
+    #       filters:
+    #         branches:
+    #           only:
+    #             - master
     jobs:
       - docker_build
       - update_toolstate:

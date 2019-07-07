@@ -53,11 +53,22 @@ commands:
           name: Build mantle-build
           command: cargo build --release -p mantle-build
       - run:
+          name: Package mantle-build for rustup
+          command: |
+            bin_dir=mantle-build/mantle-build/bin
+            mkdir -p $bin_dir
+            cp target/release/mantle-build $bin_dir
+            echo 'mantle-build' > mantle-build/components
+            echo $(git rev-parse HEAD) > mantle-build/version
+            echo '3' > mantle-build/rust-installer-version
+            echo 'file:bin/mantle-build' > mantle-build/mantle-build/manifest.in
+            tar czf mantle-build.tar.gz mantle-build
+      - run:
           name: Push to S3 bucket
           command: |
             rustc_version=$(rustc --version | cut -d'(' -f 2 | cut -d')' -f 1 | tr ' ' '_')
             llvm_target=$(rustc --print sysroot | cut -d'-' -f2-)
-            aws s3 cp target/release/mantle-build s3://mantle-framework/$rustc_version/$llvm_target/mantle-build
+            aws s3 cp mantle-build.tar.gz s3://mantle-framework/$rustc_version/$llvm_target/mantle-build.tar.gz
 
   docker_push:
     parameters:

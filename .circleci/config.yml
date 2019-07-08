@@ -26,38 +26,54 @@ executors:
 
 
 commands:
+  cache_mantle_build:
+    steps:
+      - checksum_mantle_build
+      - save_cache:
+          key: mantle-build-{{ checksum "mantle-build.sums" }}
+          paths:
+            - ~/.cargo/bin/mantle-build
+
   restore_mantle_build:
     steps:
       - checksum_mantle_build
       - restore_cache:
           keys:
             - mantle-build-{{ checksum "mantle-build.sums" }}
-      - install_mantle_build
 
   checksum_mantle_build:
     steps:
       - run:
           name: Checksum mantle-build
-          command: find mantle-build/src -type f -name "*.rs" | sort | xargs md5sum -t mantle-build/Cargo.toml > mantle-build.sums
-
-  install_mantle_build:
-    steps:
-      - run:
-          name: Install mantle-build
-          command: cp target/debug/mantle-build ~/.cargo/bin
+          command: |
+            find mantle-build/src -type f -name "*.rs" | \
+              sort | xargs md5sum mantle-build/Cargo.toml > mantle-build.sums
+            echo $(rustc --version) >> mantle-build.sums
 
   update_toolstate:
     steps:
       - checkout
       - run:
-          name: Build mantle-build
-          command: cargo build --release -p mantle-build
+          name: Install mantle-build
+          command: |
+            cargo build --release -p mantle-build && cp target/release/mantle-build ~/.cargo/bin
+      - run:
+          name: Package mantle-build for rustup
+          command: |
+            bin_dir=mantle-build/mantle-build/bin
+            mkdir -p $bin_dir
+            cp target/release/mantle-build $bin_dir
+            echo 'mantle-build' > mantle-build/components
+            echo $(git rev-parse HEAD) > mantle-build/version
+            echo '3' > mantle-build/rust-installer-version
+            echo 'file:bin/mantle-build' > mantle-build/mantle-build/manifest.in
+            tar czf mantle-build.tar.gz mantle-build
       - run:
           name: Push to S3 bucket
           command: |
             rustc_version=$(rustc --version | cut -d'(' -f 2 | cut -d')' -f 1 | tr ' ' '_')
             llvm_target=$(rustc --print sysroot | cut -d'-' -f2-)
-            aws s3 cp target/release/mantle-build s3://mantle-framework/$rustc_version/$llvm_target/mantle-build
+            aws s3 cp mantle-build.tar.gz s3://mantle-framework/$rustc_version/$llvm_target/mantle-build.tar.gz
 
   docker_push:
     parameters:
@@ -82,12 +98,10 @@ jobs:
       - restore_mantle_build
       - run:
           name: Build mantle-build
-          command: stat target/debug/mantle-build || cargo build -p mantle-build
-      - install_mantle_build
-      - save_cache:
-          key: mantle-build-{{ checksum "mantle-build.sums" }}
-          paths:
-            - target/debug/mantle-build
+          command: |
+            which mantle-build || \
+              (cargo build -p mantle-build && cp target/debug/mantle-build ~/.cargo/bin)
+      - cache_mantle_build
       - run:
           name: Unit test
           command: cargo test
@@ -100,7 +114,8 @@ jobs:
       - run:
           name: Clippy
           command: |
-            (rustup component add clippy && cargo clippy --all-features -- -D clippy::all) || true
+            rustup component add clippy || exit 0
+            cargo clippy --all-features -- -D clippy::all
 
   wasm_build:
     executor: rust
@@ -172,6 +187,7 @@ jobs:
     executor: rust_pending
     steps:
       - update_toolstate
+      - cache_mantle_build
 
   update_macos_toolstate:
     environment:

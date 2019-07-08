@@ -68,7 +68,9 @@ fn generate_rpc_dispatcher(
         .map(|rpc| {
             let (arg_name_csv, arg_ty_csv) = args_csv(&rpc.sig.decl.inputs[2..]);
 
-            rpc_payload_variants.push(format!("{}({})", rpc.name, arg_ty_csv));
+            // The double parens are necessary so that serde treats newtypes a length-1 sequence.
+            // Otherwise the client must pass in a scalar instead of [val], which is a bad UI.
+            rpc_payload_variants.push(format!("{}(({}))", rpc.name, arg_ty_csv));
 
             if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
                 any_rpc_returns_result = true;
@@ -140,7 +142,7 @@ fn generate_rpc_dispatcher(
 
 fn gen_result_dispatch(name: Symbol, arg_name_csv: impl AsRef<str>) -> String {
     format!(
-        r#"RpcPayload::{name}({args}) => match service.{name}(&ctx, {args}) {{
+        r#"RpcPayload::{name}(({args})) => match service.{name}(&ctx, {args}) {{
             Ok(output) => Ok(mantle::reexports::serde_cbor::to_vec(&output).unwrap()),
             Err(err) => Err(mantle::reexports::serde_cbor::to_vec(&err).unwrap()),
         }}"#,
@@ -151,7 +153,7 @@ fn gen_result_dispatch(name: Symbol, arg_name_csv: impl AsRef<str>) -> String {
 
 fn gen_dispatch(name: Symbol, arg_name_csv: impl AsRef<str>) -> String {
     format!(
-        r#"RpcPayload::{name}({args}) => {{
+        r#"RpcPayload::{name}(({args})) => {{
             Ok(mantle::reexports::serde_cbor::to_vec(&service.{name}(&ctx, {args})).unwrap())
         }}"#,
         name = name,
@@ -164,7 +166,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
 
     let ctor_payload_unpack = if ctor.decl.inputs.len() > 1 {
         format!(
-            "let CtorPayload({}) =
+            "let CtorPayload(({})) =
                     mantle::reexports::serde_cbor::from_slice(&mantle::backend::input()).unwrap();",
             arg_names
         )
@@ -203,7 +205,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
 
                 #[derive(Serialize, Deserialize)]
                 #[allow(non_camel_case_types)]
-                struct CtorPayload({ctor_payload_types});
+                struct CtorPayload(({ctor_payload_types}));
                 let ctx = mantle::Context::default(); // TODO(#33)
                 {ctor_payload_unpack}
                 let mut service = {ctor_stmt};
@@ -250,6 +252,7 @@ fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
 fn args_csv(args: &[Arg]) -> (String, String) {
     args.iter()
         .map(|arg| {
+            // The trailing commas are required for tupleizing newtype variants.
             (
                 pprust::ident_to_string(match arg.pat.node {
                     syntax::ast::PatKind::Ident(_, ident, _) => ident,

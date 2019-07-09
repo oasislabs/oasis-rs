@@ -321,6 +321,15 @@ testcase!(
 );
 
 testcase!(
+    // 1. Open two fds pointing to a single file--one absolute, one relative
+    // 2. Write "helloworld" into the file through the abs fd
+    // 3. Write "!" into the file through the rel fd
+    // 4. Flush the abs fd. The file now contains "helloworld".
+    // 5. Read from the rel fd. It has an offset of 1 and will pull in "elloworld".
+    // 6. Flush the rel fd. The file now (still) contains "helloworld".
+    //    NB: This differs from POSIX which would maintain a separate write buffer
+    //        In this context, it would incur undue overhead.
+    // 7. Seek to beginning using abs fd and read file. Should be "!elloworld".
     fn read_write_aliased(ptx: &mut dyn PendingTransaction) -> u16 {
         let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
 
@@ -368,7 +377,7 @@ testcase!(
         assert_eq!(
             bcfs.write_vectored(
                 ptx,
-                rel_fd, // NB: absolute path fd
+                rel_fd, // NB: relative path fd
                 &[IoSlice::new(b"!")]
             ),
             Ok(rel_seek)
@@ -387,6 +396,24 @@ testcase!(
         );
         assert_eq!(std::str::from_utf8(&read_bufs[0]).unwrap(), "ellow");
         assert_eq!(std::str::from_utf8(&read_bufs[1]).unwrap(), "orld\0");
+
+        bcfs.flush(ptx, rel_fd).unwrap();
+
+        bcfs.seek(ptx, abs_fd, 0, Whence::Start).unwrap();
+        assert_eq!(
+            bcfs.read_vectored(
+                ptx,
+                abs_fd, // NB: absolute path fd
+                &mut read_bufs
+                    .iter_mut()
+                    .map(|b| IoSliceMut::new(b))
+                    .collect::<Vec<_>>()
+            ),
+            Ok(nbytes)
+        );
+        assert_eq!(std::str::from_utf8(&read_bufs[0]).unwrap(), "hello");
+        assert_eq!(std::str::from_utf8(&read_bufs[1]).unwrap(), "world");
+
         0
     }
 );

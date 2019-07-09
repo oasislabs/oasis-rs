@@ -141,7 +141,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         fd: Fd,
     ) -> Result<()> {
         self.flush(ptx, fd)?;
-        match self.files.get_mut(u32::from(fd) as usize) {
+        match self.files.get_mut(fd_usize(fd)) {
             Some(f) if f.is_some() => {
                 *f = None;
                 Ok(())
@@ -497,7 +497,6 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         }
     }
 
-    /// Returns (bytes_read, new_offset).
     fn do_pread_vectored(
         &self,
         ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
@@ -533,7 +532,6 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         }
     }
 
-    /// Returns (bytes_written, new_offset).
     fn do_pwrite_vectored(
         &mut self,
         ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
@@ -587,7 +585,10 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
             FileCache::Absent(_) => return,
         };
         match &file.kind {
-            FileKind::Stdin | FileKind::Bytecode { .. } | FileKind::Balance { .. } => (),
+            FileKind::Stdin
+            | FileKind::Bytecode { .. }
+            | FileKind::Balance { .. }
+            | FileKind::Directory { .. } => (),
             FileKind::Stdout => ptx.ret(buf),
             FileKind::Stderr => ptx.err(buf),
             FileKind::Log => {
@@ -598,43 +599,41 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
             FileKind::Regular { key } => {
                 ptx.state_mut().set(&key, &buf);
                 for f in self.files[(HOME_DIR_FILENO as usize + 1)..].iter() {
-                    match f {
-                        Some(f) => match f {
-                            File {
-                                kind: FileKind::Regular { key: f_key },
-                                ..
-                            } if key == f_key && f as *const File<A> != file as *const File<A> => {
-                                let mut f_buf = f.buf.borrow_mut();
-                                let mut cursor = Cursor::new(buf.clone());
-                                cursor
-                                    .seek(match &*f_buf {
-                                        FileCache::Absent(seek_from) => *seek_from,
-                                        FileCache::Present(cursor) => {
-                                            SeekFrom::Start(cursor.position())
-                                        }
-                                    })
-                                    .ok(); // deal with the error when the file is actually read
-                                *f_buf = FileCache::Present(cursor);
-                                f.metadata.replace(None);
-                            }
-                            _ => (),
-                        },
-                        None => (),
+                    if let Some(File {
+                        kind: FileKind::Regular { key: f_key },
+                        ..
+                    }) = f
+                    {
+                        let f = f.as_ref().unwrap();
+                        if key != f_key || f as *const File<A> == file as *const File<A> {
+                            continue;
+                        }
+                        let mut f_buf = f.buf.borrow_mut();
+                        let mut cursor = Cursor::new(buf.clone());
+                        cursor
+                            .seek(match &*f_buf {
+                                FileCache::Absent(seek_from) => *seek_from,
+                                FileCache::Present(cursor) => SeekFrom::Start(cursor.position()),
+                            })
+                            .ok(); // deal with the error when the file is actually read
+                        *f_buf = FileCache::Present(cursor);
+                        f.metadata.replace(None);
                     }
                 }
                 file.dirty.set(false);
             }
-            FileKind::Directory { .. } => (),
         }
     }
 
+    /// Parses a log buffer into (topics, data)
+    /// Format:
+    /// num_topics [topic_len [topic_data; topic_len]; num_topics] data_len [data; data_len]
+    /// num_* are little-endian 32-bit integers.
     fn parse_log(buf: &[u8]) -> Option<(Vec<&[u8]>, &[u8])> {
-        use nom::{length_count, length_data, named, number::complete::le_u32, tuple};
-        named!(parser<&[u8], (Vec<&[u8]>, &[u8])>, tuple!(
-            length_count!(le_u32, length_data!(le_u32)), length_data!(le_u32)
-        ));
+        use nom::{length_count, length_data, named, number::complete::le_u32};
+        named!(parser<&[u8], Vec<&[u8]>>, length_count!(le_u32, length_data!(le_u32)));
         match parser(buf) {
-            Ok(([], result)) => Some(result),
+            Ok((data, topics)) => Some((topics, data)),
             _ => None,
         }
     }

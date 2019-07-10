@@ -315,6 +315,21 @@ fn check_parsed_rpc(
 }
 
 #[derive(Default)]
+pub struct PrintlnFinder {
+    pub println_spans: Vec<Span>,
+}
+
+impl<'ast> visit::Visitor<'ast> for PrintlnFinder {
+    fn visit_mac(&mut self, mac: &'ast ast::Mac) {
+        if crate::utils::path_ends_with(&mac.node.path, &["std", "println"])
+            || crate::utils::path_ends_with(&mac.node.path, &["std", "print"])
+        {
+            self.println_spans.push(mac.span);
+        }
+    }
+}
+
+#[derive(Default)]
 pub struct RefChecker {
     has_ref: bool,
 }

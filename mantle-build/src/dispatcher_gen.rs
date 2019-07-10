@@ -9,7 +9,7 @@ use syntax_pos::symbol::Symbol;
 
 use crate::{
     parse,
-    visitor::{ParsedRpc, ParsedRpcKind},
+    visitor::syntax::{ParsedRpc, ParsedRpcKind},
 };
 
 pub fn generate_and_insert(

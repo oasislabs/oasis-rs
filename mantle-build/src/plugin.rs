@@ -5,8 +5,8 @@ use rustc_data_structures::sync::Once;
 use syntax_pos::symbol::Symbol;
 
 use crate::visitor::{
-    AnalyzedRpcCollector, DefinedTypeCollector, EventCollector, ParsedRpcCollector,
-    ServiceDefFinder,
+    hir::{AnalyzedRpcCollector, DefinedTypeCollector, EventCollector},
+    syntax::{ParsedRpcCollector, ParsedRpcKind, PrintlnFinder, ServiceDefFinder},
 };
 
 pub struct BuildPlugin {
@@ -108,7 +108,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
         };
         let (ctor, rpcs): (Vec<_>, Vec<_>) = rpcs
             .into_iter()
-            .partition(|rpc| rpc.kind == crate::visitor::ParsedRpcKind::Ctor);
+            .partition(|rpc| rpc.kind == ParsedRpcKind::Ctor);
         let ctor_sig = match ctor.as_slice() {
             [] => {
                 sess.span_err(
@@ -124,7 +124,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
         let default_fn_spans = rpcs
             .iter()
             .filter_map(|rpc| {
-                if let crate::visitor::ParsedRpcKind::Default(default_span) = rpc.kind {
+                if let ParsedRpcKind::Default(default_span) = rpc.kind {
                     Some(vec![default_span, rpc.span])
                 } else {
                     None
@@ -140,6 +140,12 @@ impl rustc_driver::Callbacks for BuildPlugin {
                 "Only one RPC method can be marked with `#[default]`",
             );
             ret_err!();
+        }
+
+        let mut println_finder = PrintlnFinder::default();
+        syntax::visit::walk_crate(&mut println_finder, &parse);
+        if !println_finder.println_spans.is_empty() {
+            sess.span_warn(println_finder.println_spans, "`println!` writes to the service output channel. If you meant to log debugging information, use `eprintln!` or `dbg!`.")
         }
 
         crate::dispatcher_gen::generate_and_insert(

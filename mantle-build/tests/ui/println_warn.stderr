@@ -1,0 +1,9 @@
+warning: `println!` writes to the service output channel. If you meant to log debugging information, use `eprintln!` or `dbg!`.
+  --> $DIR/println_warn.rs:6:9
+   |
+6  |         println!("hello, world!");
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+11 |         print!("sender: {:?}", ctx.sender());
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+

@@ -51,7 +51,7 @@ pub fn generate_and_insert(
                     not(target_env = "emscripten")
                 ))
             ))]
-            compile_error!("Compiling a Mantle service to a native target is unlikely to work as expected. Did you meant to use `cargo build --target wasm32-wasi`?");
+            compile_error!("Compiling a Mantle service to a native target is unlikely to work as expected. Did you mean to use `cargo build --target wasm32-wasi`?");
         "# => parse_item).unwrap(),
     );
 }

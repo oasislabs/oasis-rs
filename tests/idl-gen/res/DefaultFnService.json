@@ -1,9 +1,0 @@
-{
-  "name": "DefaultFnService",
-  "namespace": "default_fn",
-  "constructor": {
-    "inputs": []
-  },
-  "has_default_function": true,
-  "mantle_build_version": "0.2.2"
-}

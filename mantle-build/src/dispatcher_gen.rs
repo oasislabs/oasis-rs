@@ -66,17 +66,15 @@ fn generate_rpc_dispatcher(
     let rpc_match_arms = rpcs
         .iter()
         .map(|rpc| {
-            let (arg_name_csv, arg_ty_csv) = args_csv(&rpc.sig.decl.inputs[2..]);
+            let (arg_names, arg_tys) = split_args(&rpc.sig.decl.inputs[2..]);
 
-            // The double parens are necessary so that serde treats newtypes a length-1 sequence.
-            // Otherwise the client must pass in a scalar instead of [val], which is a bad UI.
-            rpc_payload_variants.push(format!("{}(({}))", rpc.name, arg_ty_csv));
+            rpc_payload_variants.push(format!("{}({})", rpc.name, tuplize(&arg_tys)));
 
             if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
                 any_rpc_returns_result = true;
-                gen_result_dispatch(rpc.name, arg_name_csv)
+                gen_result_dispatch(rpc.name, arg_names)
             } else {
-                gen_dispatch(rpc.name, arg_name_csv)
+                gen_dispatch(rpc.name, arg_names)
             }
         })
         .collect::<String>();
@@ -84,9 +82,9 @@ fn generate_rpc_dispatcher(
     let default_fn_arm = if let Some(rpc) = default_fn {
         if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
             any_rpc_returns_result = true;
-            gen_result_dispatch(rpc.name, "")
+            gen_result_dispatch(rpc.name, Vec::new())
         } else {
-            gen_dispatch(rpc.name, "")
+            gen_dispatch(rpc.name, Vec::new())
         }
     } else {
         String::new()
@@ -140,35 +138,37 @@ fn generate_rpc_dispatcher(
     ) => parse_block)
 }
 
-fn gen_result_dispatch(name: Symbol, arg_name_csv: impl AsRef<str>) -> String {
+fn gen_result_dispatch(name: Symbol, arg_names: Vec<String>) -> String {
     format!(
-        r#"RpcPayload::{name}(({args})) => match service.{name}(&ctx, {args}) {{
+        r#"RpcPayload::{name}({tup_arg_names}) => match service.{name}(&ctx, {arg_names}) {{
             Ok(output) => Ok(mantle::reexports::serde_cbor::to_vec(&output).unwrap()),
             Err(err) => Err(mantle::reexports::serde_cbor::to_vec(&err).unwrap()),
         }}"#,
         name = name,
-        args = arg_name_csv.as_ref(),
+        tup_arg_names = tuplize(&arg_names),
+        arg_names = arg_names.join(","),
     )
 }
 
-fn gen_dispatch(name: Symbol, arg_name_csv: impl AsRef<str>) -> String {
+fn gen_dispatch(name: Symbol, arg_names: Vec<String>) -> String {
     format!(
-        r#"RpcPayload::{name}(({args})) => {{
-            Ok(mantle::reexports::serde_cbor::to_vec(&service.{name}(&ctx, {args})).unwrap())
+        r#"RpcPayload::{name}({tup_arg_names}) => {{
+            Ok(mantle::reexports::serde_cbor::to_vec(&service.{name}(&ctx, {arg_names})).unwrap())
         }}"#,
         name = name,
-        args = arg_name_csv.as_ref(),
+        tup_arg_names = tuplize(&arg_names),
+        arg_names = arg_names.join(","),
     )
 }
 
 fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
-    let (arg_names, arg_types) = args_csv(&ctor.decl.inputs[1..]);
+    let (arg_names, arg_tys) = split_args(&ctor.decl.inputs[1..]);
 
     let ctor_payload_unpack = if ctor.decl.inputs.len() > 1 {
         format!(
-            "let CtorPayload(({})) =
+            "let CtorPayload({}) =
                     mantle::reexports::serde_cbor::from_slice(&mantle::backend::input()).unwrap();",
-            arg_names
+            tuplize(&arg_names)
         )
     } else {
         String::new()
@@ -186,13 +186,13 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
             }}
             "#,
             service_ident = service_name.as_str().get(),
-            arg_names = arg_names,
+            arg_names = arg_names.join(","),
         )
     } else {
         format!(
             "<{service_ident}>::new(&ctx, {arg_names})",
             service_ident = service_name.as_str().get(),
-            arg_names = arg_names
+            arg_names = arg_names.join(",")
         )
     };
 
@@ -205,7 +205,8 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
 
                 #[derive(Serialize, Deserialize)]
                 #[allow(non_camel_case_types)]
-                struct CtorPayload(({ctor_payload_types}));
+                struct CtorPayload({ctor_payload_types});
+
                 let ctx = mantle::Context::default(); // TODO(#33)
                 {ctor_payload_unpack}
                 let mut service = {ctor_stmt};
@@ -215,7 +216,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
         "#,
         ctor_stmt = ctor_stmt,
         ctor_payload_unpack = ctor_payload_unpack,
-        ctor_payload_types = arg_types,
+        ctor_payload_types = tuplize(&arg_tys),
         service_ident = service_name.as_str().get(),
     ) => parse_item)
     .unwrap()
@@ -249,17 +250,26 @@ fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
     }
 }
 
-fn args_csv(args: &[Arg]) -> (String, String) {
+fn split_args(args: &[Arg]) -> (Vec<String>, Vec<String>) {
     args.iter()
         .map(|arg| {
-            // The trailing commas are required for tupleizing newtype variants.
             (
                 pprust::ident_to_string(match arg.pat.node {
                     syntax::ast::PatKind::Ident(_, ident, _) => ident,
                     _ => unreachable!("Checked during visitation."),
-                }) + ",",
-                pprust::ty_to_string(&arg.ty) + ",",
+                }),
+                pprust::ty_to_string(&arg.ty),
             )
         })
         .unzip()
+}
+
+/// Turns a non-empty sequence of items into a stringified tuple, else returns an empty string.
+/// Tuplizing is necessary so that serde deserializes length-1 sequences into a newtype variant.
+fn tuplize(items: &[String]) -> String {
+    if items.is_empty() {
+        String::new()
+    } else {
+        format!("({},)", items.join(","))
+    }
 }

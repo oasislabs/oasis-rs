@@ -114,3 +114,25 @@ impl RpcError {
         }
     }
 }
+
+pub enum RpcWarning {
+    Println(MultiSpan),
+}
+
+impl std::fmt::Display for RpcWarning {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        use RpcWarning::*;
+        match self {
+            Println(..) => write!(f, "`println!` writes to the service output channel. If you meant to log debugging information, use `eprintln!` or `dbg!`."),
+        }
+    }
+}
+
+impl RpcWarning {
+    pub fn span(&self) -> MultiSpan {
+        use RpcWarning::*;
+        match self {
+            Println(span) => span.clone(),
+        }
+    }
+}

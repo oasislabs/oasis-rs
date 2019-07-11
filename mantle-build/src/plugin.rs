@@ -5,8 +5,8 @@ use rustc_data_structures::sync::Once;
 use syntax_pos::symbol::Symbol;
 
 use crate::visitor::{
-    AnalyzedRpcCollector, DefinedTypeCollector, EventCollector, ParsedRpcCollector,
-    ServiceDefFinder,
+    hir::{AnalyzedRpcCollector, DefinedTypeCollector, EventCollector},
+    syntax::{ParsedRpcCollector, ParsedRpcKind, ServiceDefFinder},
 };
 
 pub struct BuildPlugin {
@@ -97,7 +97,13 @@ impl rustc_driver::Callbacks for BuildPlugin {
             }
         };
 
-        let rpcs = match parsed_rpc_collector.into_rpcs() {
+        let (rpcs_result, warnings) = parsed_rpc_collector.into_rpcs();
+
+        for warning in warnings {
+            sess.span_warn(warning.span(), &warning.to_string());
+        }
+
+        let rpcs = match rpcs_result {
             Ok(rpcs) => rpcs,
             Err(errs) => {
                 for err in errs {
@@ -106,9 +112,10 @@ impl rustc_driver::Callbacks for BuildPlugin {
                 ret_err!();
             }
         };
+
         let (ctor, rpcs): (Vec<_>, Vec<_>) = rpcs
             .into_iter()
-            .partition(|rpc| rpc.kind == crate::visitor::ParsedRpcKind::Ctor);
+            .partition(|rpc| rpc.kind == ParsedRpcKind::Ctor);
         let ctor_sig = match ctor.as_slice() {
             [] => {
                 sess.span_err(
@@ -124,7 +131,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
         let default_fn_spans = rpcs
             .iter()
             .filter_map(|rpc| {
-                if let crate::visitor::ParsedRpcKind::Default(default_span) = rpc.kind {
+                if let ParsedRpcKind::Default(default_span) = rpc.kind {
                     Some(vec![default_span, rpc.span])
                 } else {
                     None

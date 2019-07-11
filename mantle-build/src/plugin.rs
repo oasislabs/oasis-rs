@@ -6,7 +6,7 @@ use syntax_pos::symbol::Symbol;
 
 use crate::visitor::{
     hir::{AnalyzedRpcCollector, DefinedTypeCollector, EventCollector},
-    syntax::{ParsedRpcCollector, ParsedRpcKind, PrintlnFinder, ServiceDefFinder},
+    syntax::{ParsedRpcCollector, ParsedRpcKind, ServiceDefFinder},
 };
 
 pub struct BuildPlugin {
@@ -97,7 +97,13 @@ impl rustc_driver::Callbacks for BuildPlugin {
             }
         };
 
-        let rpcs = match parsed_rpc_collector.into_rpcs() {
+        let (rpcs_result, warnings) = parsed_rpc_collector.into_rpcs();
+
+        for warning in warnings {
+            sess.span_warn(warning.span(), &warning.to_string());
+        }
+
+        let rpcs = match rpcs_result {
             Ok(rpcs) => rpcs,
             Err(errs) => {
                 for err in errs {
@@ -106,6 +112,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
                 ret_err!();
             }
         };
+
         let (ctor, rpcs): (Vec<_>, Vec<_>) = rpcs
             .into_iter()
             .partition(|rpc| rpc.kind == ParsedRpcKind::Ctor);
@@ -140,12 +147,6 @@ impl rustc_driver::Callbacks for BuildPlugin {
                 "Only one RPC method can be marked with `#[default]`",
             );
             ret_err!();
-        }
-
-        let mut println_finder = PrintlnFinder::default();
-        syntax::visit::walk_crate(&mut println_finder, &parse);
-        if !println_finder.println_spans.is_empty() {
-            sess.span_warn(println_finder.println_spans, "`println!` writes to the service output channel. If you meant to log debugging information, use `eprintln!` or `dbg!`.")
         }
 
         crate::dispatcher_gen::generate_and_insert(

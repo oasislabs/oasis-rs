@@ -9,7 +9,7 @@ use syntax::{
 };
 use syntax_pos::symbol::Symbol;
 
-use crate::error::RpcError;
+use crate::error::{RpcError, RpcWarning};
 
 #[derive(Default)]
 pub struct ServiceDefFinder {
@@ -109,6 +109,7 @@ pub struct ParsedRpcCollector {
     rpcs: Vec<ParsedRpc>,
     errors: Vec<RpcError>,
     struct_span: Option<Span>,
+    println_spans: Vec<Span>,
 }
 
 impl ParsedRpcCollector {
@@ -118,6 +119,7 @@ impl ParsedRpcCollector {
             rpcs: Vec::new(),
             errors: Vec::new(),
             struct_span: None,
+            println_spans: Vec::new(),
         }
     }
 
@@ -125,12 +127,20 @@ impl ParsedRpcCollector {
         self.struct_span
     }
 
-    pub fn into_rpcs(self) -> Result<Vec<ParsedRpc>, Vec<RpcError>> {
-        if self.errors.is_empty() {
-            Ok(self.rpcs)
-        } else {
-            Err(self.errors)
+    pub fn into_rpcs(self) -> (Result<Vec<ParsedRpc>, Vec<RpcError>>, Vec<RpcWarning>) {
+        let mut warnings = Vec::new();
+        if !self.println_spans.is_empty() {
+            warnings.push(RpcWarning::Println(self.println_spans.into()))
         }
+
+        (
+            if self.errors.is_empty() {
+                Ok(self.rpcs)
+            } else {
+                Err(self.errors)
+            },
+            warnings,
+        )
     }
 }
 
@@ -152,7 +162,13 @@ impl<'ast> visit::Visitor<'ast> for ParsedRpcCollector {
             {
                 for impl_item in impl_items {
                     match check_parsed_rpc(&service_ty, impl_item) {
-                        Ok(Some(rpc)) => self.rpcs.push(rpc),
+                        Ok(Some(rpc)) => {
+                            self.rpcs.push(rpc);
+
+                            let mut println_finder = PrintlnFinder::default();
+                            syntax::visit::walk_impl_item(&mut println_finder, &impl_item);
+                            self.println_spans.extend(&println_finder.println_spans);
+                        }
                         Ok(None) => (),
                         Err(errs) => self.errors.extend(errs),
                     }
@@ -315,7 +331,7 @@ fn check_parsed_rpc(
 }
 
 #[derive(Default)]
-pub struct PrintlnFinder {
+struct PrintlnFinder {
     pub println_spans: Vec<Span>,
 }
 

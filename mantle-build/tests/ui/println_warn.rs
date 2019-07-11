@@ -17,3 +17,7 @@ impl Printer {
 fn main() {
     mantle::service!(Printer);
 }
+
+fn random_function() {
+    println!("don't warn");
+}

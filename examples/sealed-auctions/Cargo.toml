@@ -8,8 +8,8 @@ publish = false
 [dependencies]
 chrono = "0.4.6"
 failure = "0.1"
-mantle = { version = "0.2", path = "../../mantle" }
+mantle = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
-mantle-test = { version = "0.2", path = "../../mantle-test" }
+mantle-test = "0.2"

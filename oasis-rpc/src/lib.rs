@@ -1,5 +1,7 @@
 #![feature(box_syntax)]
 
+use std::io::{Read, Write};
+
 #[macro_use]
 extern crate serde;
 
@@ -23,18 +25,24 @@ pub struct Interface {
 
 #[cfg(feature = "saveload")]
 impl Interface {
-    pub fn from_slice(sl: &[u8]) -> Result<crate::Interface, failure::Error> {
-        use std::io::Read as _;
-        let mut decoder = libflate::deflate::Decoder::new(sl);
-        let mut inflated = Vec::new();
-        decoder.read_to_end(&mut inflated)?;
-        Ok(serde_json::from_slice(&inflated)?)
+    pub fn from_reader(rd: impl Read) -> Result<Self, failure::Error> {
+        Ok(serde_json::from_reader(xz2::read::XzDecoder::new(rd))?)
+    }
+
+    pub fn to_writer(&self, wr: impl Write) -> Result<(), failure::Error> {
+        let mut encoder = xz2::write::XzEncoder::new(wr, 9 /* max compression level */);
+        serde_json::to_writer(&mut encoder, self)?;
+        Ok(encoder.try_finish()?)
+    }
+
+    pub fn from_slice(sl: &[u8]) -> Result<Self, failure::Error> {
+        Self::from_reader(sl)
     }
 
     pub fn to_vec(&self) -> Result<Vec<u8>, failure::Error> {
-        let mut encoder = libflate::deflate::Encoder::new(Vec::new());
-        serde_json::to_writer(&mut encoder, self)?;
-        Ok(encoder.finish().into_result()?)
+        let mut bytes = Vec::new();
+        self.to_writer(&mut bytes)?;
+        Ok(bytes)
     }
 
     pub fn to_string(&self) -> Result<String, failure::Error> {

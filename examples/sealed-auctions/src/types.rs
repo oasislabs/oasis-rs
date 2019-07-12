@@ -8,7 +8,7 @@ pub type ItemId = u64;
 pub type Result<T> = std::result::Result<T, Error>;
 pub type UserId = Address;
 
-#[derive(Debug, Eq, PartialEq, failure::Fail)]
+#[derive(Debug, Eq, PartialEq, failure::Fail, Serialize, Deserialize)]
 pub enum Error {
     #[fail(display = "Unknown error occured.")]
     Unknown,

@@ -19,7 +19,7 @@ fn main() {
     let outcome = rustc_driver::report_ices_to_stderr_if_any(move || {
         let mut args: Vec<String> = std::env::args().collect();
         if args.len() <= 1 {
-            std::process::exit(1);
+            return Err(ErrorReported);
         }
 
         if std::path::Path::new(&args[1]).file_stem() == Some("rustc".as_ref()) {
@@ -117,8 +117,8 @@ fn main() {
     });
 
     std::process::exit(match outcome {
-        Ok(_) => 0,
-        Err(_) => 1,
+        Ok(Ok(())) => 0,
+        _ => 1,
     });
 }
 

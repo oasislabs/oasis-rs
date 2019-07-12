@@ -1,15 +1,13 @@
 [package]
-name = "idl-gen"
+name = "common"
 version = "0.1.0"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
 publish = false
 
 [dependencies]
-map_vec = { version = "0.2", features = ["serde"] }
 oasis-rpc = { version = "0.1", path = "../../oasis-rpc", features = ["saveload"] }
-oasis-std = { version = "0.2", path = "../../oasis-std" }
+oasis-std = { version = "0.2", path = "../../oasis_std" }
 serde = { version = "1.0", features = ["derive"] }
-
-[dev-dependencies]
-common = { path = "../common" }
+serde_json = "1.0"
+walrus = "0.8"

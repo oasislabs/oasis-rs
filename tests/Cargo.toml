@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "common",
     "idl-gen",
     "xcc-a",
     "xcc-b",

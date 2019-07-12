@@ -46,8 +46,8 @@ commands:
       - run:
           name: Checksum oasis-build
           command: |
-            find oasis-build/src -type f -name "*.rs" | \
-              sort | xargs md5sum oasis-build/Cargo.toml > oasis-build.sums
+            find oasis-build/src oasis-rpc/src -type f -name "*.rs" | \
+              sort | xargs md5sum oasis-build/Cargo.toml oasis-rpc/Cargo.toml > oasis-build.sums
             echo $(rustc --version) >> oasis-build.sums
 
   update_toolstate:

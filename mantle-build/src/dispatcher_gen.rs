@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{io::Write, path::Path};
 
 use syntax::{
     ast::{Arg, Block, Crate, Item, ItemKind, MethodSig, StmtKind},
@@ -28,11 +28,13 @@ pub fn generate_and_insert(
     if !rpcs.is_empty() {
         let rpcs_dispatcher = generate_rpc_dispatcher(service_name, &rpcs, default_fn);
         let rpcs_include_file = out_dir.join(format!("{}_dispatcher.rs", crate_name));
-        std::fs::write(
-            &rpcs_include_file,
-            pprust::block_to_string(&rpcs_dispatcher),
-        )
-        .unwrap();
+        let mut buf = Vec::new();
+        writeln!(&mut buf, "{{").unwrap();
+        for stmt in rpcs_dispatcher.stmts.iter() {
+            writeln!(&mut buf, "{}", pprust::stmt_to_string(&stmt)).unwrap();
+        }
+        writeln!(&mut buf, "}}").unwrap();
+        std::fs::write(&rpcs_include_file, &buf).unwrap();
         insert_rpc_dispatcher_stub(krate, &rpcs_include_file);
     }
 
@@ -254,10 +256,11 @@ fn split_args(args: &[Arg]) -> (Vec<String>, Vec<String>) {
     args.iter()
         .map(|arg| {
             (
-                pprust::ident_to_string(match arg.pat.node {
+                match arg.pat.node {
                     syntax::ast::PatKind::Ident(_, ident, _) => ident,
                     _ => unreachable!("Checked during visitation."),
-                }),
+                }
+                .to_string(),
                 pprust::ty_to_string(&arg.ty),
             )
         })

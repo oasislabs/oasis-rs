@@ -1,6 +1,8 @@
 #![feature(non_exhaustive)]
 
-pub trait Address: Eq + Copy + Default + AsRef<[u8]> + std::str::FromStr {
+pub trait Address:
+    Eq + Copy + Default + AsRef<[u8]> + std::fmt::Display + std::str::FromStr
+{
     fn path_repr(&self) -> String;
 }
 

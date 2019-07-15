@@ -1,8 +1,7 @@
 extern crate chrono;
 
-use std::{collections::HashMap, vec::Vec};
-
 use mantle::{Address, Event};
+use map_vec::Map;
 
 pub type ItemId = u64;
 pub type Result<T> = std::result::Result<T, Error>;
@@ -48,7 +47,7 @@ pub enum Error {
 }
 
 // A bid struct with the bidder and latest bid
-#[derive(Serialize, Deserialize, Clone, Debug, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, Default)]
 pub struct Bid {
     pub bidder: UserId,
     pub value: u64,
@@ -66,12 +65,6 @@ impl PartialOrd for Bid {
     }
 }
 
-impl std::hash::Hash for Bid {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.bidder.hash(state);
-    }
-}
-
 impl std::borrow::Borrow<UserId> for Bid {
     fn borrow(&self) -> &UserId {
         &self.bidder
@@ -82,7 +75,7 @@ impl std::borrow::Borrow<UserId> for Bid {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct Auction {
     pub item_id: ItemId,
-    pub bids: HashMap<UserId, Bid>,
+    pub bids: Map<UserId, Bid>,
     pub reserve: u64,
     pub max_bid: u64,
     pub realized: u64,
@@ -93,7 +86,7 @@ pub struct Auction {
 // We want to emit an event when a new item comes into the auction market
 // but don't want to expose anything in the event other than the itemID
 // and description. Hence, this struct carries `Event`.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Event)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Event, Default)]
 pub struct ArtifactBase {
     #[indexed]
     pub item_id: ItemId,
@@ -103,7 +96,7 @@ pub struct ArtifactBase {
 
 // The complete artifact struct that extends the one above with private
 // fields that we don't want emited
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct Artifact {
     pub base: ArtifactBase,
     pub owner: UserId,

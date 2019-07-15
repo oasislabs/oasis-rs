@@ -1,9 +1,8 @@
 #[macro_use]
 extern crate serde; // Provides `Serialize` and `Deserialize`.
 
-use std::collections::{HashMap, HashSet};
-
 use mantle::{Address, Context, Event, Service};
+use map_vec::{Map, Set};
 
 pub type UserId = Address;
 pub type PostId = u32;
@@ -12,7 +11,7 @@ pub type PostId = u32;
 pub struct MessageBoard {
     /// The administrators of this message board.
     /// Administrators can add and remove users.
-    admins: HashSet<UserId>,
+    admins: Set<UserId>,
 
     /// The maximum number of characters in a post. For instance, 280.
     bcast_char_limit: Option<u32>,
@@ -21,10 +20,7 @@ pub struct MessageBoard {
     posts: Vec<Post>,
 
     /// All accounts which have ever participated in this message board.
-    accounts: HashMap<UserId, Account>, /* Strictly speaking, a `Vec` would probably be faster
-                                         * since it'd be short lived and algorithmically has
-                                         * smaller constant factors. The API of `HashMap` is
-                                         * better suited for this field, though. */
+    accounts: Map<UserId, Account>,
 }
 
 // Types used in the state struct must derive serde `Serialize` and `Deserialize`
@@ -82,10 +78,10 @@ pub enum Error {
 impl MessageBoard {
     /// Constructs a new `MessageBoard`.
     pub fn new(ctx: &Context, bcast_char_limit: Option<u32>) -> Result<Self> {
-        let mut admins = HashSet::new();
+        let mut admins = Set::new();
         admins.insert(ctx.sender());
 
-        let mut accounts = HashMap::new();
+        let mut accounts = Map::new();
         accounts.insert(ctx.sender(), Account::default());
 
         Ok(Self {

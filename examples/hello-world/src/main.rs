@@ -2,8 +2,7 @@
 extern crate serde;
 
 use mantle::{Context, Service};
-
-use std::collections::{hash_map::Entry, HashMap};
+use map_vec::{map::Entry, Map};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -15,7 +14,7 @@ pub enum Error {
 
 #[derive(Service)]
 pub struct HelloWorld {
-    helloworlds: HashMap<String, String>,
+    helloworlds: Map<String, String>,
 }
 
 impl HelloWorld {

@@ -4,7 +4,7 @@ extern crate serde; // Provides `Serialize` and `Deserialize`.
 
 pub mod types;
 
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use map_vec::{map::Entry, Map, Set};
 
 use chrono::Utc;
 use mantle::{Context, Event, Service};
@@ -18,26 +18,26 @@ pub struct AuctionMarket {
 
     /// The administrators of this auction mechanism
     /// Administrators can blacklist users without due cause
-    admins: HashSet<UserId>,
+    admins: Set<UserId>,
 
     /// The blacklist of users
-    blacklist: HashSet<UserId>,
+    blacklist: Set<UserId>,
 
     /// The current valuation of the market as the cummulative value
     /// of all artifacts that have been up for auction
     market_size: u64,
 
     /// The repository of unique artifacts
-    artifacts: HashMap<ItemId, Artifact>,
+    artifacts: Map<ItemId, Artifact>,
 
     /// Active auctions
-    auctions: HashMap<ItemId, Auction>,
+    auctions: Map<ItemId, Auction>,
 }
 
 impl AuctionMarket {
     /// Constructs a new `AuctionMarket`.
     pub fn new(ctx: &Context) -> Result<Self> {
-        let mut admins = HashSet::new();
+        let mut admins = Set::new();
         admins.insert(ctx.sender());
 
         Ok(Self {

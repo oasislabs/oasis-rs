@@ -2,8 +2,7 @@
 extern crate serde;
 
 use mantle::{Address, Context, Event, Service};
-
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use map_vec::{map::Entry, Map, Set};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -32,9 +31,9 @@ pub enum Error {
 pub struct ERC20Token {
     total_supply: u64,
     owner: Address,
-    admins: HashSet<Address>,
-    accounts: HashMap<Address, u64>,
-    allowed: HashMap<Address, HashMap<Address, u64>>,
+    admins: Set<Address>,
+    accounts: Map<Address, u64>,
+    allowed: Map<Address, Map<Address, u64>>,
 }
 
 // A Transfer event struct
@@ -63,9 +62,9 @@ impl ERC20Token {
     /// Constructs a new `ERC20Token`
     pub fn new(ctx: &Context, total_supply: u64) -> Result<Self> {
         let owner = ctx.sender();
-        let mut admins = HashSet::new();
+        let mut admins = Set::new();
         admins.insert(owner);
-        let mut accounts = HashMap::new();
+        let mut accounts = Map::new();
         accounts.insert(owner, total_supply);
 
         Ok(Self {
@@ -104,12 +103,7 @@ impl ERC20Token {
 // Helper methods
 
 /// transfer method
-fn do_transfer(
-    accounts: &mut HashMap<Address, u64>,
-    from: Address,
-    to: Address,
-    amount: u64,
-) -> bool {
+fn do_transfer(accounts: &mut Map<Address, u64>, from: Address, to: Address, amount: u64) -> bool {
     let from_balance = accounts.get(&from).copied().unwrap_or_default();
     let to_balance = accounts.get(&to).copied().unwrap_or_default();
 
@@ -142,7 +136,7 @@ impl ERC20Token {
     /// allowance
     pub fn approve(&mut self, ctx: &Context, spender: Address, amount: u64) -> Result<Approval> {
         let allowances = match self.allowed.entry(ctx.sender()) {
-            Entry::Vacant(ve) => ve.insert(HashMap::new()),
+            Entry::Vacant(ve) => ve.insert(Map::new()),
             Entry::Occupied(oe) => oe.into_mut(),
         };
         allowances.insert(spender, amount);

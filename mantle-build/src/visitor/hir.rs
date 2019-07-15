@@ -168,25 +168,22 @@ impl<'tcx> hir::intravisit::Visitor<'tcx> for EventCollector<'tcx> {
                 .tcx
                 .typeck_tables_of(emit_arg.hir_id.owner_def_id())
                 .expr_ty(&emit_arg);
-            emit_arg_ty
-                .ty_adt_def()
-                .or_else(|| match emit_arg_ty.sty {
-                    ty::TyKind::Ref(
-                        _,
-                        TyS {
-                            sty: ty::TyKind::Adt(adt_def, _),
-                            ..
-                        },
-                        _,
-                    ) => Some(adt_def),
-                    _ => None,
-                })
-                .map(|adt_def| {
-                    self.adt_defs
-                        .entry(adt_def)
-                        .or_default()
-                        .push(emit_arg.span);
-                });
+            if let Some(adt_def) = emit_arg_ty.ty_adt_def().or_else(|| match emit_arg_ty.sty {
+                ty::TyKind::Ref(
+                    _,
+                    TyS {
+                        sty: ty::TyKind::Adt(adt_def, _),
+                        ..
+                    },
+                    _,
+                ) => Some(adt_def),
+                _ => None,
+            }) {
+                self.adt_defs
+                    .entry(adt_def)
+                    .or_default()
+                    .push(emit_arg.span);
+            };
         }
         intravisit::walk_expr(self, expr);
     }

@@ -127,6 +127,8 @@ jobs:
 
   build_standalone_examples:
     executor: rust
+    environment:
+      RUSTC_WRAPPER: mantle-build
     steps:
       - checkout
       - restore_mantle_build
@@ -142,6 +144,8 @@ jobs:
 
   test_idl:
     executor: rust
+    environment:
+      RUSTC_WRAPPER: mantle-build
     steps:
       - checkout
       - restore_mantle_build
@@ -152,6 +156,8 @@ jobs:
 
   test_imports:
     executor: rust
+    environment:
+      RUSTC_WRAPPER: mantle-build
     steps:
       - checkout
       - restore_mantle_build

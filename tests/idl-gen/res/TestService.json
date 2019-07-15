@@ -242,7 +242,15 @@
             "type": "bytes"
           },
           {
-            "type": "string"
+            "type": "map",
+            "params": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ]
           }
         ]
       }
@@ -264,7 +272,10 @@
             }
           },
           {
-            "type": "string"
+            "type": "set",
+            "params": {
+              "type": "u32"
+            }
           }
         ]
       }

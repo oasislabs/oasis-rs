@@ -209,9 +209,9 @@ macro_rules! convert_def {
                 Type::Optional(box $arg_at(0)?)
             } else if ty_str == "Result" {
                 Type::Result(box $arg_at(0)?, box $arg_at(1)?)
-            } else if ty_str == "HashMap" || ty_str == "BTreeMap" {
+            } else if ty_str.ends_with("Map") {
                 Type::Map(box $arg_at(0)?, box $arg_at(1)?)
-            } else if ty_str == "HashSet" || ty_str == "BTreeSet" {
+            } else if ty_str.ends_with("Set") {
                 Type::Set(box $arg_at(0)?)
             } else if ty_str == "Address" {
                 Type::Address

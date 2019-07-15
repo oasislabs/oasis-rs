@@ -1,4 +1,5 @@
 use mantle::{Address, Context, Service};
+use map_vec::Map; // Provides a Map-like API but with smaller constant factors.
 
 // Each service definition contains a struct that derives `Service`.
 // This struct represents the service's persistent state.
@@ -10,7 +11,7 @@ pub struct Ballot {
     tally: Vec<u32>,
     accepting_votes: bool,
     admin: Address,
-    voters: std::collections::HashMap<Address, u32>,
+    voters: Map<Address, u32>,
 }
 
 type Result<T> = std::result::Result<T, String>; // define our own result type, for convenience
@@ -24,7 +25,7 @@ impl Ballot {
             candidates,
             accepting_votes: true,
             admin: ctx.sender(),
-            voters: std::collections::HashMap::new(),
+            voters: Map::new(),
         })
     }
 

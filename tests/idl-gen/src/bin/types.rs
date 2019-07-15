@@ -6,6 +6,7 @@ extern crate serde;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use mantle::{Address, Context, Event, Service};
+use map_vec::{Map, Set};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum InnerTy {
@@ -60,7 +61,7 @@ impl TestService {
         ctx: &Context,
         a1: BTreeMap<bool, [u32; 12]>,
         a3: BTreeSet<i64>,
-    ) -> std::result::Result<Vec<u8>, String> {
+    ) -> std::result::Result<Vec<u8>, Map<String, String>> {
         unimplemented!()
     }
 
@@ -77,7 +78,7 @@ impl TestService {
     }
 
     #[mantle::default]
-    pub fn the_default_fn(&mut self, ctx: &Context) -> std::result::Result<Option<u64>, String> {
+    pub fn the_default_fn(&mut self, ctx: &Context) -> std::result::Result<Option<u64>, Set<u32>> {
         unimplemented!()
     }
 }

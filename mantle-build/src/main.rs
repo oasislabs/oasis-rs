@@ -138,6 +138,9 @@ fn get_sysroot() -> String {
         .expect("Could not determine rustc sysroot")
 }
 
+/// Returns the rustc args needed to build an imported services a an rlib.
+/// The invoker of rustc must supply the source file as a positional arg
+/// and `--crate-name=<the_import_name>`.
 fn collect_import_rustc_args(args: &[String]) -> Vec<String> {
     let mut import_args = Vec::with_capacity(args.len());
     let mut skip = true; // skip `rustc`

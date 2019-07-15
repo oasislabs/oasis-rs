@@ -51,6 +51,12 @@ impl std::str::FromStr for Address {
     }
 }
 
+impl std::fmt::Display for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{}", hex::encode(self.0))
+    }
+}
+
 #[repr(C)]
 #[derive(PartialEq, Eq)]
 #[doc(hidden)]

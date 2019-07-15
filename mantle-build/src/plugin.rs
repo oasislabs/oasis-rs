@@ -187,16 +187,16 @@ impl rustc_driver::Callbacks for BuildPlugin {
                 .visit_all_item_likes(&mut event_collector.as_deep_visitor());
 
             let all_adt_defs = defined_types
-                .map(|(def, orig_span)| (def, orig_span, false /* is_import */))
+                .map(|(def, spans)| (def, spans, false /* is_import */))
                 .chain(
                     event_collector
                         .adt_defs()
-                        .map(|(def, orig_span)| (def, orig_span, true)),
+                        .map(|(def, spans)| (def, spans, true)),
                 );
 
             let mut imports = BTreeSet::default();
             let mut adt_defs = BTreeSet::default();
-            for (def, orig_span, is_event) in all_adt_defs {
+            for (def, spans, is_event) in all_adt_defs {
                 if def.did.is_local() {
                     adt_defs.insert((def, is_event));
                 } else {
@@ -206,10 +206,12 @@ impl rustc_driver::Callbacks for BuildPlugin {
                             imports.insert((crate_name, version.to_string()));
                         }
                         None => {
-                            sess.span_err(
-                                orig_span,
-                                "Cannot use types not defined in an RPC interface",
+                            let err_msg = format!(
+                                "External type `{}` must be defined in \
+                                 a service to use in an RPC interface.",
+                                tcx.def_path_str(def.did)
                             );
+                            sess.span_err(spans, &err_msg);
                         }
                     };
                 }

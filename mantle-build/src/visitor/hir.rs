@@ -62,7 +62,7 @@ impl<'a, 'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx> for AnalyzedRpcCollecto
 /// that are not in a standard library crate.
 pub struct DefinedTypeCollector<'tcx> {
     tcx: TyCtxt<'tcx>,
-    adt_defs: FxHashMap<&'tcx AdtDef, Span>, // maintain a `Set` to handle recursive types
+    adt_defs: FxHashMap<&'tcx AdtDef, Vec<Span>>,
 }
 
 impl<'tcx> DefinedTypeCollector<'tcx> {
@@ -73,24 +73,28 @@ impl<'tcx> DefinedTypeCollector<'tcx> {
         }
     }
 
-    pub fn adt_defs(self) -> impl Iterator<Item = (&'tcx AdtDef, Span)> {
+    pub fn adt_defs(self) -> impl Iterator<Item = (&'tcx AdtDef, Vec<Span>)> {
         self.adt_defs.into_iter()
     }
 
     // called by `<DefinedTypeCollector as intravisit::Visitor>::visit_ty`.
     fn visit_sty(&mut self, ty: &'tcx TyS, originating_span: Span) {
-        if let rustc::ty::TyKind::Adt(adt_def, ..) = ty.sty {
+        if let ty::TyKind::Adt(adt_def, ..) = ty.sty {
             if crate::utils::is_std(self.tcx.crate_name(adt_def.did.krate))
                 || self.adt_defs.contains_key(adt_def)
             {
                 return;
             }
-            self.adt_defs.insert(adt_def, originating_span);
-            if adt_def.did.is_local() {
-                for field in adt_def.all_fields() {
-                    for inner_ty in self.tcx.type_of(field.did).walk() {
-                        self.visit_sty(inner_ty, originating_span);
-                    }
+            self.adt_defs
+                .entry(adt_def)
+                .or_default()
+                .push(originating_span);
+            if !adt_def.did.is_local() {
+                return;
+            }
+            for field in adt_def.all_fields() {
+                for inner_ty in self.tcx.type_of(field.did).walk() {
+                    self.visit_sty(inner_ty, self.tcx.def_span(field.did));
                 }
             }
         }
@@ -123,7 +127,7 @@ impl<'tcx> hir::intravisit::Visitor<'tcx> for DefinedTypeCollector<'tcx> {
 /// The only constraint is that any event must be emitted in the current crate.
 pub struct EventCollector<'tcx> {
     tcx: TyCtxt<'tcx>,
-    adt_defs: FxHashMap<&'tcx AdtDef, Span>,
+    adt_defs: FxHashMap<&'tcx AdtDef, Vec<Span>>,
 }
 
 impl<'tcx> EventCollector<'tcx> {
@@ -134,7 +138,7 @@ impl<'tcx> EventCollector<'tcx> {
         }
     }
 
-    pub fn adt_defs(self) -> impl Iterator<Item = (&'tcx AdtDef, Span)> {
+    pub fn adt_defs(self) -> impl Iterator<Item = (&'tcx AdtDef, Vec<Span>)> {
         self.adt_defs.into_iter()
     }
 }
@@ -164,6 +168,7 @@ impl<'tcx> hir::intravisit::Visitor<'tcx> for EventCollector<'tcx> {
                 .tcx
                 .typeck_tables_of(emit_arg.hir_id.owner_def_id())
                 .expr_ty(&emit_arg);
+            let mut event_adt_def = None;
             if let ty::TyKind::Ref(
                 _,
                 TyS {
@@ -173,10 +178,14 @@ impl<'tcx> hir::intravisit::Visitor<'tcx> for EventCollector<'tcx> {
                 _,
             ) = emit_arg_ty.sty
             {
-                self.adt_defs.insert(&adt_def, emit_arg.span);
+                event_adt_def = Some(*adt_def);
             }
-            if let Some(adt_def) = emit_arg_ty.ty_adt_def() {
-                self.adt_defs.insert(&adt_def, emit_arg.span);
+            event_adt_def.or_else(|| emit_arg_ty.ty_adt_def());
+            if let Some(event_adt_def) = event_adt_def {
+                self.adt_defs
+                    .entry(event_adt_def)
+                    .or_default()
+                    .push(emit_arg.span);
             }
         }
         intravisit::walk_expr(self, expr);

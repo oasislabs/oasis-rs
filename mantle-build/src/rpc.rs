@@ -1,5 +1,3 @@
-//! Types representing an "IR" for RPC interface definitions.
-
 use std::collections::BTreeSet;
 
 use rustc::{

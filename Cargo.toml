@@ -8,10 +8,10 @@ members = [
     "examples/messaging",
     "examples/sealed-auctions",
     "memchain",
-    "oasis",
     "oasis-build",
     "oasis-macros",
     "oasis-rpc",
+    "oasis-std",
     "oasis-test",
     "oasis-types",
 ]

@@ -8,7 +8,7 @@
 
 #[macro_use]
 pub extern crate serde;
-extern crate mantle_macros;
+extern crate oasis_macros;
 
 pub mod backend;
 pub mod exe;
@@ -19,8 +19,8 @@ pub mod reexports {
     pub use tiny_keccak;
 }
 
-pub use mantle_macros::{default, Event, Service};
-pub use mantle_types::Address;
+pub use oasis_macros::{default, Event, Service};
+pub use oasis_types::Address;
 
 pub use crate::exe::*;
 

@@ -1,48 +1,48 @@
-use mantle_types::{Address, ExtStatusCode};
+use oasis_types::{Address, ExtStatusCode};
 
 use super::Error;
 
 /// @see the `blockchain-traits` crate for descriptions of these methods.
 extern "C" {
-    pub fn mantle_balance(addr: *const Address, balance: *mut u64) -> ExtStatusCode;
+    pub fn oasis_balance(addr: *const Address, balance: *mut u64) -> ExtStatusCode;
 
-    pub fn mantle_code(addr: *const Address, buf: *mut u8) -> ExtStatusCode;
-    pub fn mantle_code_len(addr: *const Address, len: *mut u32) -> ExtStatusCode;
+    pub fn oasis_code(addr: *const Address, buf: *mut u8) -> ExtStatusCode;
+    pub fn oasis_code_len(addr: *const Address, len: *mut u32) -> ExtStatusCode;
 
-    pub fn mantle_fetch_input(buf: *mut u8) -> ExtStatusCode;
-    pub fn mantle_input_len(len: *mut u32) -> ExtStatusCode;
+    pub fn oasis_fetch_input(buf: *mut u8) -> ExtStatusCode;
+    pub fn oasis_input_len(len: *mut u32) -> ExtStatusCode;
 
-    pub fn mantle_ret(buf: *const u8, len: u32) -> ExtStatusCode;
-    pub fn mantle_err(buf: *const u8, len: u32) -> ExtStatusCode;
+    pub fn oasis_ret(buf: *const u8, len: u32) -> ExtStatusCode;
+    pub fn oasis_err(buf: *const u8, len: u32) -> ExtStatusCode;
 
-    pub fn mantle_fetch_ret(buf: *mut u8) -> ExtStatusCode;
-    pub fn mantle_ret_len(len: *mut u32) -> ExtStatusCode;
+    pub fn oasis_fetch_ret(buf: *mut u8) -> ExtStatusCode;
+    pub fn oasis_ret_len(len: *mut u32) -> ExtStatusCode;
 
-    pub fn mantle_fetch_err(buf: *mut u8) -> ExtStatusCode;
-    pub fn mantle_err_len(len: *mut u32) -> ExtStatusCode;
+    pub fn oasis_fetch_err(buf: *mut u8) -> ExtStatusCode;
+    pub fn oasis_err_len(len: *mut u32) -> ExtStatusCode;
 
-    pub fn mantle_transact(
+    pub fn oasis_transact(
         callee: *const Address,
         value: u64,
         input: *const u8,
         input_len: u32,
     ) -> ExtStatusCode;
 
-    pub fn mantle_address(addr: *mut Address) -> ExtStatusCode;
-    pub fn mantle_sender(addr: *mut Address) -> ExtStatusCode;
-    pub fn mantle_payer(addr: *mut Address) -> ExtStatusCode;
-    pub fn mantle_value(value: *mut u64) -> ExtStatusCode;
+    pub fn oasis_address(addr: *mut Address) -> ExtStatusCode;
+    pub fn oasis_sender(addr: *mut Address) -> ExtStatusCode;
+    pub fn oasis_payer(addr: *mut Address) -> ExtStatusCode;
+    pub fn oasis_value(value: *mut u64) -> ExtStatusCode;
 
-    pub fn mantle_read(key: *const u8, key_len: u32, value: *mut u8) -> ExtStatusCode;
-    pub fn mantle_read_len(key: *const u8, key_len: u32, value_len: *mut u32) -> ExtStatusCode;
-    pub fn mantle_write(
+    pub fn oasis_read(key: *const u8, key_len: u32, value: *mut u8) -> ExtStatusCode;
+    pub fn oasis_read_len(key: *const u8, key_len: u32, value_len: *mut u32) -> ExtStatusCode;
+    pub fn oasis_write(
         key: *const u8,
         key_len: u32,
         value: *const u8,
         value_len: u32,
     ) -> ExtStatusCode;
 
-    pub fn mantle_emit(
+    pub fn oasis_emit(
         topics: *const *const u8,
         topic_lens: *const u32,
         num_topics: u32,
@@ -80,31 +80,31 @@ macro_rules! ext {
 
 pub fn address() -> Address {
     let mut addr = Address::default();
-    ext!(mantle_address(&mut addr as *mut _)).unwrap();
+    ext!(oasis_address(&mut addr as *mut _)).unwrap();
     addr
 }
 
 pub fn sender() -> Address {
     let mut addr = Address::default();
-    ext!(mantle_sender(&mut addr as *mut _)).unwrap();
+    ext!(oasis_sender(&mut addr as *mut _)).unwrap();
     addr
 }
 
 pub fn payer() -> Address {
     let mut addr = Address::default();
-    ext!(mantle_payer(&mut addr as *mut _)).unwrap();
+    ext!(oasis_payer(&mut addr as *mut _)).unwrap();
     addr
 }
 
 pub fn value() -> u64 {
     let mut value = 0;
-    ext!(mantle_value(&mut value as *mut _)).unwrap();
+    ext!(oasis_value(&mut value as *mut _)).unwrap();
     value
 }
 
 pub fn balance(addr: &Address) -> Option<u64> {
     let mut balance = 0;
-    ext!(mantle_balance(addr as *const _, &mut balance as *mut _))
+    ext!(oasis_balance(addr as *const _, &mut balance as *mut _))
         .ok()
         .map(|_| balance)
 }
@@ -112,7 +112,7 @@ pub fn balance(addr: &Address) -> Option<u64> {
 pub fn code(addr: &Address) -> Option<Vec<u8>> {
     let mut code_len = 0u32;
     let mut code = Vec::with_capacity(
-        match ext!(mantle_code_len(
+        match ext!(oasis_code_len(
             addr as *const Address,
             &mut code_len as *mut _
         )) {
@@ -120,13 +120,13 @@ pub fn code(addr: &Address) -> Option<Vec<u8>> {
             Err(_) => return None,
         },
     );
-    ext!(mantle_code(addr as *const Address, code.as_mut_ptr()))
+    ext!(oasis_code(addr as *const Address, code.as_mut_ptr()))
         .ok()
         .map(|_| code)
 }
 
 pub fn transact(callee: &Address, value: u64, input: &[u8]) -> Result<Vec<u8>, Error> {
-    ext!(mantle_transact(
+    ext!(oasis_transact(
         callee as *const _,
         value,
         input.as_ptr(),
@@ -138,49 +138,49 @@ pub fn transact(callee: &Address, value: u64, input: &[u8]) -> Result<Vec<u8>, E
     ))?;
 
     let mut ret_len = 0u32;
-    ext!(mantle_ret_len(&mut ret_len as *mut _))?;
+    ext!(oasis_ret_len(&mut ret_len as *mut _))?;
 
     let mut ret = Vec::with_capacity(ret_len as usize);
     unsafe { ret.set_len(ret_len as usize) };
 
-    ext!(mantle_fetch_ret(ret.as_mut_ptr())).map(|_| ret)
+    ext!(oasis_fetch_ret(ret.as_mut_ptr())).map(|_| ret)
 }
 
 pub fn input() -> Vec<u8> {
     let mut input_len = 0u32;
-    ext!(mantle_input_len(&mut input_len as *mut _)).unwrap();
+    ext!(oasis_input_len(&mut input_len as *mut _)).unwrap();
 
     let mut input = Vec::with_capacity(input_len as usize);
     unsafe { input.set_len(input_len as usize) };
 
-    ext!(mantle_fetch_input(input.as_mut_ptr())).unwrap();
+    ext!(oasis_fetch_input(input.as_mut_ptr())).unwrap();
     input
 }
 
 pub fn ret(ret: &[u8]) -> ! {
-    ext!(mantle_ret(ret.as_ptr(), ret.len() as u32)).unwrap();
+    ext!(oasis_ret(ret.as_ptr(), ret.len() as u32)).unwrap();
     std::process::abort();
 }
 
 pub fn err(err: &[u8]) -> ! {
-    ext!(mantle_err(err.as_ptr(), err.len() as u32)).unwrap();
+    ext!(oasis_err(err.as_ptr(), err.len() as u32)).unwrap();
     std::process::abort();
 }
 
 pub fn fetch_err() -> Vec<u8> {
     let mut err_len = 0u32;
-    ext!(mantle_err_len(&mut err_len as *mut _)).unwrap();
+    ext!(oasis_err_len(&mut err_len as *mut _)).unwrap();
 
     let mut err = Vec::with_capacity(err_len as usize);
     unsafe { err.set_len(err_len as usize) };
 
-    ext!(mantle_fetch_err(err.as_mut_ptr())).unwrap();
+    ext!(oasis_fetch_err(err.as_mut_ptr())).unwrap();
     err
 }
 
 pub fn read(key: &[u8]) -> Vec<u8> {
     let mut val_len = 0u32;
-    ext!(mantle_read_len(
+    ext!(oasis_read_len(
         key.as_ptr(),
         key.len() as u32,
         &mut val_len as *mut _
@@ -190,7 +190,7 @@ pub fn read(key: &[u8]) -> Vec<u8> {
     let mut val = Vec::with_capacity(val_len as usize);
     unsafe { val.set_len(val_len as usize) };
 
-    ext!(mantle_read(
+    ext!(oasis_read(
         key.as_ptr(),
         key.len() as u32,
         val.as_mut_ptr()
@@ -200,7 +200,7 @@ pub fn read(key: &[u8]) -> Vec<u8> {
 }
 
 pub fn write(key: &[u8], value: &[u8]) {
-    ext!(mantle_write(
+    ext!(oasis_write(
         key.as_ptr(),
         key.len() as u32,
         value.as_ptr(),
@@ -212,7 +212,7 @@ pub fn write(key: &[u8], value: &[u8]) {
 pub fn emit(topics: &[&[u8]], data: &[u8]) {
     let topic_ptrs: Vec<*const u8> = topics.iter().map(|t| t.as_ptr()).collect();
     let topic_lens: Vec<u32> = topics.iter().map(|t| t.len() as u32).collect();
-    ext!(mantle_emit(
+    ext!(oasis_emit(
         topic_ptrs.as_ptr(),
         topic_lens.as_ptr(),
         topics.len() as u32,

@@ -78,7 +78,7 @@ pub enum ImportError {
     #[fail(display = "No importer for scheme `{}`", _0)]
     NoImporter(String),
 
-    #[fail(display = "Wasm module missing mantle-interface section")]
+    #[fail(display = "Wasm module missing oasis-interface section")]
     MissingInterfaceSection,
 
     #[fail(display = "Could not locate `{}`", _0)]

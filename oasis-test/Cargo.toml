@@ -1,19 +1,19 @@
 [package]
-name = "mantle-test"
+name = "oasis-test"
 version = "0.2.0"
 license = "Apache-2.0"
-description = "A testing framework for Mantle executables."
+description = "A testing framework for Oasis executables."
 edition = "2018"
-repository = "https://github.com/oasislabs/mantle.git"
+repository = "https://github.com/oasislabs/oasis.git"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 readme = "README.md"
-keywords = ["mantle", "test", "testing"]
+keywords = ["oasis", "test", "testing"]
 
 [lib]
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 blockchain-traits = { version = "0.2", path = "../blockchain-traits" }
-mantle-macros = { version = "0.2", path = "../mantle-macros" }
-mantle-types = { version = "0.2", path = "../mantle-types" }
+oasis-macros = { version = "0.2", path = "../oasis-macros" }
+oasis-types = { version = "0.2", path = "../oasis-types" }
 memchain = { version = "0.2", path = "../memchain" }

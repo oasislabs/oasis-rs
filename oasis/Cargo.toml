@@ -1,21 +1,19 @@
 [package]
-name = "mantle"
-version = "0.2.1"
+name = "oasis-std"
+version = "0.2.0"
 license = "Apache-2.0"
-description = "A humane programming model for blockchain."
+description = "Types and functions for developing against the Oasis platform"
 edition = "2018"
-repository = "https://github.com/oasislabs/mantle.git"
+repository = "https://github.com/oasislabs/oasis.git"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 readme = "README.md"
-keywords = ["mantle"]
+keywords = ["oasis"]
 
 [dependencies]
 blockchain-traits = { version = "0.2", path = "../blockchain-traits" }
 cfg-if = "0.1"
-default-env = "0.1"
-failure = "0.1"
-mantle-macros = { version = "0.2", path = "../mantle-macros" }
-mantle-types = { version = "0.2", path = "../mantle-types" }
+oasis-macros = { version = "0.2", path = "../oasis-macros" }
+oasis-types = { version = "0.2", path = "../oasis-types" }
 serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.10"
 tiny-keccak = "1.4"

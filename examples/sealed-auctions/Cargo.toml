@@ -8,9 +8,9 @@ publish = false
 [dependencies]
 chrono = "0.4.6"
 failure = "0.1"
-mantle = "0.2"
+oasis = "0.2"
 map_vec = { version = "0.2", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
-mantle-test = "0.2"
+oasis-test = "0.2"

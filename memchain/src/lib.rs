@@ -8,7 +8,7 @@ mod pending_transaction;
 use std::{borrow::Cow, collections::HashMap, convert::TryInto};
 
 use blockchain_traits::Blockchain;
-use mantle_types::{AccountMeta, Address};
+use oasis_types::{AccountMeta, Address};
 
 use block::Block;
 

@@ -13,7 +13,7 @@ pub struct BuildPlugin {
     imports: FxHashMap<String, String>, // crate_name -> version
     service_name: Once<Symbol>,
     event_indexed_fields: FxHashMap<Symbol, Vec<Symbol>>, // event_name -> field_name
-    iface: Once<mantle_rpc::Interface>,
+    iface: Once<oasis_rpc::Interface>,
 }
 
 impl BuildPlugin {
@@ -28,14 +28,14 @@ impl BuildPlugin {
 
     /// Returns the generated interface.
     /// Only valid after rustc callback has been executed. Panics if called before.
-    pub fn try_get(&self) -> Option<&mantle_rpc::Interface> {
+    pub fn try_get(&self) -> Option<&oasis_rpc::Interface> {
         self.iface.try_get()
     }
 }
 
 macro_rules! ret_err {
     () => {{
-        std::env::set_var("MANTLE_BUILD_NO_SERVICE_DERIVE", "1");
+        std::env::set_var("OASIS_BUILD_NO_SERVICE_DERIVE", "1");
         return true; // Always return success so that compiler catches other errors.
     }};
 }
@@ -47,7 +47,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
             .as_ref()
             .map(std::path::PathBuf::clone)
             .unwrap_or_else(std::env::temp_dir)
-            .join("mantle_generated");
+            .join("oasis_generated");
         std::fs::create_dir_all(&gen_dir)
             .unwrap_or_else(|_| panic!("Could not create dir: `{}`", gen_dir.display()));
 

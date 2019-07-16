@@ -47,13 +47,13 @@ pub fn generate_and_insert(
     krate.module.items.insert(0,
         parse!(r#"
             #[cfg(all(
-                not(any(test, feature = "mantle-build-compiletest")),
+                not(any(test, feature = "oasis-build-compiletest")),
                 not(all(
                     target_arch = "wasm32",
                     not(target_env = "emscripten")
                 ))
             ))]
-            compile_error!("Compiling a Mantle service to a native target is unlikely to work as expected. Did you mean to use `cargo build --target wasm32-wasi`?");
+            compile_error!("Compiling a Oasis service to a native target is unlikely to work as expected. Did you mean to use `cargo build --target wasm32-wasi`?");
         "# => parse_item).unwrap(),
     );
 }
@@ -201,7 +201,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
     parse!(format!(r#"
             #[allow(warnings)]
             #[no_mangle]
-            extern "C" fn _mantle_deploy() -> u8 {{
+            extern "C" fn _oasis_deploy() -> u8 {{
                 use oasis_std::Service as _;
                 use oasis_std::reexports::serde::{{Serialize, Deserialize}};
 
@@ -233,19 +233,19 @@ fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
             ItemKind::Fn(_, _, _, ref mut block) => block,
             _ => continue,
         };
-        let mantle_macro_idx = main_fn_block
+        let oasis_macro_idx = main_fn_block
             .stmts
             .iter()
             .position(|stmt| match &stmt.node {
                 StmtKind::Mac(mac) => {
                     let mac_ = &mac.0.node;
-                    crate::utils::path_ends_with(&mac_.path, &["mantle", "service"])
+                    crate::utils::path_ends_with(&mac_.path, &["oasis", "service"])
                 }
                 _ => false,
             })
             .unwrap();
         main_fn_block.stmts.splice(
-            mantle_macro_idx..=mantle_macro_idx,
+            oasis_macro_idx..=oasis_macro_idx,
             parse!(format!("include!(\"{}\");", include_file.display()) => parse_stmt),
         );
         break;

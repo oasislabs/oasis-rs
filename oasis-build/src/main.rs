@@ -1,5 +1,5 @@
-//! Compiles a Mantle executable and generates the RPC interface definition.
-//! Usage: `RUSTC_WRAPPER=mantle-build cargo build`
+//! Compiles a Oasis executable and generates the RPC interface definition.
+//! Usage: `RUSTC_WRAPPER=oasis-build cargo build`
 
 #![feature(box_syntax, rustc_private)]
 
@@ -38,7 +38,7 @@ fn main() {
         let is_service = is_primary && is_bin;
         let is_testing = args
             .iter()
-            .any(|arg| arg == "feature=\"mantle-build-compiletest\"");
+            .any(|arg| arg == "feature=\"oasis-build-compiletest\"");
 
         let out_dir = get_arg("--out-dir", &args).map(|p| {
             let mut path = PathBuf::from(p);
@@ -49,13 +49,13 @@ fn main() {
         let imports = if is_primary {
             let out_dir = out_dir.as_ref().unwrap();
 
-            let gen_dir = out_dir.parent().unwrap().join("build/mantle_imports");
+            let gen_dir = out_dir.parent().unwrap().join("build/oasis_imports");
             std::fs::create_dir_all(&gen_dir).unwrap();
 
             let mut manifest_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
             manifest_path.push("Cargo.toml");
             match load_deps(&manifest_path).and_then(|services| {
-                mantle_build::build_imports(
+                oasis_build::build_imports(
                     services,
                     gen_dir,
                     out_dir,
@@ -80,7 +80,7 @@ fn main() {
         };
 
         let mut idl8r =
-            mantle_build::BuildPlugin::new(imports.into_iter().map(|imp| (imp.name, imp.version)));
+            oasis_build::BuildPlugin::new(imports.into_iter().map(|imp| (imp.name, imp.version)));
         let mut default_cbs = rustc_driver::DefaultCallbacks;
         let callbacks: &mut (dyn rustc_driver::Callbacks + Send) = if is_service || is_testing {
             &mut idl8r
@@ -172,20 +172,20 @@ fn load_deps(manifest_path: &Path) -> Result<BTreeMap<String, String>, failure::
         .as_table()
         .and_then(|c_t| c_t.get("package").and_then(toml::Value::as_table))
         .and_then(|p| p.get("metadata").and_then(toml::Value::as_table))
-        .and_then(|m| m.get("mantle-dependencies"))
+        .and_then(|m| m.get("oasis-dependencies"))
         .cloned()
         .map(|d| d.try_into::<BTreeMap<String, String>>())
         .unwrap_or_else(|| Ok(BTreeMap::new()))
-        .map_err(|err| failure::format_err!("Could not parse Mantle dependencies: {}", err))?)
+        .map_err(|err| failure::format_err!("Could not parse Oasis dependencies: {}", err))?)
 }
 
 fn pack_iface_into_wasm(
-    iface: &mantle_rpc::Interface,
+    iface: &oasis_rpc::Interface,
     wasm_path: &Path,
 ) -> Result<(), ErrorReported> {
     let mut module = walrus::Module::from_file(&wasm_path).unwrap();
     module.customs.add(walrus::RawCustomSection {
-        name: "mantle-interface".to_string(),
+        name: "oasis-interface".to_string(),
         data: iface.to_vec().map_err(|_| ErrorReported)?,
     });
     module.emit_wasm_file(wasm_path).unwrap();

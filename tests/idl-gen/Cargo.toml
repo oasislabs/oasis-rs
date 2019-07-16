@@ -6,8 +6,8 @@ edition = "2018"
 publish = false
 
 [dependencies]
-mantle = { version = "0.2", path = "../../mantle" }
-mantle-rpc = { version = "0.1", path = "../../mantle-rpc", features = ["saveload"] }
+oasis = { version = "0.2", path = "../../oasis" }
+oasis-rpc = { version = "0.1", path = "../../oasis-rpc", features = ["saveload"] }
 map_vec = { version = "0.2", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

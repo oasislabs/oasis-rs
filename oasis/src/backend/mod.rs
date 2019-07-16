@@ -12,20 +12,23 @@ pub use imp::{
     address, balance, code, emit, err, input, payer, read, ret, sender, transact, value, write,
 };
 
-#[derive(Debug, Eq, PartialEq, failure::Fail)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Error {
-    #[fail(display = "Unknown error occured.")]
+    /// Unknown error occured
     Unknown,
 
-    #[fail(display = "Not enough funds to pay for transaction.")]
+    /// Not enough funds to pay for transaction
     InsufficientFunds,
 
-    #[fail(display = "Invalid input provided to a transaction.")]
+    /// Invalid input provided to transaction
     InvalidInput,
 
-    #[fail(display = "No account at destination of transaction.")]
+    /// No account at destination of transaction
     NoAccount,
 
-    #[fail(display = "Transaction failed with status code {}.", code)]
+    /// Execution invoked missing capability
+    NotCapable,
+
+    /// Transaction failed with status code and payload
     Execution { code: u32, payload: Vec<u8> },
 }

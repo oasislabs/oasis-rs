@@ -19,7 +19,7 @@ impl ImporterBackend for FileImporter {
         let interface_bytes = match walrus::Module::from_buffer(&bytecode)
             .map_err(ImportError::Importer)?
             .customs
-            .remove_raw("mantle-interface")
+            .remove_raw("oasis-interface")
         {
             Some(iface_section) => iface_section.data,
             None => return Err(ImportError::MissingInterfaceSection),

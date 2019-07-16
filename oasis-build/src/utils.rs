@@ -10,7 +10,7 @@ pub fn is_std(crate_name: Symbol) -> bool {
         || crate_name == "core"
         || crate_name == "alloc"
         || crate_name == "map_vec"
-        || crate_name.starts_with("mantle")
+        || crate_name.starts_with("oasis")
 }
 
 /// Returns the crate name and path components of a `DefId`.
@@ -99,7 +99,7 @@ pub fn is_self_ref(ty: &syntax::ast::Ty) -> bool {
 pub fn is_context_ref(ty: &syntax::ast::Ty) -> bool {
     match &ty.node {
         syntax::ast::TyKind::Rptr(_, mut_ty) => match &mut_ty.ty.node {
-            syntax::ast::TyKind::Path(_, path) => path_ends_with(&path, &["mantle", "Context"]),
+            syntax::ast::TyKind::Path(_, path) => path_ends_with(&path, &["oasis", "Context"]),
             _ => false,
         },
         _ => false,
@@ -107,7 +107,7 @@ pub fn is_context_ref(ty: &syntax::ast::Ty) -> bool {
 }
 
 /// Returns whether `path` ends with `suffix`.
-/// e.g, `path_is_suffix(crate::oasis_std::service, ["mantle", "service"]) == true`
+/// e.g, `path_is_suffix(crate::oasis_std::service, ["oasis", "service"]) == true`
 pub fn path_ends_with(path: &syntax::ast::Path, suffix: &[&'static str]) -> bool {
     for (path_seg, suffix_seg_str) in path.segments.iter().rev().zip(suffix.iter().rev()) {
         if path_seg.ident.name != Symbol::intern(suffix_seg_str) {

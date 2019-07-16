@@ -8,7 +8,7 @@ use std::{
 };
 
 use blockchain_traits::{Blockchain, TransactionOutcome};
-use mantle_types::{AccountMeta, Address};
+use oasis_types::{AccountMeta, Address};
 use memchain::{Account, Memchain};
 use wasi_types::{ErrNo, Fd, FdFlags, OpenFlags, Whence};
 

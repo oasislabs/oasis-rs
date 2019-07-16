@@ -7,12 +7,12 @@ members = [
     "examples/hello-world",
     "examples/messaging",
     "examples/sealed-auctions",
-    "mantle",
-    "mantle-build",
-    "mantle-macros",
-    "mantle-rpc",
-    "mantle-test",
-    "mantle-types",
+    "oasis",
+    "oasis-build",
+    "oasis-macros",
+    "oasis-rpc",
+    "oasis-test",
+    "oasis-types",
     "memchain",
 ]
 exclude = ["tests"]

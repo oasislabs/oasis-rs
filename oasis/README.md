@@ -1,6 +1,6 @@
-# mantle
+# oasis
 
-[![Latest Version](https://img.shields.io/crates/v/mantle.svg)](https://crates.io/crates/mantle)
-[![docs](https://docs.rs/mantle/badge.svg)](https://docs.rs/mantle)
+[![Latest Version](https://img.shields.io/crates/v/oasis.svg)](https://crates.io/crates/oasis)
+[![docs](https://docs.rs/oasis/badge.svg)](https://docs.rs/oasis)
 
 A humane programming model for blockchain services.

@@ -1,13 +1,13 @@
 [package]
-name = "mantle-rpc"
+name = "oasis-rpc"
 version = "0.1.1"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
 license = "Apache-2.0"
-description = "Mantle RPC IR and utilities"
-repository = "https://github.com/oasislabs/mantle.git"
+description = "Oasis RPC IR and utilities"
+repository = "https://github.com/oasislabs/oasis.git"
 readme = "README.md"
-keywords = ["idl", "rpc", "mantle"]
+keywords = ["idl", "rpc", "oasis"]
 
 [dependencies]
 failure = { version = "0.1", optional = true }

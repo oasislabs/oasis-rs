@@ -3,7 +3,7 @@ mod ext;
 use std::cell::RefCell;
 
 use blockchain_traits::Blockchain as _;
-use mantle_types::Address;
+use oasis_types::Address;
 use memchain::Memchain;
 
 const SEED_ADDR: Address = Address([0xffu8; 20]);

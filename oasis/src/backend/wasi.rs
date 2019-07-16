@@ -8,13 +8,13 @@ use std::{
 
 use blockchain_traits::Address as _;
 use libc::{__wasi_errno_t, __wasi_fd_t};
-use mantle_types::Address;
+use oasis_types::Address;
 
 use super::Error;
 
 macro_rules! chain_dir {
     ($($ext:literal),*) => {
-        concat!("/opt/", default_env::default_env!("MANTLE_BLOCKCHAIN_NAME", "oasis"), "/", $($ext),*)
+        concat!("/opt/oasis", $($ext),*)
     }
 }
 fn home<P: AsRef<Path>>(addr: &Address, file: P) -> PathBuf {

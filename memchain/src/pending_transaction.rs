@@ -1,5 +1,5 @@
 use blockchain_traits::TransactionOutcome;
-use mantle_types::{AccountMeta, Address};
+use oasis_types::{AccountMeta, Address};
 
 use crate::{
     output::{Event, Receipt},

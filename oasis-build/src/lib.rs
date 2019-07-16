@@ -1,8 +1,8 @@
-//! # mantle-build
+//! # oasis-build
 //!
 //! A Rust compiler plugin that turns a RPC service definition
 //! into a program that runs in a blockchain-like environment.
-//! Specifically, mantle-build generates boilerplate RPC code for
+//! Specifically, oasis-build generates boilerplate RPC code for
 //! and generates an interface definition for the service.
 //!
 //! This library is used by registering `BuildPlugin` as a rustc callback.

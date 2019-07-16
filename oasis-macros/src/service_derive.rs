@@ -1,6 +1,6 @@
 #[proc_macro_derive(Service)]
 pub fn service_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    if std::env::var("MANTLE_BUILD_NO_SERVICE_DERIVE").is_ok() {
+    if std::env::var("OASIS_BUILD_NO_SERVICE_DERIVE").is_ok() {
         return proc_macro::TokenStream::new();
     }
     let input = parse_macro_input!(input as syn::DeriveInput);
@@ -29,7 +29,7 @@ fn get_serde(
     if input.generics.type_params().count() > 0 {
         // early return because `impl Service` won't have generics which will
         // result in additional, confusing error messages.
-        // No error because mantle-build will warn about this.
+        // No error because oasis-build will warn about this.
         return None;
     }
 

@@ -1,11 +1,11 @@
 [package]
-name = "mantle-build"
+name = "oasis-build"
 version = "0.2.3"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
 license = "Apache-2.0"
-description = "Rust compiler plugin that builds Mantle services"
-repository = "https://github.com/oasislabs/mantle.git"
+description = "Rust compiler plugin that builds Oasis services"
+repository = "https://github.com/oasislabs/oasis.git"
 readme = "README.md"
 keywords = ["idl", "interface", "rpc", "plugin"]
 
@@ -13,7 +13,7 @@ keywords = ["idl", "interface", "rpc", "plugin"]
 colored = "1.8"
 failure = "0.1"
 heck = "0.3"
-mantle-rpc = { version = "0.1", path = "../mantle-rpc", features = ["resolve"] }
+oasis-rpc = { version = "0.1", path = "../oasis-rpc", features = ["resolve"] }
 proc-macro2 = "0.4"
 proc-quote = "0.2"
 serde_json = "1.0"
@@ -22,5 +22,5 @@ walrus = "0.8"
 
 [dev-dependencies]
 compiletest_rs = { version = "0.3", features = ["tmp"] }
-mantle = { version = "0.2", path = "../mantle" }
+oasis = { version = "0.2", path = "../oasis" }
 serde = { version = "1.0", features = ["derive"] }

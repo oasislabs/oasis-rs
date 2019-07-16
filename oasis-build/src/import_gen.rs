@@ -7,7 +7,7 @@ use std::{
 
 use colored::*;
 use heck::{CamelCase, SnakeCase};
-use mantle_rpc::import::ImportedService;
+use oasis_rpc::import::ImportedService;
 use proc_macro2::{Ident, Literal, Span, TokenStream};
 use proc_quote::quote;
 
@@ -38,7 +38,7 @@ pub fn build(
 ) -> Result<Vec<Import>, failure::Error> {
     let out_dir = out_dir.as_ref();
 
-    let services = mantle_rpc::import::Resolver::new(
+    let services = oasis_rpc::import::Resolver::new(
         top_level_deps.into_iter().collect(),
         std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()),
     )
@@ -110,12 +110,12 @@ pub fn build(
     Ok(imports)
 }
 
-fn gen_def_tys<'a>(defs: &'a [mantle_rpc::TypeDef]) -> impl Iterator<Item = TokenStream> + 'a {
+fn gen_def_tys<'a>(defs: &'a [oasis_rpc::TypeDef]) -> impl Iterator<Item = TokenStream> + 'a {
     defs.iter().map(|def| {
         let name = format_ident!("{}", def.name());
         let derives = quote!(Serialize, Deserialize, Debug, Clone, PartialEq, Hash);
         match def {
-            mantle_rpc::TypeDef::Struct { fields, .. } => {
+            oasis_rpc::TypeDef::Struct { fields, .. } => {
                 let is_newtype = fields
                     .iter()
                     .enumerate()
@@ -136,7 +136,7 @@ fn gen_def_tys<'a>(defs: &'a [mantle_rpc::TypeDef]) -> impl Iterator<Item = Toke
                     }
                 }
             }
-            mantle_rpc::TypeDef::Enum { variants, .. } => {
+            oasis_rpc::TypeDef::Enum { variants, .. } => {
                 let variants = variants.iter().map(|v| format_ident!("{}", v));
                 quote! {
                     #[derive(#derives)]
@@ -145,7 +145,7 @@ fn gen_def_tys<'a>(defs: &'a [mantle_rpc::TypeDef]) -> impl Iterator<Item = Toke
                     }
                 }
             }
-            mantle_rpc::TypeDef::Event {
+            oasis_rpc::TypeDef::Event {
                 fields: indexed_fields,
                 ..
             } => {
@@ -193,13 +193,13 @@ fn gen_client(service: &ImportedService) -> TokenStream {
     }
 }
 
-fn gen_rpcs<'a>(functions: &'a [mantle_rpc::Function]) -> impl Iterator<Item = TokenStream> + 'a {
+fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = TokenStream> + 'a {
     functions.iter().enumerate().map(|(fn_idx, func)| {
         let fn_name = format_ident!("{}", func.name);
 
         let self_ref = match func.mutability {
-            mantle_rpc::StateMutability::Immutable => quote! { &self },
-            mantle_rpc::StateMutability::Mutable => quote! { &mut self },
+            oasis_rpc::StateMutability::Immutable => quote! { &self },
+            oasis_rpc::StateMutability::Mutable => quote! { &mut self },
         };
 
         let num_args = func.inputs.len();
@@ -210,7 +210,7 @@ fn gen_rpcs<'a>(functions: &'a [mantle_rpc::Function]) -> impl Iterator<Item = T
             .unzip();
 
         let (output_ty, err_ty) = match &func.output {
-            Some(mantle_rpc::Type::Result(ok_ty, err_ty)) => (quote_ty(ok_ty), quote_ty(err_ty)),
+            Some(oasis_rpc::Type::Result(ok_ty, err_ty)) => (quote_ty(ok_ty), quote_ty(err_ty)),
             Some(ty) => (quote_ty(ty), quote!(())),
             None => (quote!(()), quote!(())),
         };
@@ -250,7 +250,7 @@ fn gen_rpcs<'a>(functions: &'a [mantle_rpc::Function]) -> impl Iterator<Item = T
     })
 }
 
-fn gen_ctors(ctor: &mantle_rpc::Constructor, _bytecode: &[u8]) -> TokenStream {
+fn gen_ctors(ctor: &oasis_rpc::Constructor, _bytecode: &[u8]) -> TokenStream {
     let (arg_names, arg_tys): (Vec<Ident>, Vec<TokenStream>) = ctor
         .inputs
         .iter()
@@ -279,8 +279,8 @@ fn gen_ctors(ctor: &mantle_rpc::Constructor, _bytecode: &[u8]) -> TokenStream {
     }
 }
 
-fn quote_ty(ty: &mantle_rpc::Type) -> TokenStream {
-    use mantle_rpc::Type;
+fn quote_ty(ty: &oasis_rpc::Type) -> TokenStream {
+    use oasis_rpc::Type;
     match ty {
         Type::Bool => quote!(bool),
         Type::U8 => quote!(u8),
@@ -340,8 +340,8 @@ fn quote_ty(ty: &mantle_rpc::Type) -> TokenStream {
     }
 }
 
-fn quote_borrow(ty: &mantle_rpc::Type) -> TokenStream {
-    use mantle_rpc::Type;
+fn quote_borrow(ty: &oasis_rpc::Type) -> TokenStream {
+    use oasis_rpc::Type;
     let tyq = match ty {
         Type::Bool
         | Type::U8

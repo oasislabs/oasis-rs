@@ -1,4 +1,4 @@
-use mantle_types::Address;
+use oasis_types::Address;
 
 /// A type that can be stored in blockchain storage.
 pub trait Storage = serde::Serialize + serde::de::DeserializeOwned;

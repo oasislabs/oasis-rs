@@ -73,7 +73,7 @@ impl<'ast> visit::Visitor<'ast> for ServiceDefFinder {
 
     fn visit_mac(&mut self, mac: &'ast ast::Mac) {
         let mac_ = &mac.node;
-        if !crate::utils::path_ends_with(&mac_.path, &["mantle", "service"]) {
+        if !crate::utils::path_ends_with(&mac_.path, &["oasis", "service"]) {
             return;
         }
         // Why not parse the `TokenStream`, you ask? Because the `TokenStream`
@@ -233,7 +233,7 @@ fn check_parsed_rpc(
     }
 
     let default_span = impl_item.attrs.iter().find_map(|attr| {
-        if crate::utils::path_ends_with(&attr.path, &["mantle", "default"]) {
+        if crate::utils::path_ends_with(&attr.path, &["oasis", "default"]) {
             Some(attr.span)
         } else {
             None

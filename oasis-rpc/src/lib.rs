@@ -18,7 +18,7 @@ pub struct Interface {
     pub constructor: Constructor,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub functions: Vec<Function>,
-    pub mantle_build_version: String,
+    pub oasis_build_version: String,
 }
 
 #[cfg(feature = "saveload")]

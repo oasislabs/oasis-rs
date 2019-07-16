@@ -6,11 +6,11 @@ edition = "2018"
 publish = false
 
 [dependencies]
-mantle = { version = "0.2", path = "../../mantle" }
+oasis = { version = "0.2", path = "../../oasis" }
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
 idl-gen = { path = "../idl-gen" }
 
-[package.metadata.mantle-dependencies]
+[package.metadata.oasis-dependencies]
 xcc-b = "file:///../target/wasm32-wasi/debug/xcc-b.wasm?version=0.1"

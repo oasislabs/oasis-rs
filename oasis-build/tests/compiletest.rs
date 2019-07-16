@@ -26,7 +26,7 @@ fn find_deps(names: &[&str]) -> Vec<PathBuf> {
 }
 
 fn run_mode(mode: &'static str) {
-    let deps = &["mantle", "serde", "serde_cbor", "serde_derive"];
+    let deps = &["oasis", "serde", "serde_cbor", "serde_derive"];
     let externs = deps
         .iter()
         .zip(find_deps(deps).iter())
@@ -39,12 +39,12 @@ fn run_mode(mode: &'static str) {
         src_base: PathBuf::from(format!("tests/{}", mode.replace("-", "_"))),
         target_rustcflags: Some(format!(
             "--edition=2018 \
-             --cfg feature=\"mantle-build-compiletest\" \
+             --cfg feature=\"oasis-build-compiletest\" \
              --crate-type dylib \
              {}",
             externs
         )),
-        rustc_path: PathBuf::from("mantle-build"),
+        rustc_path: PathBuf::from("oasis-build"),
         ..Default::default()
     }
     .tempdir();

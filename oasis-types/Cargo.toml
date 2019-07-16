@@ -1,13 +1,13 @@
 [package]
-name = "mantle-types"
+name = "oasis-types"
 version = "0.2.1"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
 license = "Apache-2.0"
-description = "Types used by the Mantle blockchain framework."
-repository = "https://github.com/oasislabs/mantle.git"
+description = "Types used by the Oasis blockchain framework."
+repository = "https://github.com/oasislabs/oasis.git"
 readme = "README.md"
-keywords = ["blockchain", "mantle"]
+keywords = ["blockchain", "oasis"]
 
 [dependencies]
 blockchain-traits = { version = "0.2", path = "../blockchain-traits" }

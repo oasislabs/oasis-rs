@@ -7,7 +7,7 @@ use rustc::{
 };
 use syntax_pos::symbol::Symbol;
 
-use mantle_rpc::{
+use oasis_rpc::{
     Constructor, Field, Function, Import, IndexedField, Interface, StateMutability, Type, TypeDef,
 };
 
@@ -84,7 +84,7 @@ pub fn convert_interface(
             type_defs,
             constructor: ctor.unwrap(),
             functions,
-            mantle_build_version: env!("CARGO_PKG_VERSION").to_string(),
+            oasis_build_version: env!("CARGO_PKG_VERSION").to_string(),
         })
     }
 }

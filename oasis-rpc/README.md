@@ -1,3 +1,3 @@
-# mantle-rpc
+# oasis-rpc
 
-Rust definitions for the Mantle interface description language.
+Rust definitions for the Oasis interface description language.

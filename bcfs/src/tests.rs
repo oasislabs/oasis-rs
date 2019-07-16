@@ -8,8 +8,8 @@ use std::{
 };
 
 use blockchain_traits::{Blockchain, TransactionOutcome};
-use oasis_types::{AccountMeta, Address};
 use memchain::{Account, Memchain};
+use oasis_types::{AccountMeta, Address};
 use wasi_types::{ErrNo, Fd, FdFlags, OpenFlags, Whence};
 
 use crate::BCFS;

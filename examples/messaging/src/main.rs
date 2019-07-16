@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate serde; // Provides `Serialize` and `Deserialize`.
 
-use oasis_std::{Address, Context, Event, Service};
 use map_vec::{Map, Set};
+use oasis_std::{Address, Context, Event, Service};
 
 pub type UserId = Address;
 pub type PostId = u32;

@@ -7,13 +7,13 @@ members = [
     "examples/hello-world",
     "examples/messaging",
     "examples/sealed-auctions",
+    "memchain",
     "oasis",
     "oasis-build",
     "oasis-macros",
     "oasis-rpc",
     "oasis-test",
     "oasis-types",
-    "memchain",
 ]
 exclude = ["tests"]
 

@@ -8,8 +8,8 @@ publish = false
 [dependencies]
 chrono = "0.4.6"
 failure = "0.1"
-oasis = "0.2"
 map_vec = { version = "0.2", features = ["serde"] }
+oasis-std = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]

@@ -1,10 +1,10 @@
 [package]
 name = "oasis-macros"
-version = "0.2.1"
+version = "0.2.0"
 license = "Apache-2.0"
 description = "Macros used internally by the Oasis framework."
 edition = "2018"
-repository = "https://github.com/oasislabs/oasis.git"
+repository = "https://github.com/oasislabs/oasis-rs.git"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 readme = "README.md"
 keywords = ["oasis", "blockchain"]

@@ -5,7 +5,7 @@ license = "Apache-2.0"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
 description = "A virtual filesystem for Blockchain WASI"
-repository = "https://github.com/oasislabs/oasis.git"
+repository = "https://github.com/oasislabs/oasis-rs.git"
 readme = "README.md"
 keywords = ["blockchain", "filesystem", "wasm", "wasi"]
 
@@ -14,8 +14,8 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 blockchain-traits = { version = "0.2", path = "../blockchain-traits" }
-oasis-types = { version = "0.2", path = "../oasis-types" }
 nom = { version = "5.0.0-beta3", default-features = false, features = ["std"] }
+oasis-types = { version = "0.2", path = "../oasis-types" }
 wasi-types = "0.1"
 
 [dev-dependencies]

@@ -5,6 +5,6 @@ authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
 license = "Apache-2.0"
 description = "A minimal description of a programmable blockchain."
-repository = "https://github.com/oasislabs/oasis.git"
+repository = "https://github.com/oasislabs/oasis-rs.git"
 readme = "README.md"
 keywords = ["blockchain"]

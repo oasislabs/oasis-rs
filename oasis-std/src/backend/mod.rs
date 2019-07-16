@@ -26,9 +26,6 @@ pub enum Error {
     /// No account at destination of transaction
     NoAccount,
 
-    /// Execution invoked missing capability
-    NotCapable,
-
     /// Transaction failed with status code and payload
     Execution { code: u32, payload: Vec<u8> },
 }

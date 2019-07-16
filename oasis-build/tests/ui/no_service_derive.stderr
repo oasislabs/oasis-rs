@@ -1,0 +1,18 @@
+error[E0599]: no function or associated item named `sunder` found for type `Counter` in the current scope
+  --> /tmp/mantle_generated/no_service_derive_ctor.rs:11:16
+   |
+11 |     <Counter>::sunder(service);
+   |                ^^^^^^ function or associated item not found in `Counter`
+   | 
+  ::: $DIR/no_service_derive.rs:3:1
+   |
+3  | pub struct Counter(u32);
+   | ------------------------ function or associated item `sunder` not found for this
+   |
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following trait defines an item `sunder`, perhaps you need to implement it:
+           candidate #1: `oasis_std::exe::Service`
+
+error: aborting due to previous error
+
+For more information about this error, try `rustc --explain E0599`.

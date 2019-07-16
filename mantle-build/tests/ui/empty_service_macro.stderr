@@ -1,8 +1,0 @@
-error: unexpected end of macro invocation
- --> $DIR/empty_service_macro.rs:2:5
-  |
-2 |     mantle::service!();
-  |     ^^^^^^^^^^^^^^^^^^^ missing tokens in macro arguments
-
-error: aborting due to previous error
-

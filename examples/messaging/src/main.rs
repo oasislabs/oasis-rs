@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate serde; // Provides `Serialize` and `Deserialize`.
 
-use mantle::{Address, Context, Event, Service};
+use oasis_std::{Address, Context, Event, Service};
 use map_vec::{Map, Set};
 
 pub type UserId = Address;
@@ -213,7 +213,7 @@ impl MessageBoard {
 }
 
 fn main() {
-    mantle::service!(MessageBoard);
+    oasis_std::service!(MessageBoard);
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate serde;
 
-use mantle::{Address, Context, Event, Service};
+use oasis_std::{Address, Context, Event, Service};
 use map_vec::{map::Entry, Map, Set};
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -219,13 +219,13 @@ impl ERC20Token {
 }
 
 fn main() {
-    mantle::service!(ERC20Token);
+    oasis_std::service!(ERC20Token);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mantle::{Address, Context};
+    use oasis_std::{Address, Context};
 
     /// Creates a new account and a `Context` with the new account as the sender.
     fn create_account() -> (Address, Context) {

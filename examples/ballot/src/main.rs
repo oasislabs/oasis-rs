@@ -1,4 +1,4 @@
-use mantle::{Address, Context, Service};
+use oasis_std::{Address, Context, Service};
 use map_vec::Map; // Provides a Map-like API but with smaller constant factors.
 
 // Each service definition contains a struct that derives `Service`.
@@ -85,7 +85,7 @@ impl Ballot {
 }
 
 fn main() {
-    mantle::service!(Ballot);
+    oasis_std::service!(Ballot);
 }
 
 #[cfg(test)]

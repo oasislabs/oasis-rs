@@ -7,7 +7,7 @@ pub mod types;
 use map_vec::{map::Entry, Map, Set};
 
 use chrono::Utc;
-use mantle::{Context, Event, Service};
+use oasis_std::{Context, Event, Service};
 
 use crate::types::*;
 
@@ -222,7 +222,7 @@ impl AuctionMarket {
 }
 
 fn main() {
-    mantle::service!(AuctionMarket);
+    oasis_std::service!(AuctionMarket);
 }
 
 #[cfg(test)]
@@ -230,7 +230,7 @@ mod tests {
     extern crate mantle_test;
 
     use super::*;
-    use mantle::{Address, Context};
+    use oasis_std::{Address, Context};
     use std::time::Duration;
 
     /// Creates a new account and a `Context` with the new account as the sender.

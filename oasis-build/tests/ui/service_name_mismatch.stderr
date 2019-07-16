@@ -1,0 +1,8 @@
+error: Could not find state struct for `Serivce`
+ --> $DIR/service_name_mismatch.rs:5:5
+  |
+5 |     oasis_std::service!(Serivce);
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to previous error
+

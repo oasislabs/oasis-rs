@@ -1,4 +1,4 @@
-use mantle::{Address, Context, Service};
+use oasis_std::{Address, Context, Service};
 
 #[derive(Service)]
 pub struct ServiceA;
@@ -15,5 +15,5 @@ impl ServiceA {
 }
 
 fn main() {
-    mantle::service!(ServiceA);
+    oasis_std::service!(ServiceA);
 }

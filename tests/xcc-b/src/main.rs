@@ -1,4 +1,4 @@
-use mantle::{Context, Service};
+use oasis_std::{Context, Service};
 use serde::{Deserialize, Serialize};
 
 #[derive(Service)]
@@ -20,5 +20,5 @@ impl ServiceB {
 }
 
 fn main() {
-    mantle::service!(ServiceB);
+    oasis_std::service!(ServiceB);
 }

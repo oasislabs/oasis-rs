@@ -6,13 +6,13 @@ You can find more information in the [developer documentation](https://docs.oasi
 ## Crates for Blockchain Service Developers
 
 * **mantle** - A framework for conveniently developing blockchain services.
-* **mantle-test** - A testing framework for testing services built using Mantle.
+* **mantle-test** - A testing framework for testing services built using Oasis.
 * **mantle-build** - A compiler plugin that adds boilerplate code and generates RPC schemas from Rust types.
 
-## Crates for Mantle Developers
+## Crates for Oasis Developers
 
 * **mantle-macros** - Proc macros used by `mantle`.
-* **mantle-types** - Types common to packages in the Mantle framework.
+* **mantle-types** - Types common to packages in the Oasis framework.
 * **memchain** - An in-memory blockchain simulator used for testing
 
 ## Crates for Blockchain Developers

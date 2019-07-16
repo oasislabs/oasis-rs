@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate serde;
 
-use mantle::{Context, Service};
 use map_vec::{map::Entry, Map};
+use oasis_std::{Context, Service};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -54,17 +54,17 @@ impl HelloWorld {
 }
 
 fn main() {
-    mantle::service!(HelloWorld);
+    oasis_std::service!(HelloWorld);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mantle::{Address, Context};
+    use oasis_std::{Address, Context};
 
     /// Creates a new account and a `Context` with the new account as the sender.
     fn create_account() -> (Address, Context) {
-        let addr = mantle_test::create_account(0 /* initial balance */);
+        let addr = oasis_test::create_account(0 /* initial balance */);
         let ctx = Context::default().with_sender(addr).with_gas(100_000);
         (addr, ctx)
     }

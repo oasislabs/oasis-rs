@@ -3,7 +3,7 @@
 #[macro_use]
 extern crate serde;
 
-use mantle::{Context, Service};
+use oasis_std::{Context, Service};
 
 #[derive(Service)]
 pub struct NonDefaultFnService {}
@@ -20,5 +20,5 @@ impl NonDefaultFnService {
 }
 
 fn main() {
-    mantle::service!(NonDefaultFnService);
+    oasis_std::service!(NonDefaultFnService);
 }

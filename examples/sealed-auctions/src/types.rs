@@ -1,7 +1,7 @@
 extern crate chrono;
 
-use mantle::{Address, Event};
 use map_vec::Map;
+use oasis_std::{Address, Event};
 
 pub type ItemId = u64;
 pub type Result<T> = std::result::Result<T, Error>;

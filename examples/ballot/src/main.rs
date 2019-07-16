@@ -1,5 +1,5 @@
-use mantle::{Address, Context, Service};
-use map_vec::Map; // Provides a Map-like API but with smaller constant factors.
+use map_vec::Map;
+use oasis_std::{Address, Context, Service}; // Provides a Map-like API but with smaller constant factors.
 
 // Each service definition contains a struct that derives `Service`.
 // This struct represents the service's persistent state.
@@ -85,20 +85,20 @@ impl Ballot {
 }
 
 fn main() {
-    mantle::service!(Ballot);
+    oasis_std::service!(Ballot);
 }
 
 #[cfg(test)]
 mod tests {
     // This is required even in Rust 2018. If omitted, rustc will not link in the testing
     // library and will produce a giant error message.
-    extern crate mantle_test;
+    extern crate oasis_test;
 
     use super::*;
 
     /// Creates a new account and a `Context` with the new account as the sender.
     fn create_account() -> (Address, Context) {
-        let addr = mantle_test::create_account(0 /* initial balance */);
+        let addr = oasis_test::create_account(0 /* initial balance */);
         let ctx = Context::default().with_sender(addr).with_gas(100_000);
         (addr, ctx)
     }

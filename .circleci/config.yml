@@ -26,54 +26,54 @@ executors:
 
 
 commands:
-  cache_mantle_build:
+  cache_oasis_build:
     steps:
-      - checksum_mantle_build
+      - checksum_oasis_build
       - save_cache:
-          key: mantle-build-{{ checksum "mantle-build.sums" }}
+          key: oasis-build-{{ checksum "oasis-build.sums" }}
           paths:
-            - ~/.cargo/bin/mantle-build
+            - ~/.cargo/bin/oasis-build
 
-  restore_mantle_build:
+  restore_oasis_build:
     steps:
-      - checksum_mantle_build
+      - checksum_oasis_build
       - restore_cache:
           keys:
-            - mantle-build-{{ checksum "mantle-build.sums" }}
+            - oasis-build-{{ checksum "oasis-build.sums" }}
 
-  checksum_mantle_build:
+  checksum_oasis_build:
     steps:
       - run:
-          name: Checksum mantle-build
+          name: Checksum oasis-build
           command: |
-            find mantle-build/src -type f -name "*.rs" | \
-              sort | xargs md5sum mantle-build/Cargo.toml > mantle-build.sums
-            echo $(rustc --version) >> mantle-build.sums
+            find oasis-build/src -type f -name "*.rs" | \
+              sort | xargs md5sum oasis-build/Cargo.toml > oasis-build.sums
+            echo $(rustc --version) >> oasis-build.sums
 
   update_toolstate:
     steps:
       - checkout
       - run:
-          name: Install mantle-build
+          name: Install oasis-build
           command: |
-            cargo build --release -p mantle-build && cp target/release/mantle-build ~/.cargo/bin
+            cargo build --release -p oasis-build && cp target/release/oasis-build ~/.cargo/bin
       - run:
-          name: Package mantle-build for rustup
+          name: Package oasis-build for rustup
           command: |
-            bin_dir=mantle-build/mantle-build/bin
+            bin_dir=oasis-build/oasis-build/bin
             mkdir -p $bin_dir
-            cp target/release/mantle-build $bin_dir
-            echo 'mantle-build' > mantle-build/components
-            echo $(git rev-parse HEAD) > mantle-build/version
-            echo '3' > mantle-build/rust-installer-version
-            echo 'file:bin/mantle-build' > mantle-build/mantle-build/manifest.in
-            tar czf mantle-build.tar.gz mantle-build
+            cp target/release/oasis-build $bin_dir
+            echo 'oasis-build' > oasis-build/components
+            echo $(git rev-parse HEAD) > oasis-build/version
+            echo '3' > oasis-build/rust-installer-version
+            echo 'file:bin/oasis-build' > oasis-build/oasis-build/manifest.in
+            tar czf oasis-build.tar.gz oasis-build
       - run:
           name: Push to S3 bucket
           command: |
             rustc_version=$(rustc --version | cut -d'(' -f 2 | cut -d')' -f 1 | tr ' ' '_')
             llvm_target=$(rustc --print sysroot | cut -d'-' -f2-)
-            aws s3 cp mantle-build.tar.gz s3://mantle-framework/$rustc_version/$llvm_target/mantle-build.tar.gz
+            aws s3 cp oasis-build.tar.gz s3://oasis-framework/$rustc_version/$llvm_target/oasis-build.tar.gz
 
   docker_push:
     parameters:
@@ -95,13 +95,13 @@ jobs:
       - run:
           name: Rustfmt
           command: cargo fmt -- --check
-      - restore_mantle_build
+      - restore_oasis_build
       - run:
-          name: Build mantle-build
+          name: Build oasis-build
           command: |
-            which mantle-build || \
-              (cargo build -p mantle-build && cp target/debug/mantle-build ~/.cargo/bin)
-      - cache_mantle_build
+            which oasis-build || \
+              (cargo build -p oasis-build && cp target/debug/oasis-build ~/.cargo/bin)
+      - cache_oasis_build
       - run:
           name: Unit test
           command: cargo test
@@ -128,14 +128,14 @@ jobs:
   build_standalone_examples:
     executor: rust
     environment:
-      RUSTC_WRAPPER: mantle-build
+      RUSTC_WRAPPER: oasis-build
     steps:
       - checkout
-      - restore_mantle_build
+      - restore_oasis_build
       - run:
           name: cargo build
           command: |
-            RUSTC_WRAPPER=mantle-build cargo build --target=wasm32-wasi \
+            RUSTC_WRAPPER=oasis-build cargo build --target=wasm32-wasi \
               -p ballot \
               -p erc20 \
               -p hello-world \
@@ -145,10 +145,10 @@ jobs:
   test_idl:
     executor: rust
     environment:
-      RUSTC_WRAPPER: mantle-build
+      RUSTC_WRAPPER: oasis-build
     steps:
       - checkout
-      - restore_mantle_build
+      - restore_oasis_build
       - run:
           name: Test IDL generation
           working_directory: tests/idl-gen
@@ -157,10 +157,10 @@ jobs:
   test_imports:
     executor: rust
     environment:
-      RUSTC_WRAPPER: mantle-build
+      RUSTC_WRAPPER: oasis-build
     steps:
       - checkout
-      - restore_mantle_build
+      - restore_oasis_build
       - run:
           name: Build dependency
           working_directory: tests/xcc-b
@@ -193,7 +193,7 @@ jobs:
     executor: rust_pending
     steps:
       - update_toolstate
-      - cache_mantle_build
+      - cache_oasis_build
 
   update_macos_toolstate:
     environment:

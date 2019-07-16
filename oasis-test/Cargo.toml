@@ -1,0 +1,19 @@
+[package]
+name = "oasis-test"
+version = "0.2.0"
+license = "Apache-2.0"
+description = "A testing framework for Oasis executables."
+edition = "2018"
+repository = "https://github.com/oasislabs/oasis-rs.git"
+authors = ["Oasis Labs <feedback@oasislabs.com>"]
+readme = "README.md"
+keywords = ["oasis", "test", "testing"]
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+blockchain-traits = { version = "0.2", path = "../blockchain-traits" }
+memchain = { version = "0.2", path = "../memchain" }
+oasis-macros = { version = "0.2", path = "../oasis-macros" }
+oasis-types = { version = "0.2", path = "../oasis-types" }

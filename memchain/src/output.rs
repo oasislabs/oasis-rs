@@ -1,5 +1,5 @@
 use blockchain_traits::TransactionOutcome;
-use mantle_types::Address;
+use oasis_types::Address;
 
 #[derive(Clone, Debug)]
 pub struct Receipt {

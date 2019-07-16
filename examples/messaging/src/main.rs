@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate serde; // Provides `Serialize` and `Deserialize`.
 
-use mantle::{Address, Context, Event, Service};
 use map_vec::{Map, Set};
+use oasis_std::{Address, Context, Event, Service};
 
 pub type UserId = Address;
 pub type PostId = u32;
@@ -213,18 +213,18 @@ impl MessageBoard {
 }
 
 fn main() {
-    mantle::service!(MessageBoard);
+    oasis_std::service!(MessageBoard);
 }
 
 #[cfg(test)]
 mod tests {
-    extern crate mantle_test;
+    extern crate oasis_test;
 
     use super::*;
 
     /// Creates a new account and a `Context` with the new account as the sender.
     fn create_account() -> (Address, Context) {
-        let addr = mantle_test::create_account(0 /* initial balance */);
+        let addr = oasis_test::create_account(0 /* initial balance */);
         let ctx = Context::default().with_sender(addr).with_gas(100_000);
         (addr, ctx)
     }

@@ -1,0 +1,15 @@
+[package]
+name = "oasis-types"
+version = "0.2.0"
+authors = ["Oasis Labs <feedback@oasislabs.com>"]
+edition = "2018"
+license = "Apache-2.0"
+description = "Types used by the Oasis blockchain framework."
+repository = "https://github.com/oasislabs/oasis-rs.git"
+readme = "README.md"
+keywords = ["blockchain", "oasis"]
+
+[dependencies]
+blockchain-traits = { version = "0.2", path = "../blockchain-traits" }
+hex = "0.3"
+serde = { version = "1.0", features = ["derive"] }

@@ -1,0 +1,8 @@
+error: Multiple invocations of `oasis_std::service!`. Second occurrence here:
+  --> $DIR/multi_service_main.rs:23:5
+   |
+23 |     oasis_std::service!(Counter2);
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to previous error
+

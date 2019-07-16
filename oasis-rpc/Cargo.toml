@@ -1,0 +1,23 @@
+[package]
+name = "oasis-rpc"
+version = "0.1.0"
+authors = ["Oasis Labs <feedback@oasislabs.com>"]
+edition = "2018"
+license = "Apache-2.0"
+description = "Oasis RPC IR and utilities"
+repository = "https://github.com/oasislabs/oasis-rs.git"
+readme = "README.md"
+keywords = ["idl", "rpc", "oasis"]
+
+[dependencies]
+failure = { version = "0.1", optional = true }
+libflate = { version = "0.1", optional = true }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", optional = true }
+url = { version = "1.7", optional = true }
+walrus = { version = "0.8", optional = true }
+
+[features]
+resolve = ["import"]
+import = ["saveload", "url", "walrus"]
+saveload = ["libflate", "serde_json", "failure"]

@@ -5,7 +5,7 @@ extern crate serde;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use mantle::{Address, Context, Event, Service};
+use oasis_std::{Address, Context, Event, Service};
 use map_vec::{Map, Set};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -77,12 +77,12 @@ impl TestService {
         unimplemented!()
     }
 
-    #[mantle::default]
+    #[oasis_std::default]
     pub fn the_default_fn(&mut self, ctx: &Context) -> std::result::Result<Option<u64>, Set<u32>> {
         unimplemented!()
     }
 }
 
 fn main() {
-    mantle::service!(TestService);
+    oasis_std::service!(TestService);
 }

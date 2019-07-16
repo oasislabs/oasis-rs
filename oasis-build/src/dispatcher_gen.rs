@@ -239,7 +239,7 @@ fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
             .position(|stmt| match &stmt.node {
                 StmtKind::Mac(mac) => {
                     let mac_ = &mac.0.node;
-                    crate::utils::path_ends_with(&mac_.path, &["oasis", "service"])
+                    crate::utils::path_ends_with(&mac_.path, &["oasis_std", "service"])
                 }
                 _ => false,
             })

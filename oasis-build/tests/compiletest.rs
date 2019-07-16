@@ -26,7 +26,7 @@ fn find_deps(names: &[&str]) -> Vec<PathBuf> {
 }
 
 fn run_mode(mode: &'static str) {
-    let deps = &["oasis", "serde", "serde_cbor", "serde_derive"];
+    let deps = &["oasis_std", "serde", "serde_cbor", "serde_derive"];
     let externs = deps
         .iter()
         .zip(find_deps(deps).iter())

@@ -18,6 +18,5 @@ members = [
 exclude = ["tests"]
 
 [profile.release]
-incremental = false
 lto = true
 opt-level = 3

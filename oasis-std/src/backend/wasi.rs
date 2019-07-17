@@ -14,7 +14,7 @@ use super::Error;
 
 macro_rules! chain_dir {
     ($($ext:literal),*) => {
-        concat!("/opt/oasis", $($ext),*)
+        concat!("/opt/oasis/", $($ext),*)
     }
 }
 fn home<P: AsRef<Path>>(addr: &Address, file: P) -> PathBuf {

@@ -73,7 +73,7 @@ commands:
           command: |
             rustc_version=$(rustc --version | cut -d'(' -f 2 | cut -d')' -f 1 | tr ' ' '_')
             llvm_target=$(rustc --print sysroot | cut -d'-' -f2-)
-            aws s3 cp oasis-build.tar.gz s3://oasis-framework/$rustc_version/$llvm_target/oasis-build.tar.gz
+            aws s3 cp oasis-build.tar.gz s3://oasis-rs/$rustc_version/$llvm_target/oasis-build.tar.gz
 
   docker_push:
     parameters:

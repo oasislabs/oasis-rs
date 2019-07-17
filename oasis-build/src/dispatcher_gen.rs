@@ -29,11 +29,9 @@ pub fn generate_and_insert(
         let rpcs_dispatcher = generate_rpc_dispatcher(service_name, &rpcs, default_fn);
         let rpcs_include_file = out_dir.join(format!("{}_dispatcher.rs", crate_name));
         let mut buf = Vec::new();
-        writeln!(&mut buf, "{{").unwrap();
         for stmt in rpcs_dispatcher.stmts.iter() {
             writeln!(&mut buf, "{}", pprust::stmt_to_string(&stmt)).unwrap();
         }
-        writeln!(&mut buf, "}}").unwrap();
         std::fs::write(&rpcs_include_file, &buf).unwrap();
         insert_rpc_dispatcher_stub(krate, &rpcs_include_file);
     }

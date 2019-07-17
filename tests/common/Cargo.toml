@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 oasis-rpc = { version = "0.1", path = "../../oasis-rpc", features = ["saveload"] }
-oasis-std = { version = "0.2", path = "../../oasis_std" }
+oasis-std = { version = "0.2", path = "../../oasis-std" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 walrus = "0.8"

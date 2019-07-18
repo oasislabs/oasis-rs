@@ -17,3 +17,11 @@ impl ServiceA {
 fn main() {
     oasis_std::service!(ServiceA);
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_xcc() {
+        let a = xcc_a::ServiceAClient::deploy();
+    }
+}

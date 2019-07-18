@@ -17,6 +17,7 @@ oasis-rpc = { version = "0.1", path = "../oasis-rpc", features = ["resolve"] }
 proc-macro2 = "0.4"
 proc-quote = "0.2"
 serde_json = "1.0"
+syn = { version = "0.15", default-features = false, features = ["parsing"] }
 toml = "0.5"
 walrus = "0.8"
 

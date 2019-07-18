@@ -8,21 +8,12 @@ use std::{
 use colored::*;
 use heck::{CamelCase, SnakeCase};
 use oasis_rpc::import::ImportedService;
-use proc_macro2::{Ident, Literal, Span, TokenStream};
+use proc_macro2::{Ident, TokenStream};
 use proc_quote::quote;
 
-macro_rules! format_ident {
-    ($fmt_str:literal, $($fmt_arg:expr),+) => {
-        Ident::new(&format!($fmt_str, $($fmt_arg),+), Span::call_site())
-    }
-}
+use crate::format_ident;
 
-fn sanitize_ident(ident: &str) -> String {
-    ident
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric() || *ch == '_' || *ch == '-')
-        .collect()
-}
+use super::common::{quote_borrow, quote_ty, sanitize_ident};
 
 pub struct Import {
     pub name: String,
@@ -51,6 +42,7 @@ pub fn build(
     for service in services {
         let mut hasher = DefaultHasher::new();
         service.interface.hash(&mut hasher);
+        get_rustc_version().hash(&mut hasher);
         let interface_hash = hasher.finish();
 
         let mod_name = sanitize_ident(&service.interface.namespace).to_snake_case();
@@ -169,7 +161,7 @@ fn gen_def_tys<'a>(defs: &'a [oasis_rpc::TypeDef]) -> impl Iterator<Item = Token
     })
 }
 
-fn gen_client(service: &ImportedService) -> TokenStream {
+pub fn gen_client(service: &ImportedService) -> TokenStream {
     let ImportedService {
         bytecode,
         interface,
@@ -279,92 +271,13 @@ fn gen_ctors(ctor: &oasis_rpc::Constructor, _bytecode: &[u8]) -> TokenStream {
     }
 }
 
-fn quote_ty(ty: &oasis_rpc::Type) -> TokenStream {
-    use oasis_rpc::Type;
-    match ty {
-        Type::Bool => quote!(bool),
-        Type::U8 => quote!(u8),
-        Type::I8 => quote!(i8),
-        Type::U16 => quote!(u16),
-        Type::I16 => quote!(i16),
-        Type::U32 => quote!(u32),
-        Type::I32 => quote!(i32),
-        Type::U64 => quote!(u64),
-        Type::I64 => quote!(i64),
-        Type::F32 => quote!(f32),
-        Type::F64 => quote!(f64),
-        Type::Bytes => quote!(Vec<u8>),
-        Type::String => quote!(&str),
-        Type::Address => quote!(oasis_std::Address),
-        Type::Defined { namespace, ty } => {
-            let tyq = format_ident!("{}", ty);
-            match namespace {
-                Some(namespace) => {
-                    let ns = format_ident!("{}", namespace);
-                    quote!(#ns::#tyq)
-                }
-                None => quote!(#tyq),
-            }
-        }
-        Type::Tuple(tys) => {
-            let tyqs = tys.iter().map(quote_ty);
-            quote!(( #(#tyqs),*) )
-        }
-        Type::Array(ty, count) => {
-            let tyq = quote_ty(ty);
-            let count = Literal::usize_suffixed(*count as usize);
-            quote!([#tyq; #count])
-        }
-        Type::List(ty) => {
-            let tyq = quote_ty(ty);
-            quote!(Vec<#tyq>)
-        }
-        Type::Set(ty) => {
-            let tyq = quote_ty(ty);
-            quote!(std::collections::HashSet<#tyq>)
-        }
-        Type::Map(kty, vty) => {
-            let ktyq = quote_ty(kty);
-            let vtyq = quote_ty(vty);
-            quote!(std::collections::HashMap<#ktyq, #vtyq>)
-        }
-        Type::Optional(ty) => {
-            let tyq = quote_ty(ty);
-            quote!(Option<#tyq>)
-        }
-        Type::Result(ok_ty, err_ty) => {
-            let ok_tyq = quote_ty(ok_ty);
-            let err_tyq = quote_ty(err_ty);
-            quote!(Result<#ok_tyq, #err_tyq>)
-        }
-    }
-}
-
-fn quote_borrow(ty: &oasis_rpc::Type) -> TokenStream {
-    use oasis_rpc::Type;
-    let tyq = match ty {
-        Type::Bool
-        | Type::U8
-        | Type::I8
-        | Type::U16
-        | Type::I16
-        | Type::U32
-        | Type::I32
-        | Type::U64
-        | Type::I64
-        | Type::F32
-        | Type::F64 => {
-            return quote_ty(ty);
-        }
-        Type::Bytes => quote!([u8]),
-        Type::String => quote!(str),
-        Type::List(ty) => {
-            let tyq = quote_ty(ty);
-            quote!([#tyq])
-        }
-        _ => quote_ty(ty),
-    };
-    quote!(impl std::borrow::Borrow<#tyq>)
+fn get_rustc_version() -> String {
+    std::process::Command::new("rustc")
+        .arg("--version")
+        .output()
+        .ok()
+        .and_then(|out| String::from_utf8(out.stdout).ok())
+        .expect("Could not determine rustc version")
 }
 
 #[cfg(test)]

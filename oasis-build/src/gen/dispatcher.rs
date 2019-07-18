@@ -12,7 +12,7 @@ use crate::{
     visitor::syntax::{ParsedRpc, ParsedRpcKind},
 };
 
-pub fn generate_and_insert(
+pub fn insert(
     krate: &mut Crate,
     out_dir: &Path,
     crate_name: &str,

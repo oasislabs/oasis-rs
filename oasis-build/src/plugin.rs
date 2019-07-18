@@ -151,7 +151,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
             ret_err!();
         }
 
-        crate::dispatcher_gen::generate_and_insert(
+        crate::gen::dispatcher::insert(
             &mut parse,
             &gen_dir,
             &crate_name,

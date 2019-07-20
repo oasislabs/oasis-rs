@@ -2,6 +2,7 @@ use rustc::{
     hir::{self, def_id::DefId},
     ty::TyCtxt,
 };
+use syntax::ast;
 use syntax_pos::symbol::Symbol;
 
 pub fn is_std(crate_name: Symbol) -> bool {
@@ -117,28 +118,10 @@ pub fn path_ends_with(path: &syntax::ast::Path, suffix: &[&'static str]) -> bool
     true
 }
 
-pub fn mk_parse_sess() -> syntax::parse::ParseSess {
-    syntax::parse::ParseSess::new(syntax::source_map::FilePathMapping::empty())
-}
-
-#[macro_export]
-macro_rules! try_parse {
-    ($src:expr => $parse_fn:ident) => {{
-        let sess = crate::utils::mk_parse_sess();
-        let mut parser = syntax::parse::new_parser_from_source_str(
-            &sess,
-            syntax::source_map::FileName::Custom(String::new()),
-            $src.to_string(),
-        );
-        parser
-            .$parse_fn()
-            .map_err(|mut diagnostic| diagnostic.cancel() /* drop sess */)
-    }};
-}
-
-#[macro_export]
-macro_rules! parse {
-    ($src:expr => $parse_fn:ident) => {
-        crate::try_parse!($src => $parse_fn).unwrap()
-    }
+pub fn gen_ty(node: ast::TyKind) -> syntax::ptr::P<ast::Ty> {
+    syntax::ptr::P(ast::Ty {
+        id: ast::DUMMY_NODE_ID,
+        span: syntax_pos::DUMMY_SP,
+        node,
+    })
 }

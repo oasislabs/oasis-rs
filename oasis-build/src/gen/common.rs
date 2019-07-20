@@ -1,10 +1,11 @@
-use proc_macro2::{Ident, Literal, Span, TokenStream};
+use proc_macro2::{Literal, TokenStream};
 use proc_quote::quote;
+use syntax::{ast, ptr::P, source_map};
 
 #[macro_export]
 macro_rules! format_ident {
     ($fmt_str:literal, $($fmt_arg:expr),+) => {
-        Ident::new(&format!($fmt_str, $($fmt_arg),+), Span::call_site())
+        proc_macro2::Ident::new(&format!($fmt_str, $($fmt_arg),+), proc_macro2::Span::call_site())
     }
 }
 
@@ -101,4 +102,48 @@ pub fn quote_borrow(ty: &oasis_rpc::Type) -> TokenStream {
         _ => quote_ty(ty),
     };
     quote!(impl std::borrow::Borrow<#tyq>)
+}
+
+pub fn gen_include_item(include_path: impl AsRef<std::path::Path>) -> P<ast::Item> {
+    P(ast::Item {
+        ident: ast::Ident::from_str(""),
+        attrs: Vec::new(),
+        id: ast::DUMMY_NODE_ID,
+        node: ast::ItemKind::Mac(source_map::dummy_spanned(gen_include_mac(include_path))),
+        vis: source_map::dummy_spanned(ast::VisibilityKind::Public),
+        span: syntax_pos::DUMMY_SP,
+        tokens: None,
+    })
+}
+
+/// Generates `include!("<include_path>");`
+pub fn gen_include_stmt(include_path: impl AsRef<std::path::Path>) -> ast::Stmt {
+    let mac = gen_include_mac(include_path);
+
+    ast::Stmt {
+        node: ast::StmtKind::Mac(P((
+            source_map::dummy_spanned(mac),
+            ast::MacStmtStyle::Semicolon,
+            Default::default(),
+        ))),
+        id: ast::DUMMY_NODE_ID,
+        span: syntax_pos::DUMMY_SP,
+    }
+}
+
+pub fn gen_include_mac(include_path: impl AsRef<std::path::Path>) -> ast::Mac_ {
+    use syntax::parse::token::{LitKind, Token, TokenKind};
+    ast::Mac_ {
+        path: ast::Path::from_ident(ast::Ident::from_str("include")),
+        delim: ast::MacDelimiter::Parenthesis,
+        tts: syntax::tokenstream::TokenTree::Token(Token {
+            kind: TokenKind::lit(
+                LitKind::Str,
+                syntax_pos::Symbol::intern(&format!("{}", include_path.as_ref().display())),
+                None,
+            ),
+            span: syntax_pos::DUMMY_SP,
+        })
+        .into(),
+    }
 }

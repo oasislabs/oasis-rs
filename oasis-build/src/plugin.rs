@@ -10,7 +10,22 @@ use crate::visitor::{
     syntax::{ParsedRpcCollector, ParsedRpcKind, ServiceDefFinder},
 };
 
+#[derive(Clone, Debug)]
+pub struct BuildContext {
+    pub target: BuildTarget,
+    pub crate_name: String,
+    pub out_dir: std::path::PathBuf,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuildTarget {
+    Wasi,
+    Test,
+    Unsup,
+}
+
 pub struct BuildPlugin {
+    target: BuildTarget,
     imports: FxHashMap<String, String>, // crate_name -> version
     service_name: Once<Symbol>,
     event_indexed_fields: FxHashMap<Symbol, Vec<Symbol>>, // event_name -> field_name
@@ -18,8 +33,9 @@ pub struct BuildPlugin {
 }
 
 impl BuildPlugin {
-    pub fn new(imports: impl IntoIterator<Item = (String, String)>) -> Self {
+    pub fn new(target: BuildTarget, imports: impl IntoIterator<Item = (String, String)>) -> Self {
         Self {
+            target,
             imports: imports.into_iter().collect(),
             service_name: Once::new(),
             event_indexed_fields: Default::default(),
@@ -151,14 +167,18 @@ impl rustc_driver::Callbacks for BuildPlugin {
             ret_err!();
         }
 
-        crate::gen::dispatcher::insert(
-            &mut parse,
-            &gen_dir,
-            &crate_name,
-            service_name,
-            &ctor_sig,
+        let build_context = BuildContext {
+            target: self.target,
+            crate_name,
+            out_dir: gen_dir,
+        };
+        let service_def = crate::gen::ServiceDefinition {
+            name: service_name,
+            ctor: &ctor_sig,
             rpcs,
-        );
+        };
+
+        crate::gen::insert_oasis_bindings(build_context, &mut parse, service_def);
 
         Compilation::Continue
     }

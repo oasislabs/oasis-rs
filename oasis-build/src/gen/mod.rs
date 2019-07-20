@@ -1,11 +1,21 @@
-#[macro_use]
-pub mod client;
 mod common;
-pub mod dispatcher;
-pub mod imports;
+mod dispatcher;
+mod imports;
+mod self_client;
 
-pub use crate::format_ident;
-
-pub use client::generate as generate_client;
-pub use dispatcher::insert as insert_dispatcher;
 pub use imports::build as build_imports;
+
+pub struct ServiceDefinition<'ast> {
+    pub name: syntax_pos::symbol::Symbol,
+    pub ctor: &'ast syntax::ast::MethodSig,
+    pub rpcs: Vec<crate::visitor::syntax::ParsedRpc>,
+}
+
+pub fn insert_oasis_bindings(
+    build_ctx: crate::BuildContext,
+    krate: &mut syntax::ast::Crate,
+    service_def: ServiceDefinition,
+) {
+    dispatcher::insert(&build_ctx, krate, &service_def);
+    self_client::insert(&build_ctx, krate, &service_def);
+}

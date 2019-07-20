@@ -26,5 +26,5 @@ mod rpc;
 mod utils;
 mod visitor;
 
-pub use gen::{build_imports, insert_dispatcher};
-pub use plugin::BuildPlugin;
+pub use gen::{build_imports, insert_oasis_bindings};
+pub use plugin::{BuildContext, BuildPlugin, BuildTarget};

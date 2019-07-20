@@ -76,17 +76,25 @@ impl<'ast> visit::Visitor<'ast> for ServiceDefFinder {
         if !crate::utils::path_ends_with(&mac_.path, &["oasis_std", "service"]) {
             return;
         }
-        // Why not parse the `TokenStream`, you ask? Because the `TokenStream`
-        // refers to sourcemap info not held by the anonymous `ParseSess` used
-        // for one-off parsing.
-        let service_ident = match try_parse!(format!("{}", mac_.tts) => parse_ident) {
-            Ok(ident) => ident,
-            Err(_) => return,
-        };
-        self.services.push(Service {
-            span: mac.span,
-            name: service_ident.name,
-        });
+        if mac_.tts.len() != 1 {
+            return;
+        }
+        if let Some(ident) = mac_
+            .tts
+            .trees()
+            .next_with_joint()
+            .and_then(|(tree, _)| match tree {
+                syntax::tokenstream::TokenTree::Token(tok) => Some(tok),
+                _ => None,
+            })
+            .and_then(|tok| tok.ident())
+            .map(|(ident, _)| ident)
+        {
+            self.services.push(Service {
+                span: mac.span,
+                name: ident.name,
+            });
+        }
     }
 }
 
@@ -367,12 +375,22 @@ impl mut_visit::MutVisitor for Deborrower {
             match &refd_ty.node {
                 ast::TyKind::Path(None, path) => {
                     if path.segments.last().unwrap().ident.name == Symbol::intern("str") {
-                        *ty = parse!("String" => parse_ty);
+                        *ty = crate::utils::gen_ty(ast::TyKind::Path(
+                            None,
+                            ast::Path::from_ident(ast::Ident::from_str("String")),
+                        ))
                     }
                 }
                 ast::TyKind::Slice(slice_ty) => {
-                    *ty = parse!(format!("Vec<{}>",
-                            pprust::ty_to_string(&slice_ty)) => parse_ty);
+                    let mut path = ast::Path::from_ident(ast::Ident::from_str("Vec"));
+                    path.segments[0].args = Some(P(ast::GenericArgs::AngleBracketed(
+                        ast::AngleBracketedArgs {
+                            span: syntax_pos::DUMMY_SP,
+                            args: vec![ast::GenericArg::Type(slice_ty.clone())],
+                            constraints: Vec::new(),
+                        },
+                    )));
+                    *ty = crate::utils::gen_ty(ast::TyKind::Path(None, path));
                 }
                 _ => (),
             }

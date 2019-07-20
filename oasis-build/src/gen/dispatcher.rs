@@ -1,66 +1,59 @@
-use std::{io::Write, path::Path};
+use std::path::Path;
 
+use proc_quote::quote;
 use syntax::{
-    ast::{Arg, Block, Crate, Item, ItemKind, MethodSig, StmtKind},
+    ast::{Arg, Crate, ItemKind, MethodSig, StmtKind},
     print::pprust,
-    ptr::P,
 };
 use syntax_pos::symbol::Symbol;
 
 use crate::{
-    parse,
+    format_ident,
     visitor::syntax::{ParsedRpc, ParsedRpcKind},
+    BuildContext,
 };
 
-pub fn insert(
-    krate: &mut Crate,
-    out_dir: &Path,
-    crate_name: &str,
-    service_name: Symbol,
-    ctor: &MethodSig,
-    rpcs: Vec<ParsedRpc>,
-) {
+use super::ServiceDefinition;
+
+pub fn insert(build_ctx: &BuildContext, krate: &mut Crate, service_def: &ServiceDefinition) {
+    let BuildContext {
+        out_dir,
+        crate_name,
+        ..
+    } = build_ctx;
+
+    let ServiceDefinition {
+        name: service_name,
+        rpcs,
+        ctor,
+    } = service_def;
+
     let default_fn = rpcs.iter().find(|rpc| match rpc.kind {
         ParsedRpcKind::Default(_) => true,
         _ => false,
     });
 
     if !rpcs.is_empty() {
-        let rpcs_dispatcher = generate_rpc_dispatcher(service_name, &rpcs, default_fn);
+        let rpcs_dispatcher = generate_rpc_dispatcher(*service_name, &rpcs, default_fn);
         let rpcs_include_file = out_dir.join(format!("{}_dispatcher.rs", crate_name));
-        let mut buf = Vec::new();
-        for stmt in rpcs_dispatcher.stmts.iter() {
-            writeln!(&mut buf, "{}", pprust::stmt_to_string(&stmt)).unwrap();
-        }
-        std::fs::write(&rpcs_include_file, &buf).unwrap();
+        std::fs::write(&rpcs_include_file, &rpcs_dispatcher.to_string()).unwrap();
         insert_rpc_dispatcher_stub(krate, &rpcs_include_file);
     }
 
-    let ctor_fn = generate_ctor_fn(service_name, &ctor);
+    let ctor_fn = generate_ctor_fn(*service_name, &ctor);
     let ctor_include_file = out_dir.join(format!("{}_ctor.rs", crate_name));
-    std::fs::write(&ctor_include_file, pprust::item_to_string(&ctor_fn)).unwrap();
-    krate.module.items.push(
-        parse!(format!("include!(\"{}\");", ctor_include_file.display()) => parse_item).unwrap(),
-    );
-    krate.module.items.insert(0,
-        parse!(r#"
-            #[cfg(all(
-                not(any(test, feature = "oasis-build-compiletest")),
-                not(all(
-                    target_arch = "wasm32",
-                    not(target_env = "emscripten")
-                ))
-            ))]
-            compile_error!("Compiling a Oasis service to a native target is unlikely to work as expected. Did you mean to use `cargo build --target wasm32-wasi`?");
-        "# => parse_item).unwrap(),
-    );
+    std::fs::write(&ctor_include_file, ctor_fn.to_string()).unwrap();
+    krate
+        .module
+        .items
+        .push(super::common::gen_include_item(ctor_include_file));
 }
 
 fn generate_rpc_dispatcher(
     service_name: Symbol,
     rpcs: &[ParsedRpc],
     default_fn: Option<&ParsedRpc>,
-) -> P<Block> {
+) -> proc_macro2::TokenStream {
     let mut any_rpc_returns_result = false;
     let mut rpc_payload_variants = Vec::with_capacity(rpcs.len());
     let rpc_match_arms = rpcs
@@ -68,7 +61,10 @@ fn generate_rpc_dispatcher(
         .map(|rpc| {
             let (arg_names, arg_tys) = split_args(&rpc.sig.decl.inputs[2..]);
 
-            rpc_payload_variants.push(format!("{}({})", rpc.name, tuplize(&arg_tys)));
+            let rpc_name = format_ident!("{}", rpc.name.as_str().get());
+            rpc_payload_variants.push(quote! {
+                #rpc_name((#(#arg_tys),*),)
+            });
 
             if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
                 any_rpc_returns_result = true;
@@ -77,7 +73,7 @@ fn generate_rpc_dispatcher(
                 gen_dispatch(rpc.name, arg_names)
             }
         })
-        .collect::<String>();
+        .collect::<Vec<_>>();
 
     let default_fn_arm = if let Some(rpc) = default_fn {
         if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
@@ -87,139 +83,119 @@ fn generate_rpc_dispatcher(
             gen_dispatch(rpc.name, Vec::new())
         }
     } else {
-        String::new()
+        quote!()
     };
 
     let output_err_ty = if any_rpc_returns_result {
-        "Vec<u8>"
+        quote!(Vec<u8>)
     } else {
-        "()"
+        quote!(())
     };
 
     let err_returner = if any_rpc_returns_result {
-        "oasis_std::backend::err(&err_output)"
+        quote!(oasis_std::backend::err(&err_output))
     } else {
-        r#"unreachable!("No RPC function returns Err")"#
+        quote!(unreachable!("No RPC function returns Err"))
     };
 
-    parse!(format!(r#"{{
+    let service_ident = format_ident!("{}", service_name.as_str().get());
+
+    quote! {
         #[allow(warnings)]
-        {{
-            use oasis_std::reexports::serde::{{Serialize, Deserialize}};
+        {
+            use oasis_std::reexports::serde::{Serialize, Deserialize};
             use oasis_std::Service as _;
 
             #[derive(Serialize, Deserialize)]
             #[serde(tag = "method", content = "payload")]
-            enum RpcPayload {{
-                {rpc_payload_variants}
-            }}
+            enum RpcPayload {
+                #(#rpc_payload_variants),*
+            }
 
             let ctx = oasis_std::Context::default(); // TODO(#33)
-            let mut service = <{service_ident}>::coalesce();
+            let mut service = <#service_ident>::coalesce();
             let payload: RpcPayload =
                 oasis_std::reexports::serde_cbor::from_slice(&oasis_std::backend::input()).unwrap();
-            let output: std::result::Result<Vec<u8>, {output_err_ty}> = match payload {{
-                {call_tree}
-                {default_fn_arm}
-            }};
-            <{service_ident}>::sunder(service);
-            match output {{
+            let output: std::result::Result<Vec<u8>, #output_err_ty> = match payload {
+                #(#rpc_match_arms)*
+                #default_fn_arm
+            };
+            <#service_ident>::sunder(service);
+            match output {
                 Ok(output) => oasis_std::backend::ret(&output),
-                Err(err_output) => {err_returner},
-            }}
-        }}
-        }}"#,
-        rpc_payload_variants = rpc_payload_variants.join(", "),
-        service_ident = service_name.as_str().get(),
-        call_tree = rpc_match_arms,
-        default_fn_arm = default_fn_arm,
-        output_err_ty = output_err_ty,
-        err_returner = err_returner
-    ) => parse_block)
+                Err(err_output) => #err_returner,
+            }
+        }
+    }
 }
 
-fn gen_result_dispatch(name: Symbol, arg_names: Vec<String>) -> String {
-    format!(
-        r#"RpcPayload::{name}({tup_arg_names}) => match service.{name}(&ctx, {arg_names}) {{
+fn gen_result_dispatch(
+    name: Symbol,
+    arg_names: Vec<proc_macro2::Ident>,
+) -> proc_macro2::TokenStream {
+    let name = format_ident!("{}", name.as_str().get());
+    quote! {
+        RpcPayload::#name((#(#arg_names),*),) => match service.#name(&ctx, #(#arg_names),*) {
             Ok(output) => Ok(oasis_std::reexports::serde_cbor::to_vec(&output).unwrap()),
             Err(err) => Err(oasis_std::reexports::serde_cbor::to_vec(&err).unwrap()),
-        }}"#,
-        name = name,
-        tup_arg_names = tuplize(&arg_names),
-        arg_names = arg_names.join(","),
-    )
+        }
+    }
 }
 
-fn gen_dispatch(name: Symbol, arg_names: Vec<String>) -> String {
-    format!(
-        r#"RpcPayload::{name}({tup_arg_names}) => {{
-            Ok(oasis_std::reexports::serde_cbor::to_vec(&service.{name}(&ctx, {arg_names})).unwrap())
-        }}"#,
-        name = name,
-        tup_arg_names = tuplize(&arg_names),
-        arg_names = arg_names.join(","),
-    )
+fn gen_dispatch(name: Symbol, arg_names: Vec<proc_macro2::Ident>) -> proc_macro2::TokenStream {
+    let name = format_ident!("{}", name.as_str().get());
+    quote! {
+        RpcPayload::#name((#(#arg_names),*),) =>
+            Ok(oasis_std::reexports::serde_cbor::to_vec(&service.#name(&ctx, #(#arg_names),*)).unwrap())
+    }
 }
 
-fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
+fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> proc_macro2::TokenStream {
     let (arg_names, arg_tys) = split_args(&ctor.decl.inputs[1..]);
 
     let ctor_payload_unpack = if ctor.decl.inputs.len() > 1 {
-        format!(
-            "let CtorPayload({}) =
-                    oasis_std::reexports::serde_cbor::from_slice(&oasis_std::backend::input()).unwrap();",
-            tuplize(&arg_names)
-        )
+        quote! {
+            let CtorPayload((#(#arg_names),*),) =
+                oasis_std::reexports::serde_cbor::from_slice(&oasis_std::backend::input()).unwrap();,
+        }
     } else {
-        String::new()
+        quote!()
     };
+
+    let service_ident = format_ident!("{}", service_name.as_str().get());
 
     let ctor_stmt = if crate::utils::unpack_syntax_ret(&ctor.decl.output).is_result {
-        format!(
-            r#"
-            match <{service_ident}>::new(&ctx, {arg_names}) {{
+        quote! {
+            match <#service_ident>::new(&ctx, #(#arg_names),*) {
                 Ok(service) => service,
-                Err(err) => {{
-                    oasis_std::backend::err(&format!("{{:#?}}", err).into_bytes());
+                Err(err) => {
+                    oasis_std::backend::err(&format!("{:#?}", err).into_bytes());
                     return 1;
-                }}
-            }}
-            "#,
-            service_ident = service_name.as_str().get(),
-            arg_names = arg_names.join(","),
-        )
+                }
+            }
+        }
     } else {
-        format!(
-            "<{service_ident}>::new(&ctx, {arg_names})",
-            service_ident = service_name.as_str().get(),
-            arg_names = arg_names.join(",")
-        )
+        quote! { <#service_ident>::new(&ctx, #(#arg_names),*) }
     };
 
-    parse!(format!(r#"
-            #[allow(warnings)]
-            #[no_mangle]
-            extern "C" fn _oasis_deploy() -> u8 {{
-                use oasis_std::Service as _;
-                use oasis_std::reexports::serde::{{Serialize, Deserialize}};
+    quote! {
+        #[allow(warnings)]
+        #[no_mangle]
+        extern "C" fn _oasis_deploy() -> u8 {
+            use oasis_std::Service as _;
+            use oasis_std::reexports::serde::{Serialize, Deserialize};
 
-                #[derive(Serialize, Deserialize)]
-                #[allow(non_camel_case_types)]
-                struct CtorPayload({ctor_payload_types});
+            #[derive(Serialize, Deserialize)]
+            #[allow(non_camel_case_types)]
+            struct CtorPayload((#(#arg_tys),*),);
 
-                let ctx = oasis_std::Context::default(); // TODO(#33)
-                {ctor_payload_unpack}
-                let mut service = {ctor_stmt};
-                <{service_ident}>::sunder(service);
-                return 0;
-            }}
-        "#,
-        ctor_stmt = ctor_stmt,
-        ctor_payload_unpack = ctor_payload_unpack,
-        ctor_payload_types = tuplize(&arg_tys),
-        service_ident = service_name.as_str().get(),
-    ) => parse_item)
-    .unwrap()
+            let ctx = oasis_std::Context::default(); // TODO(#33)
+            #ctor_payload_unpack
+            let mut service = #ctor_stmt;
+            <#service_ident>::sunder(service);
+            return 0;
+        }
+    }
 }
 
 fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
@@ -244,33 +220,23 @@ fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
             .unwrap();
         main_fn_block.stmts.splice(
             oasis_macro_idx..=oasis_macro_idx,
-            parse!(format!("include!(\"{}\");", include_file.display()) => parse_stmt),
+            std::iter::once(super::common::gen_include_stmt(include_file)),
         );
         break;
     }
 }
 
-fn split_args(args: &[Arg]) -> (Vec<String>, Vec<String>) {
+/// Returns (arg_names, arg_tys)
+fn split_args(args: &[Arg]) -> (Vec<proc_macro2::Ident>, Vec<syn::Type>) {
     args.iter()
         .map(|arg| {
             (
                 match arg.pat.node {
-                    syntax::ast::PatKind::Ident(_, ident, _) => ident,
+                    syntax::ast::PatKind::Ident(_, ident, _) => format_ident!("{}", ident),
                     _ => unreachable!("Checked during visitation."),
-                }
-                .to_string(),
-                pprust::ty_to_string(&arg.ty),
+                },
+                syn::parse_str::<syn::Type>(&pprust::ty_to_string(&arg.ty)).unwrap(),
             )
         })
         .unzip()
-}
-
-/// Turns a non-empty sequence of items into a stringified tuple, else returns an empty string.
-/// Tuplizing is necessary so that serde deserializes length-1 sequences into a newtype variant.
-fn tuplize(items: &[String]) -> String {
-    if items.is_empty() {
-        String::new()
-    } else {
-        format!("({},)", items.join(","))
-    }
 }

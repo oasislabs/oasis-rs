@@ -63,7 +63,7 @@ fn generate_rpc_dispatcher(
 
             let rpc_name = format_ident!("{}", rpc.name.as_str().get());
             rpc_payload_variants.push(quote! {
-                #rpc_name((#(#arg_tys),*),)
+                #rpc_name((#(#arg_tys),*,),)
             });
 
             if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
@@ -101,8 +101,7 @@ fn generate_rpc_dispatcher(
     let service_ident = format_ident!("{}", service_name.as_str().get());
 
     quote! {
-        #[allow(warnings)]
-        {
+        #[allow(warnings)] {
             use oasis_std::reexports::serde::{Serialize, Deserialize};
             use oasis_std::Service as _;
 
@@ -135,7 +134,7 @@ fn gen_result_dispatch(
 ) -> proc_macro2::TokenStream {
     let name = format_ident!("{}", name.as_str().get());
     quote! {
-        RpcPayload::#name((#(#arg_names),*),) => match service.#name(&ctx, #(#arg_names),*) {
+        RpcPayload::#name((#(#arg_names),*,),) => match service.#name(&ctx, #(#arg_names),*) {
             Ok(output) => Ok(oasis_std::reexports::serde_cbor::to_vec(&output).unwrap()),
             Err(err) => Err(oasis_std::reexports::serde_cbor::to_vec(&err).unwrap()),
         }

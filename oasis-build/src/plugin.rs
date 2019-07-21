@@ -2,6 +2,7 @@ use std::collections::BTreeSet; // BTree for reproducability
 
 use rustc::{hir::intravisit::Visitor, util::nodemap::FxHashMap};
 use rustc_data_structures::sync::Once;
+use rustc_driver::Compilation;
 use syntax_pos::symbol::Symbol;
 
 use crate::visitor::{
@@ -36,12 +37,13 @@ impl BuildPlugin {
 macro_rules! ret_err {
     () => {{
         std::env::set_var("OASIS_BUILD_NO_SERVICE_DERIVE", "1");
-        return true; // Always return success so that compiler catches other errors.
+        return Compilation::Continue;
+        // ^ Always continue so that compiler catches other errors.
     }};
 }
 
 impl rustc_driver::Callbacks for BuildPlugin {
-    fn after_parsing(&mut self, compiler: &rustc_interface::interface::Compiler) -> bool {
+    fn after_parsing(&mut self, compiler: &rustc_interface::interface::Compiler) -> Compilation {
         let gen_dir = compiler
             .output_dir()
             .as_ref()
@@ -70,7 +72,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
         self.event_indexed_fields = event_indexed_fields;
 
         let main_service = match services.as_slice() {
-            [] => return true, // No services defined. Do nothing.
+            [] => return Compilation::Continue, // No services defined. Do nothing.
             [main_service] => main_service,
             _ => {
                 sess.span_err(
@@ -158,16 +160,16 @@ impl rustc_driver::Callbacks for BuildPlugin {
             rpcs,
         );
 
-        true
+        Compilation::Continue
     }
 
-    fn after_analysis(&mut self, compiler: &rustc_interface::interface::Compiler) -> bool {
+    fn after_analysis(&mut self, compiler: &rustc_interface::interface::Compiler) -> Compilation {
         let sess = compiler.session();
         let mut global_ctxt = rustc_driver::abort_on_err(compiler.global_ctxt(), sess).peek_mut();
 
         let service_name = match self.service_name.try_get() {
             Some(service_name) => service_name,
-            None => return true, // No service defined. Do nothing.
+            None => return Compilation::Continue, // No service defined. Do nothing.
         };
 
         global_ctxt.enter(|tcx| {
@@ -237,6 +239,6 @@ impl rustc_driver::Callbacks for BuildPlugin {
             self.iface.set(iface);
         });
 
-        true
+        Compilation::Continue
     }
 }

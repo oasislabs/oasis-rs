@@ -88,7 +88,7 @@ commands:
 
 
 jobs:
-  init:
+  init: &init
     executor: rust
     steps:
       - checkout
@@ -106,7 +106,11 @@ jobs:
           name: Unit test
           command: cargo test
 
-  clippy:
+  init_pending:
+    << : *init
+    executor: rust_pending
+
+  clippy: &clippy
     executor: rust
     resource_class: medium
     steps:
@@ -117,6 +121,10 @@ jobs:
             rustup component add clippy || exit 0
             cargo clippy --all-features -- -D clippy::all
 
+  clippy_pending:
+    << : *clippy
+    executor: rust_pending
+
   wasm_build:
     executor: rust
     steps:
@@ -125,7 +133,7 @@ jobs:
           name: Wasm build
           command: cargo build --target wasm32-unknown-unknown --all-features -p memchain -p bcfs
 
-  build_standalone_examples:
+  build_standalone_examples: &build_standalone_examples
     executor: rust
     environment:
       RUSTC_WRAPPER: oasis-build
@@ -142,7 +150,11 @@ jobs:
               -p messaging \
               -p sealed-auctions
 
-  test_idl:
+  build_standalone_examples_pending:
+    << : *build_standalone_examples
+    executor: rust_pending
+
+  test_idl: &test_idl
     executor: rust
     environment:
       RUSTC_WRAPPER: oasis-build
@@ -154,7 +166,11 @@ jobs:
           working_directory: tests/idl-gen
           command: cargo build --target wasm32-wasi --bins && cargo test --lib
 
-  test_imports:
+  test_idl_pending:
+    << : *test_idl
+    executor: rust_pending
+
+  test_imports: &test_imports
     executor: rust
     environment:
       RUSTC_WRAPPER: oasis-build
@@ -169,6 +185,10 @@ jobs:
           name: Build toplevel
           working_directory: tests/xcc-a
           command: cargo build --target wasm32-wasi --bins && cargo test --lib
+
+  test_imports_pending:
+    << : *test_imports
+    executor: rust_pending
 
   docker_build:
     executor: docker_builder
@@ -233,18 +253,33 @@ workflows:
 
   test:
     jobs:
-      - init
-      - clippy
+      - init:
+          filters:
+            branches:
+              ignore: nightly-plugin
+      - clippy:
+          filters:
+            branches:
+              ignore: nightly-plugin
       - wasm_build
       - test_idl:
           requires:
             - init
+          filters:
+            branches:
+              ignore: nightly-plugin
       - test_imports:
           requires:
             - init
+          filters:
+            branches:
+              ignore: nightly-plugin
       - build_standalone_examples:
           requires:
             - init
+          filters:
+            branches:
+              ignore: nightly-plugin
 
   nightly:
     triggers:
@@ -266,21 +301,37 @@ workflows:
 
   fix_plugin:
     jobs:
-      - docker_build:
-          filters:
-            branches:
-              only: nightly-plugin
+      - init_pending
+      - clippy_pending
+      - test_idl_pending:
+          requires:
+            - init_pending
+      - test_imports_pending:
+          requires:
+            - init_pending
+      - build_standalone_examples_pending:
+          requires:
+            - init_pending
       - update_linux_toolstate:
           requires:
-            - docker_build
+            - clippy_pending
+            - test_idl_pending
+            - test_imports_pending
+            - build_standalone_examples_pending
           filters:
             branches:
               only: nightly-plugin
       - update_macos_toolstate:
+          requires:
+            - clippy_pending
+            - test_idl_pending
+            - test_imports_pending
+            - build_standalone_examples_pending
           filters:
             branches:
               only: nightly-plugin
       - docker_publish:
+          type: approval
           requires:
             - update_linux_toolstate
           filters:

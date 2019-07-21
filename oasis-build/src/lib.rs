@@ -22,7 +22,6 @@ mod error;
 mod gen;
 mod plugin;
 mod rpc;
-#[macro_use]
 mod utils;
 mod visitor;
 

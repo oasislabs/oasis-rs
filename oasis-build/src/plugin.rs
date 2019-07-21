@@ -21,7 +21,6 @@ pub struct BuildContext {
 pub enum BuildTarget {
     Wasi,
     Test,
-    Unsup,
 }
 
 pub struct BuildPlugin {

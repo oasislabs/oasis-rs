@@ -263,3 +263,26 @@ workflows:
       - docker_publish:
           requires:
             - update_linux_toolstate
+
+  fix_plugin:
+    jobs:
+      - docker_build:
+          filters:
+            branches:
+              only: nightly-plugin
+      - update_linux_toolstate:
+          requires:
+            - docker_build
+          filters:
+            branches:
+              only: nightly-plugin
+      - update_macos_toolstate:
+          filters:
+            branches:
+              only: nightly-plugin
+      - docker_publish:
+          requires:
+            - update_linux_toolstate
+          filters:
+            branches:
+              only: nightly-plugin

@@ -101,11 +101,11 @@ fn generate_rpc_dispatcher(
     let service_ident = format_ident!("{}", service_name.as_str().get());
 
     quote! {
-        #[allow(warnings)] {
-            use oasis_std::reexports::serde::{Serialize, Deserialize};
-            use oasis_std::Service as _;
+        #[allow(warnings)]
+        {
+            use oasis_std::{Service as _, reexports::serde::Deserialize};
 
-            #[derive(Serialize, Deserialize)]
+            #[derive(Deserialize)]
             #[serde(tag = "method", content = "payload")]
             enum RpcPayload {
                 #(#rpc_payload_variants),*
@@ -181,10 +181,9 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> proc_macro2::Toke
         #[allow(warnings)]
         #[no_mangle]
         extern "C" fn _oasis_deploy() -> u8 {
-            use oasis_std::Service as _;
-            use oasis_std::reexports::serde::{Serialize, Deserialize};
+            use oasis_std::{Service as _, reexports::serde::Deserialize};
 
-            #[derive(Serialize, Deserialize)]
+            #[derive(Deserialize)]
             #[allow(non_camel_case_types)]
             struct CtorPayload((#(#arg_tys),*),);
 

@@ -9,7 +9,7 @@ cfg_if::cfg_if! {
 }
 
 pub use imp::{
-    address, balance, code, emit, err, input, payer, read, ret, sender, transact, value, write,
+    aad, address, balance, code, emit, err, input, payer, read, ret, sender, transact, value, write,
 };
 
 #[derive(Debug, Eq, PartialEq)]

@@ -19,5 +19,6 @@ serde_cbor = "0.10"
 tiny-keccak = "1.4"
 
 [target.'cfg(target_os = "wasi")'.dependencies]
+base64 = "0.10.1"
 hex = "0.3"
 libc = "0.2"

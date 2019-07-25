@@ -31,6 +31,16 @@ pub extern "C" fn oasis_input_len(len: *mut u32) -> ExtStatusCode {
 }
 
 #[no_mangle]
+pub extern "C" fn oasis_fetch_aad(buf: *mut u8) -> ExtStatusCode {
+    ExtStatusCode::Success
+}
+
+#[no_mangle]
+pub extern "C" fn oasis_aad_len(len: *mut u32) -> ExtStatusCode {
+    ExtStatusCode::Success
+}
+
+#[no_mangle]
 pub extern "C" fn oasis_ret(buf: *const u8, len: u32) -> ExtStatusCode {
     ExtStatusCode::Success
 }

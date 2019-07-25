@@ -72,6 +72,11 @@ impl Context {
         crate::backend::address()
     }
 
+    /// Returns the AAD of the confidential execution.
+    pub fn aad(&self) -> Vec<u8> {
+        crate::backend::aad()
+    }
+
     /// Returns the value with which this `Context` was created.
     pub fn value(&self) -> u64 {
         self.value.unwrap_or_else(crate::backend::value)

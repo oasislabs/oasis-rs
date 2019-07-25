@@ -301,15 +301,15 @@ workflows:
 
   fix_plugin:
     jobs:
-      - docker_build
+      - docker_build:
           filters:
             branches:
               only: nightly-plugin
-      - init_pending
+      - init_pending:
           filters:
             branches:
               only: nightly-plugin
-      - clippy_pending
+      - clippy_pending:
           filters:
             branches:
               only: nightly-plugin

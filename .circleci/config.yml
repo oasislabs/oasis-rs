@@ -302,17 +302,35 @@ workflows:
   fix_plugin:
     jobs:
       - docker_build
+          filters:
+            branches:
+              only: nightly-plugin
       - init_pending
+          filters:
+            branches:
+              only: nightly-plugin
       - clippy_pending
+          filters:
+            branches:
+              only: nightly-plugin
       - test_idl_pending:
           requires:
             - init_pending
+          filters:
+            branches:
+              only: nightly-plugin
       - test_imports_pending:
           requires:
             - init_pending
+          filters:
+            branches:
+              only: nightly-plugin
       - build_standalone_examples_pending:
           requires:
             - init_pending
+          filters:
+            branches:
+              only: nightly-plugin
       - update_linux_toolstate:
           requires:
             - clippy_pending

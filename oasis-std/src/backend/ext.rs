@@ -21,6 +21,9 @@ extern "C" {
     pub fn oasis_fetch_err(buf: *mut u8) -> ExtStatusCode;
     pub fn oasis_err_len(len: *mut u32) -> ExtStatusCode;
 
+    pub fn oasis_fetch_aad(buf: *mut u8) -> ExtStatusCode;
+    pub fn oasis_aad_len(len: *mut u32) -> ExtStatusCode;
+
     pub fn oasis_transact(
         callee: *const Address,
         value: u64,
@@ -94,6 +97,17 @@ pub fn payer() -> Address {
     let mut addr = Address::default();
     ext!(oasis_payer(&mut addr as *mut _)).unwrap();
     addr
+}
+
+pub fn aad() -> Vec<u8> {
+    let mut aad_len = 0u32;
+    ext!(oasis_aad_len(&mut aad_len as *mut _)).unwrap();
+
+    let mut aad = Vec::with_capacity(aad_len as usize);
+    unsafe { aad.set_len(aad_len as usize) };
+
+    ext!(oasis_fetch_aad(aad.as_mut_ptr())).unwrap();
+    aad
 }
 
 pub fn value() -> u64 {

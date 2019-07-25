@@ -43,6 +43,10 @@ pub fn payer() -> Address {
     env_addr("PAYER")
 }
 
+pub fn aad() -> Vec<u8> {
+    base64::decode(&std::env::var_os("AAD").unwrap().into_vec()).unwrap()
+}
+
 pub fn value() -> u64 {
     u64::from_str(&std::env::var("VALUE").unwrap()).unwrap()
 }

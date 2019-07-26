@@ -1,10 +1,10 @@
-use map_vec::Map;
-use oasis_std::{Address, Context, Service}; // Provides a Map-like API but with smaller constant factors.
+use map_vec::Map; // Provides a Map-like API but with smaller constant factors.
+use oasis_std::{Address, Context};
 
 // Each service definition contains a struct that derives `Service`.
 // This struct represents the service's persistent state.
 // Changes to the state will be persisted across service invocations.
-#[derive(Service)]
+#[derive(oasis_std::Service)]
 pub struct Ballot {
     description: String,
     candidates: Vec<String>,

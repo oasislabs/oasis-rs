@@ -2,7 +2,7 @@
 extern crate serde;
 
 use map_vec::{map::Entry, Map, Set};
-use oasis_std::{Address, Context, Event, Service};
+use oasis_std::{Address, Context, Event};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -27,7 +27,7 @@ pub enum Error {
     RequestExceedsAllowance { amount: u64, allowance: u64 },
 }
 
-#[derive(Service, Default)]
+#[derive(oasis_std::Service, Default)]
 pub struct ERC20Token {
     total_supply: u64,
     owner: Address,

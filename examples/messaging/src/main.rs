@@ -2,12 +2,12 @@
 extern crate serde; // Provides `Serialize` and `Deserialize`.
 
 use map_vec::{Map, Set};
-use oasis_std::{Address, Context, Event, Service};
+use oasis_std::{Address, Context, Event};
 
 pub type UserId = Address;
 pub type PostId = u32;
 
-#[derive(Service)]
+#[derive(oasis_std::Service)]
 pub struct MessageBoard {
     /// The administrators of this message board.
     /// Administrators can add and remove users.

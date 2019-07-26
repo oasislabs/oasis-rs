@@ -7,11 +7,11 @@ pub mod types;
 use map_vec::{map::Entry, Map, Set};
 
 use chrono::Utc;
-use oasis_std::{Context, Event, Service};
+use oasis_std::{Context, Event};
 
 use crate::types::*;
 
-#[derive(Service, Default)]
+#[derive(oasis_std::Service, Default)]
 pub struct AuctionMarket {
     /// The item counter
     item_counter: u64,

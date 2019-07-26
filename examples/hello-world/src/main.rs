@@ -2,7 +2,7 @@
 extern crate serde;
 
 use map_vec::{map::Entry, Map};
-use oasis_std::{Context, Service};
+use oasis_std::Context;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -12,7 +12,7 @@ pub enum Error {
     DuplicateEntry,
 }
 
-#[derive(Service)]
+#[derive(oasis_std::Service)]
 pub struct HelloWorld {
     helloworlds: Map<String, String>,
 }

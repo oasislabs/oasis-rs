@@ -40,6 +40,7 @@ fn main() {
             .unwrap_or_default();
         let is_service = is_bin && !is_nonprimary_bin;
         let is_test = args.iter().any(|arg| arg == "--test");
+        let is_wasi = get_arg("--target", &args).map(String::as_str) == Some("wasm32-wasi");
         let is_compiletest = args
             .iter()
             .any(|arg| arg == "feature=\"oasis-build-compiletest\"");
@@ -91,6 +92,17 @@ fn main() {
             }
         } else {
             Vec::new()
+        };
+
+        let build_target = if is_test {
+            BuildTarget::Test
+        } else if is_wasi || is_compiletest {
+            BuildTarget::Wasi
+        } else if !is_service {
+            BuildTarget::Dep
+        } else {
+            println!("\n{}: Compiling an Oasis service to a native target is unlikely to work as expected. Did you mean to use `cargo build --target wasm32-wasi`?\n", "error".red());
+            return Err(ErrorReported);
         };
 
         let mut idl8r = oasis_build::BuildPlugin::new(

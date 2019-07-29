@@ -13,7 +13,7 @@ use crate::{
     BuildContext,
 };
 
-use super::ServiceDefinition;
+use super::{common, ServiceDefinition};
 
 pub fn insert(build_ctx: &BuildContext, krate: &mut Crate, service_def: &ServiceDefinition) {
     let BuildContext {
@@ -36,17 +36,17 @@ pub fn insert(build_ctx: &BuildContext, krate: &mut Crate, service_def: &Service
     if !rpcs.is_empty() {
         let rpcs_dispatcher = generate_rpc_dispatcher(*service_name, &rpcs, default_fn);
         let rpcs_include_file = out_dir.join(format!("{}_dispatcher.rs", crate_name));
-        std::fs::write(&rpcs_include_file, &rpcs_dispatcher.to_string()).unwrap();
+        common::write_include(&rpcs_include_file, &rpcs_dispatcher.to_string());
         insert_rpc_dispatcher_stub(krate, &rpcs_include_file);
     }
 
     let ctor_fn = generate_ctor_fn(*service_name, &ctor);
     let ctor_include_file = out_dir.join(format!("{}_ctor.rs", crate_name));
-    std::fs::write(&ctor_include_file, ctor_fn.to_string()).unwrap();
+    common::write_include(&ctor_include_file, &ctor_fn.to_string());
     krate
         .module
         .items
-        .push(super::common::gen_include_item(ctor_include_file));
+        .push(common::gen_include_item(ctor_include_file));
 }
 
 fn generate_rpc_dispatcher(
@@ -102,7 +102,7 @@ fn generate_rpc_dispatcher(
 
     quote! {
         #[allow(warnings)]
-        {
+        fn _oasis_dispatcher() {
             use oasis_std::{Service as _, reexports::serde::Deserialize};
 
             #[derive(Deserialize)]
@@ -144,7 +144,7 @@ fn gen_result_dispatch(
 fn gen_dispatch(name: Symbol, arg_names: Vec<proc_macro2::Ident>) -> proc_macro2::TokenStream {
     let name = format_ident!("{}", name.as_str().get());
     quote! {
-        RpcPayload::#name((#(#arg_names),*),) =>
+        RpcPayload::#name((#(#arg_names),*,),) =>
             Ok(oasis_std::reexports::serde_cbor::to_vec(&service.#name(&ctx, #(#arg_names),*)).unwrap())
     }
 }
@@ -155,7 +155,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> proc_macro2::Toke
     let ctor_payload_unpack = if ctor.decl.inputs.len() > 1 {
         quote! {
             let CtorPayload((#(#arg_names),*),) =
-                oasis_std::reexports::serde_cbor::from_slice(&oasis_std::backend::input()).unwrap();,
+                oasis_std::reexports::serde_cbor::from_slice(&oasis_std::backend::input()).unwrap();
         }
     } else {
         quote!()
@@ -197,6 +197,10 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> proc_macro2::Toke
 }
 
 fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
+    krate
+        .module
+        .items
+        .push(common::gen_include_item(include_file));
     for item in krate.module.items.iter_mut() {
         if item.ident.name != Symbol::intern("main") {
             continue;
@@ -218,7 +222,9 @@ fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
             .unwrap();
         main_fn_block.stmts.splice(
             oasis_macro_idx..=oasis_macro_idx,
-            std::iter::once(super::common::gen_include_stmt(include_file)),
+            std::iter::once(common::gen_call_stmt(
+                syntax::source_map::symbol::Ident::from_str("_oasis_dispatcher"),
+            )),
         );
         break;
     }

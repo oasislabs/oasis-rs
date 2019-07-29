@@ -116,21 +116,6 @@ pub fn gen_include_item(include_path: impl AsRef<std::path::Path>) -> P<ast::Ite
     })
 }
 
-/// Generates `include!("<include_path>");`
-pub fn gen_include_stmt(include_path: impl AsRef<std::path::Path>) -> ast::Stmt {
-    let mac = gen_include_mac(include_path);
-
-    ast::Stmt {
-        node: ast::StmtKind::Mac(P((
-            source_map::dummy_spanned(mac),
-            ast::MacStmtStyle::Semicolon,
-            Default::default(),
-        ))),
-        id: ast::DUMMY_NODE_ID,
-        span: syntax_pos::DUMMY_SP,
-    }
-}
-
 pub fn gen_include_mac(include_path: impl AsRef<std::path::Path>) -> ast::Mac_ {
     use syntax::parse::token::{LitKind, Token, TokenKind};
     ast::Mac_ {
@@ -146,4 +131,38 @@ pub fn gen_include_mac(include_path: impl AsRef<std::path::Path>) -> ast::Mac_ {
         })
         .into(),
     }
+}
+
+pub fn gen_call_stmt(fn_ident: source_map::symbol::Ident) -> ast::Stmt {
+    let call_ident = ast::Expr {
+        node: ast::ExprKind::Path(None /* qself */, ast::Path::from_ident(fn_ident)),
+        id: ast::DUMMY_NODE_ID,
+        span: syntax_pos::DUMMY_SP,
+        attrs: Default::default(),
+    };
+    let call_expr = ast::Expr {
+        node: ast::ExprKind::Call(P(call_ident), Vec::new() /* args */),
+        id: ast::DUMMY_NODE_ID,
+        span: syntax_pos::DUMMY_SP,
+        attrs: Default::default(),
+    };
+    ast::Stmt {
+        node: ast::StmtKind::Semi(P(call_expr)),
+        id: ast::DUMMY_NODE_ID,
+        span: syntax_pos::DUMMY_SP,
+    }
+}
+
+pub fn write_include(path: &std::path::Path, contents: &str) {
+    std::fs::write(path, contents).unwrap();
+    std::process::Command::new("rustfmt")
+        .args(&[
+            path.to_str().unwrap(),
+            "--edition",
+            "2018",
+            "--emit",
+            "files",
+        ])
+        .output()
+        .ok();
 }

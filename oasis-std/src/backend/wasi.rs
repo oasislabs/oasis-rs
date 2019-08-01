@@ -130,7 +130,13 @@ pub fn read(key: &[u8]) -> Vec<u8> {
 }
 
 pub fn write(key: &[u8], value: &[u8]) {
-    fs::write(std::str::from_utf8(key).unwrap(), value).unwrap()
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(std::str::from_utf8(key).unwrap())
+        .unwrap();
+    f.write_all(value).unwrap();
 }
 
 pub fn emit(topics: &[&[u8]], data: &[u8]) {

@@ -116,10 +116,14 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
                     ctime: 0u64.into(),
                 })
             }),
-            buf: RefCell::new(if file_exists {
-                FileCache::Absent(SeekFrom::Start(0))
-            } else {
+            buf: RefCell::new(if !file_exists || open_flags.contains(OpenFlags::TRUNC) {
                 FileCache::Present(Cursor::new(Vec::new()))
+            } else {
+                FileCache::Absent(if fd_flags.contains(FdFlags::APPEND) {
+                    SeekFrom::End(0)
+                } else {
+                    SeekFrom::Start(0)
+                })
             }),
             dirty: Cell::new(false),
         }));

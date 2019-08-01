@@ -224,6 +224,8 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    extern crate oasis_test;
+
     use super::*;
     use oasis_std::{Address, Context};
 

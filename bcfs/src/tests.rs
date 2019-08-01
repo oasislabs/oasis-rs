@@ -72,6 +72,7 @@ macro_rules! testcase {
             extern "C" fn test_main(ptxp: memchain::PtxPtr) -> u16 {
                 let $ptx = unsafe { &mut **ptxp };
                 $body
+                0
             }
             let mut bc = create_memchain(vec![None, Some(test_main)]);
             let receipt = bc.last_block_mut().transact(
@@ -95,7 +96,6 @@ testcase!(
         for fd in (crate::file::HOME_DIR_FILENO + 1)..10 {
             assert_eq!(bcfs.close(ptx, Fd::from(fd)), Err(ErrNo::BadF));
         }
-        0
     }
 );
 
@@ -154,7 +154,6 @@ testcase!(
         assert!(bcfs.close(ptx, abs_fd).is_ok());
         assert!(bcfs.close(ptx, abs_fd2).is_ok());
         assert!(bcfs.close(ptx, rel_fd).is_ok());
-        0
     }
 );
 
@@ -264,7 +263,6 @@ testcase!(
         );
         assert_eq!(std::str::from_utf8(&read_bufs[0]).unwrap(), write_bufs[0]);
         assert_eq!(std::str::from_utf8(&read_bufs[1]).unwrap(), write_bufs[1]);
-        0
     }
 );
 
@@ -315,8 +313,6 @@ testcase!(
                 .collect::<Vec<u8>>()[1..]
         );
         assert_eq!(read_buf[read_buf.len() - 1], 0);
-
-        0
     }
 );
 
@@ -413,8 +409,6 @@ testcase!(
         );
         assert_eq!(std::str::from_utf8(&read_bufs[0]).unwrap(), "hello");
         assert_eq!(std::str::from_utf8(&read_bufs[1]).unwrap(), "world");
-
-        0
     }
 );
 
@@ -451,7 +445,6 @@ testcase!(
         assert_eq!(bcfs.renumber(ptx, badf, badf).unwrap_err(), ErrNo::BadF);
 
         assert_eq!(bcfs.close(ptx, badf), Err(ErrNo::BadF));
-        0
     }
 );
 
@@ -512,7 +505,6 @@ testcase!(
             bcfs.tell(ptx, anotherfile_fd),
             Ok(write_bufs.iter().map(|b| b.len() as u64).sum())
         );
-        0
     }
 );
 
@@ -538,6 +530,69 @@ testcase!(
             bcfs.open(ptx, curdir, &path, OpenFlags::empty(), FdFlags::empty()),
             Err(ErrNo::NoEnt)
         );
-        0
+    }
+);
+
+macro_rules! write_twice {
+    ($ptx:ident, $oflags:expr, $fdflags:expr, $expected:expr) => {{
+        let mut bcfs = BCFS::new(*$ptx.address(), CHAIN_NAME);
+
+        let path = PathBuf::from("somefile");
+        let curdir = crate::file::HOME_DIR_FILENO.into();
+
+        let first = "some initial, rather lengthy value";
+        let second = "a second value";
+
+        let mut do_write = |val: &str| {
+            let fd = bcfs
+                .open($ptx, curdir, &path, OpenFlags::CREATE | $oflags, $fdflags)
+                .unwrap();
+            bcfs.write_vectored($ptx, fd, &[std::io::IoSlice::new(val.as_bytes())])
+                .unwrap();
+            bcfs.close($ptx, fd).unwrap();
+        };
+
+        do_write(first);
+        do_write(second);
+
+        let fd = bcfs
+            .open($ptx, curdir, &path, OpenFlags::empty(), FdFlags::empty())
+            .unwrap();
+
+        let mut read_buf = vec![' ' as u8; first.len() + second.len()];
+        bcfs.read_vectored($ptx, fd, &mut [IoSliceMut::new(&mut read_buf)])
+            .unwrap();
+
+        assert_eq!(
+            String::from_utf8(read_buf).unwrap().trim(),
+            $expected(first, second)
+        );
+    }};
+}
+
+testcase!(
+    fn write_trunc(ptx: &mut dyn PendingTransaction) -> u16 {
+        write_twice!(ptx, OpenFlags::TRUNC, FdFlags::empty(), |_first, second| {
+            second
+        });
+    }
+);
+
+testcase!(
+    fn write_append(ptx: &mut dyn PendingTransaction) -> u16 {
+        write_twice!(
+            ptx,
+            OpenFlags::empty(),
+            FdFlags::APPEND,
+            |first: &str, second| { first.to_string() + second }
+        );
+    }
+);
+
+testcase!(
+    fn write_trunc_append(ptx: &mut dyn PendingTransaction) -> u16 {
+        write_twice!(ptx, OpenFlags::TRUNC, FdFlags::APPEND, |_first, second| {
+            second
+        });
     }
 );

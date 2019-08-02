@@ -6,10 +6,7 @@
     {
       "type": "enum",
       "name": "InnerTy",
-      "variants": [
-        "Field1",
-        "Field2"
-      ]
+      "variants": ["Field1", "Field2"]
     },
     {
       "type": "event",
@@ -281,5 +278,5 @@
       }
     }
   ],
-  "oasis_build_version": "0.2.1"
+  "oasis_build_version": "0.2.2"
 }

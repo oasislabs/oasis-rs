@@ -76,7 +76,7 @@ pub fn unpack_syntax_ret(ty: &syntax::ast::FunctionRetTy) -> SyntaxReturnType {
                 if let syntax::ast::GenericArgs::AngleBracketed(syntax::ast::AngleBracketedArgs {
                     args,
                     ..
-                }) = result.args.deref().as_ref().unwrap()
+                }) = &**result.args.as_ref().unwrap()
                 {
                     if let syntax::ast::GenericArg::Type(p_ty) = &args[0] {
                         ret_ty.ty = ReturnType::Known(p_ty.clone().into_inner())

@@ -7,22 +7,8 @@ executors:
       PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
     docker:
-      - image: oasislabs/rust:latest
+      - image: oasislabs/rust:nightly2019-08-01
     resource_class: xlarge
-
-  rust_pending:
-    environment:
-      PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-      LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
-    docker:
-      - image: oasislabs/rust:pending
-    resource_class: xlarge
-
-  docker_builder:
-    environment:
-      IMAGE_NAME: oasislabs/rust
-    docker:
-      - image: circleci/buildpack-deps:bionic
 
 
 commands:
@@ -50,45 +36,9 @@ commands:
               sort | xargs md5sum oasis-build/Cargo.toml > oasis-build.sums
             echo $(rustc --version) >> oasis-build.sums
 
-  update_toolstate:
-    steps:
-      - checkout
-      - run:
-          name: Install oasis-build
-          command: |
-            cargo build --release -p oasis-build && cp target/release/oasis-build ~/.cargo/bin
-      - run:
-          name: Package oasis-build for rustup
-          command: |
-            bin_dir=oasis-build/oasis-build/bin
-            mkdir -p $bin_dir
-            cp target/release/oasis-build $bin_dir
-            echo 'oasis-build' > oasis-build/components
-            echo $(git rev-parse HEAD) > oasis-build/version
-            echo '3' > oasis-build/rust-installer-version
-            echo 'file:bin/oasis-build' > oasis-build/oasis-build/manifest.in
-            tar czf oasis-build.tar.gz oasis-build
-      - run:
-          name: Push to S3 bucket
-          command: |
-            rustc_version=$(rustc --version | cut -d'(' -f 2 | cut -d')' -f 1 | tr ' ' '_')
-            llvm_target=$(rustc --print sysroot | cut -d'-' -f2-)
-            aws s3 cp oasis-build.tar.gz s3://oasis-rs/$rustc_version/$llvm_target/oasis-build.tar.gz
-
-  docker_push:
-    parameters:
-      tag:
-        type: string
-    steps:
-      - run:
-          name: Push to Docker Hub
-          command: |
-            echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
-            docker push oasislabs/rust:<< parameters.tag >>
-
 
 jobs:
-  init: &init
+  init:
     executor: rust
     steps:
       - checkout
@@ -106,11 +56,7 @@ jobs:
           name: Unit test
           command: cargo test
 
-  init_pending:
-    << : *init
-    executor: rust_pending
-
-  clippy: &clippy
+  clippy:
     executor: rust
     resource_class: medium
     steps:
@@ -121,10 +67,6 @@ jobs:
             rustup component add clippy || exit 0
             cargo clippy --all-features -- -D clippy::all
 
-  clippy_pending:
-    << : *clippy
-    executor: rust_pending
-
   wasm_build:
     executor: rust
     steps:
@@ -133,7 +75,7 @@ jobs:
           name: Wasm build
           command: cargo build --target wasm32-unknown-unknown --all-features -p memchain -p bcfs
 
-  build_standalone_examples: &build_standalone_examples
+  build_standalone_examples:
     executor: rust
     environment:
       RUSTC_WRAPPER: oasis-build
@@ -150,11 +92,7 @@ jobs:
               -p messaging \
               -p sealed-auctions
 
-  build_standalone_examples_pending:
-    << : *build_standalone_examples
-    executor: rust_pending
-
-  test_idl: &test_idl
+  test_idl:
     executor: rust
     environment:
       RUSTC_WRAPPER: oasis-build
@@ -166,11 +104,7 @@ jobs:
           working_directory: tests/idl-gen
           command: cargo build --target wasm32-wasi --bins && cargo test --lib
 
-  test_idl_pending:
-    << : *test_idl
-    executor: rust_pending
-
-  test_imports: &test_imports
+  test_imports:
     executor: rust
     environment:
       RUSTC_WRAPPER: oasis-build
@@ -186,173 +120,21 @@ jobs:
           working_directory: tests/xcc-a
           command: cargo build --target wasm32-wasi --bins && cargo test --lib
 
-  test_imports_pending:
-    << : *test_imports
-    executor: rust_pending
-
-  docker_build:
-    executor: docker_builder
-    steps:
-      - checkout
-      - setup_remote_docker
-      - run:
-          name: Build Docker image
-          command: docker build -t $IMAGE_NAME:pending .
-          working_directory: .circleci/docker
-      - run:
-          name: Archive Docker image
-          command: docker save -o image.tar $IMAGE_NAME
-      - persist_to_workspace:
-          root: .
-          paths:
-            - ./image.tar
-      - docker_push:
-          tag: pending
-
-  update_linux_toolstate:
-    executor: rust_pending
-    steps:
-      - update_toolstate
-      - cache_oasis_build
-
-  update_macos_toolstate:
-    environment:
-      PATH: /Users/distiller/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-      LD_LIBRARY_PATH: /Users/distiller/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
-    macos:
-      xcode: "10.0.0"
-    steps:
-      - run:
-          name: Install Rust
-          command: curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
-      - run:
-          name: Install AWS CLI
-          command: pip install awscli
-      - checkout
-      - update_toolstate
-
-  docker_publish:
-    executor: docker_builder
-    steps:
-      - checkout
-      - attach_workspace:
-          at: /tmp/workspace
-      - setup_remote_docker
-      - run:
-          name: Load archived Docker image
-          command: docker load -i /tmp/workspace/image.tar
-      - run:
-          name: Tag image with latest
-          command: docker tag $IMAGE_NAME:pending $IMAGE_NAME:latest
-      - docker_push:
-          tag: latest
-
 
 workflows:
   version: 2
 
   test:
     jobs:
-      - init:
-          filters:
-            branches:
-              ignore: nightly-plugin
-      - clippy:
-          filters:
-            branches:
-              ignore: nightly-plugin
+      - init
+      - clippy
       - wasm_build
       - test_idl:
           requires:
             - init
-          filters:
-            branches:
-              ignore: nightly-plugin
       - test_imports:
           requires:
             - init
-          filters:
-            branches:
-              ignore: nightly-plugin
       - build_standalone_examples:
           requires:
             - init
-          filters:
-            branches:
-              ignore: nightly-plugin
-
-  nightly:
-    triggers:
-      - schedule:
-          cron: "0 14 * * *"
-          filters:
-            branches:
-              only:
-                - master
-    jobs:
-      - docker_build
-      - update_linux_toolstate:
-          requires:
-            - docker_build
-      - update_macos_toolstate
-      - docker_publish:
-          requires:
-            - update_linux_toolstate
-
-  fix_plugin:
-    jobs:
-      - docker_build:
-          filters:
-            branches:
-              only: nightly-plugin
-      - init_pending:
-          filters:
-            branches:
-              only: nightly-plugin
-      - clippy_pending:
-          filters:
-            branches:
-              only: nightly-plugin
-      - test_idl_pending:
-          requires:
-            - init_pending
-          filters:
-            branches:
-              only: nightly-plugin
-      - test_imports_pending:
-          requires:
-            - init_pending
-          filters:
-            branches:
-              only: nightly-plugin
-      - build_standalone_examples_pending:
-          requires:
-            - init_pending
-          filters:
-            branches:
-              only: nightly-plugin
-      - update_linux_toolstate:
-          requires:
-            - clippy_pending
-            - test_idl_pending
-            - test_imports_pending
-            - build_standalone_examples_pending
-          filters:
-            branches:
-              only: nightly-plugin
-      - update_macos_toolstate:
-          requires:
-            - clippy_pending
-            - test_idl_pending
-            - test_imports_pending
-            - build_standalone_examples_pending
-          filters:
-            branches:
-              only: nightly-plugin
-      - docker_publish:
-          type: approval
-          requires:
-            - update_linux_toolstate
-          filters:
-            branches:
-              only: nightly-plugin

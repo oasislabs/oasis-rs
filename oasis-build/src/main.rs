@@ -29,13 +29,15 @@ fn main() {
         args.push("--sysroot".to_string());
         args.push(get_sysroot());
 
-        let is_primary = std::env::var("CARGO_PRIMARY_PACKAGE")
-            .map(|p| p == "1")
-            .unwrap_or(false);
+        let crate_name = get_arg("--crate-name", &args).cloned();
         let is_bin = get_arg("--crate-type", &args)
             .map(|t| t == "bin")
             .unwrap_or(false);
-        let is_service = is_primary && is_bin;
+        let is_nonprimary_bin = crate_name
+            .as_ref()
+            .map(|n| n == "build_script_build" || n == "___")
+            .unwrap_or_default();
+        let is_service = is_bin && !is_nonprimary_bin;
         let is_testing = args
             .iter()
             .any(|arg| arg == "feature=\"oasis-build-compiletest\"");
@@ -46,7 +48,7 @@ fn main() {
             path
         });
 
-        let imports = if is_primary {
+        let imports = if is_service {
             let out_dir = out_dir.as_ref().unwrap();
 
             let gen_dir = out_dir.parent().unwrap().join("build/oasis_imports");
@@ -93,7 +95,7 @@ fn main() {
             return Ok(());
         }
 
-        let service_name = get_arg("--crate-name", &args).unwrap();
+        let service_name = crate_name.unwrap();
 
         let rpc_iface = match idl8r.try_get() {
             Some(rpc_iface) => rpc_iface,

@@ -7,7 +7,7 @@ executors:
       PATH: /root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
     docker:
-      - image: oasislabs/rust:nightly2019-08-01
+      - image: oasislabs/rust:latest
     resource_class: xlarge
 
 

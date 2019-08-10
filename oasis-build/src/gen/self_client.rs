@@ -1,5 +1,7 @@
 use std::{io::Write, path::Path};
 
+use heck::CamelCase;
+use proc_quote::quote;
 use syntax::{
     ast::{Arg, Block, Crate, Item, ItemKind, MethodSig, StmtKind},
     print::pprust,
@@ -12,7 +14,7 @@ use crate::{
     BuildContext, BuildTarget,
 };
 
-use super::ServiceDefinition;
+use super::{common::sanitize_ident, ServiceDefinition};
 
 pub fn insert(build_ctx: &BuildContext, krate: &mut Crate, service_def: &ServiceDefinition) {
     let BuildContext {
@@ -33,7 +35,10 @@ pub fn insert(build_ctx: &BuildContext, krate: &mut Crate, service_def: &Service
         build_test_client(service_def)
     };
 
-    let client_ident = format_ident!("{}Client", sanitize_ident(&interface.name).to_camel_case());
+    let client_ident = crate::format_ident!(
+        "{}Client",
+        sanitize_ident(service_name.as_str().get()).to_camel_case()
+    );
 
     let client = quote! {
         pub struct #client_ident {
@@ -45,18 +50,18 @@ pub fn insert(build_ctx: &BuildContext, krate: &mut Crate, service_def: &Service
         }
     };
 
-    let include_file = out_dir.join(format!("{}_client.rs", crate_name));
-    std::fs::write(&include_file, &client.to_string()).unwrap();
-    krate
-        .module
-        .items
-        .push(super::common::gen_include_item(include_file));
+    // let include_file = out_dir.join(format!("{}_client.rs", crate_name));
+    // std::fs::write(&include_file, &client.to_string()).unwrap();
+    // krate
+    //     .module
+    //     .items
+    //     .push(super::common::gen_include_item(include_file));
 }
 
 fn build_wasi_client(service_def: &ServiceDefinition) -> proc_macro2::TokenStream {
-    unimplemented!()
+    quote!().into()
 }
 
 fn build_test_client(service_def: &ServiceDefinition) -> proc_macro2::TokenStream {
-    unimplemented!()
+    quote!().into()
 }

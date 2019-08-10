@@ -42,6 +42,7 @@ pub fn build(
     for service in services {
         let mut hasher = DefaultHasher::new();
         service.interface.hash(&mut hasher);
+        get_rustc_version().hash(&mut hasher);
         let interface_hash = hasher.finish();
 
         let mod_name = sanitize_ident(&service.interface.namespace).to_snake_case();
@@ -268,6 +269,15 @@ fn gen_ctors(ctor: &oasis_rpc::Constructor, _bytecode: &[u8]) -> TokenStream {
             }
         }
     }
+}
+
+fn get_rustc_version() -> String {
+    std::process::Command::new("rustc")
+        .arg("--version")
+        .output()
+        .ok()
+        .and_then(|out| String::from_utf8(out.stdout).ok())
+        .expect("Could not determine rustc version")
 }
 
 #[cfg(test)]

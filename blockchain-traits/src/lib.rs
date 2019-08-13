@@ -191,7 +191,7 @@ pub enum TransactionOutcome {
     InsufficientFunds,
     InsufficientGas,
     InvalidInput,
-    NoAccount,
+    InvalidCallee,
     Aborted, // recoverable error
     Fatal,
 }

@@ -98,7 +98,7 @@ pub fn transact(callee: &Address, value: u64, input: &[u8]) -> Result<Vec<u8>, E
     match errno {
         libc::__WASI_ESUCCESS => Ok(out),
         libc::__WASI_EFAULT | libc::__WASI_EINVAL => return Err(Error::InvalidInput),
-        libc::__WASI_ENOENT => return Err(Error::NoAccount),
+        libc::__WASI_ENOENT => return Err(Error::InvalidCallee),
         libc::__WASI_EDQUOT => return Err(Error::InsufficientFunds),
         _ => {
             return Err(Error::Execution {

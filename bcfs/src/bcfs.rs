@@ -105,16 +105,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
             metadata: Cell::new(if file_exists {
                 None
             } else {
-                Some(FileStat {
-                    device: 0u64.into(),
-                    inode: 0u32.into(),
-                    file_type: FileType::RegularFile,
-                    num_links: 0,
-                    file_size: 0,
-                    atime: 0u64.into(),
-                    mtime: 0u64.into(),
-                    ctime: 0u64.into(),
-                })
+                Some(Self::default_filestat())
             }),
             buf: RefCell::new(if !file_exists || open_flags.contains(OpenFlags::TRUNC) {
                 FileCache::Present(Cursor::new(Vec::new()))
@@ -125,6 +116,21 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
                     SeekFrom::Start(0)
                 })
             }),
+            dirty: Cell::new(false),
+        }));
+        Ok(fd)
+    }
+
+    pub fn tempfile(
+        &mut self,
+        _ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+    ) -> Result<Fd> {
+        let fd = self.alloc_fd()?;
+        self.files.push(Some(File {
+            kind: FileKind::Temporary,
+            flags: FdFlags::empty(),
+            metadata: Cell::new(Some(Self::default_filestat())),
+            buf: RefCell::new(FileCache::Present(Cursor::new(Vec::new()))),
             dirty: Cell::new(false),
         }));
         Ok(fd)
@@ -473,7 +479,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
                         None => return Err(ErrNo::NoEnt),
                     },
                     FileKind::Stdout | FileKind::Stderr | FileKind::Log => Vec::new(),
-                    FileKind::Directory { .. } => return Err(ErrNo::Fault),
+                    FileKind::Directory { .. } | FileKind::Temporary => return Err(ErrNo::Fault),
                 };
                 let file_size = bytes.len();
                 let mut cursor = Cursor::new(bytes);
@@ -592,7 +598,8 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
             FileKind::Stdin
             | FileKind::Bytecode { .. }
             | FileKind::Balance { .. }
-            | FileKind::Directory { .. } => (),
+            | FileKind::Directory { .. }
+            | FileKind::Temporary => (),
             FileKind::Stdout => ptx.ret(buf),
             FileKind::Stderr => ptx.err(buf),
             FileKind::Log => {
@@ -639,6 +646,19 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         match parser(buf) {
             Ok((data, topics)) => Some((topics, data)),
             _ => None,
+        }
+    }
+
+    fn default_filestat() -> FileStat {
+        FileStat {
+            device: 0u64.into(),
+            inode: 0u32.into(),
+            file_type: FileType::RegularFile,
+            num_links: 0,
+            file_size: 0,
+            atime: 0u64.into(),
+            mtime: 0u64.into(),
+            ctime: 0u64.into(),
         }
     }
 }

@@ -69,7 +69,9 @@ pub fn code(addr: &Address) -> Option<Vec<u8>> {
     })
 }
 
+#[link(wasm_import_module = "wasi_unstable")]
 extern "C" {
+    #[link_name = "blockchain_transact"]
     fn __wasi_blockchain_transact(
         callee_addr: *const u8,
         value: u64,

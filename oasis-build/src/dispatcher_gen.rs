@@ -177,7 +177,7 @@ fn gen_result_dispatch(
             let output = match service.{name}(&ctx, {arg_names}) {{
                 Ok(output) => Ok(oasis_std::reexports::serde_cbor::to_vec(&output).unwrap()),
                 Err(err) => Err(oasis_std::reexports::serde_cbor::to_vec(&err).unwrap()),
-            }}
+            }};
             {sunderer}
             output
         }}"#,

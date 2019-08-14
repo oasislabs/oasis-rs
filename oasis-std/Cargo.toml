@@ -1,6 +1,6 @@
 [package]
 name = "oasis-std"
-version = "0.2.2"
+version = "0.2.3"
 license = "Apache-2.0"
 description = "Types and functions for developing against the Oasis platform"
 edition = "2018"

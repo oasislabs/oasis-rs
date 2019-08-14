@@ -27,5 +27,5 @@ pub enum Error {
     InvalidCallee,
 
     /// Transaction failed with status code and payload
-    Execution { code: u32, payload: Vec<u8> },
+    Execution { payload: Vec<u8> },
 }

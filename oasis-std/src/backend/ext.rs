@@ -60,10 +60,8 @@ impl From<ExtStatusCode> for Error {
             ExtStatusCode::Success => unreachable!(),
             ExtStatusCode::InsufficientFunds => Error::InsufficientFunds,
             ExtStatusCode::InvalidInput => Error::InvalidInput,
-            ExtStatusCode::NoAccount => Error::NoAccount,
-            code if code.0 <= u32::from(u8::max_value()) => Error::Unknown,
-            code => Error::Execution {
-                code: code.0,
+            ExtStatusCode::NoAccount => Error::InvalidCallee,
+            _ => Error::Execution {
                 payload: fetch_err(),
             },
         }

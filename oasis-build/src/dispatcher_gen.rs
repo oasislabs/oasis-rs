@@ -72,9 +72,9 @@ fn generate_rpc_dispatcher(
 
             if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
                 any_rpc_returns_result = true;
-                gen_result_dispatch(rpc.name, arg_names)
+                gen_result_dispatch(service_name, rpc.name, rpc.is_mut(), arg_names)
             } else {
-                gen_dispatch(rpc.name, arg_names)
+                gen_dispatch(service_name, rpc.name, rpc.is_mut(), arg_names)
             }
         })
         .collect::<String>();
@@ -82,9 +82,9 @@ fn generate_rpc_dispatcher(
     let default_fn_arm = if let Some(rpc) = default_fn {
         if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
             any_rpc_returns_result = true;
-            gen_result_dispatch(rpc.name, Vec::new())
+            gen_default_result_dispatch(service_name, rpc.is_mut(), rpc.name)
         } else {
-            gen_dispatch(rpc.name, Vec::new())
+            gen_default_dispatch(service_name, rpc.is_mut(), rpc.name)
         }
     } else {
         String::new()
@@ -115,14 +115,14 @@ fn generate_rpc_dispatcher(
             }}
 
             let ctx = oasis_std::Context::default(); // TODO(#33)
-            let mut service = <{service_ident}>::coalesce();
-            let payload: RpcPayload =
-                oasis_std::reexports::serde_cbor::from_slice(&oasis_std::backend::input()).unwrap();
+            let mut service = <{service_name}>::coalesce();
+            let input = oasis_std::backend::input();
+            let payload = oasis_std::reexports::serde_cbor::from_slice::<RpcPayload>(&input);
             let output: std::result::Result<Vec<u8>, {output_err_ty}> = match payload {{
                 {call_tree}
                 {default_fn_arm}
+                Err(err) => panic!("{{}}", err)
             }};
-            <{service_ident}>::sunder(service);
             match output {{
                 Ok(output) => oasis_std::backend::ret(&output),
                 Err(err_output) => {err_returner},
@@ -130,7 +130,7 @@ fn generate_rpc_dispatcher(
         }}
         }}"#,
         rpc_payload_variants = rpc_payload_variants.join(", "),
-        service_ident = service_name.as_str().get(),
+        service_name = service_name,
         call_tree = rpc_match_arms,
         default_fn_arm = default_fn_arm,
         output_err_ty = output_err_ty,
@@ -138,26 +138,76 @@ fn generate_rpc_dispatcher(
     ) => parse_block)
 }
 
-fn gen_result_dispatch(name: Symbol, arg_names: Vec<String>) -> String {
+fn gen_default_result_dispatch(service_name: Symbol, mutable: bool, default_fn: Symbol) -> String {
     format!(
-        r#"RpcPayload::{name}({tup_arg_names}) => match service.{name}(&ctx, {arg_names}) {{
-            Ok(output) => Ok(oasis_std::reexports::serde_cbor::to_vec(&output).unwrap()),
-            Err(err) => Err(oasis_std::reexports::serde_cbor::to_vec(&err).unwrap()),
+        r#"Err(_) if input.is_empty() => {{
+            let output = match service.{default_fn}(&ctx) {{
+                Ok(output) => Ok(oasis_std::reexports::serde_cbor::to_vec(&output).unwrap()),
+                Err(err) => Err(oasis_std::reexports::serde_cbor::to_vec(&err).unwrap()),
+            }};
+            {sunderer}
+            output
         }}"#,
-        name = name,
-        tup_arg_names = tuplize(&arg_names),
-        arg_names = arg_names.join(","),
+        default_fn = default_fn,
+        sunderer = get_sunderer(service_name, mutable)
     )
 }
 
-fn gen_dispatch(name: Symbol, arg_names: Vec<String>) -> String {
+fn gen_default_dispatch(service_name: Symbol, mutable: bool, default_fn: Symbol) -> String {
     format!(
-        r#"RpcPayload::{name}({tup_arg_names}) => {{
-            Ok(oasis_std::reexports::serde_cbor::to_vec(&service.{name}(&ctx, {arg_names})).unwrap())
+        r#"Err(_) if input.is_empty() => {{
+            let output = Ok(
+                oasis_std::reexports::serde_cbor::to_vec(&service.{default_fn}(&ctx)).unwrap());
+            {sunderer}
+            output
+        }}"#,
+        default_fn = default_fn,
+        sunderer = get_sunderer(service_name, mutable)
+    )
+}
+
+fn gen_result_dispatch(
+    service_name: Symbol,
+    name: Symbol,
+    mutable: bool,
+    arg_names: Vec<String>,
+) -> String {
+    format!(
+        r#"Ok(RpcPayload::{name}({tup_arg_names})) => {{
+            let output = match service.{name}(&ctx, {arg_names}) {{
+                Ok(output) => Ok(oasis_std::reexports::serde_cbor::to_vec(&output).unwrap()),
+                Err(err) => Err(oasis_std::reexports::serde_cbor::to_vec(&err).unwrap()),
+            }}
+            {sunderer}
+            output
         }}"#,
         name = name,
         tup_arg_names = tuplize(&arg_names),
         arg_names = arg_names.join(","),
+        sunderer = get_sunderer(service_name, mutable)
+    )
+}
+
+fn gen_dispatch(
+    service_name: Symbol,
+    name: Symbol,
+    mutable: bool,
+    arg_names: Vec<String>,
+) -> String {
+    format!(
+        r#"Ok(RpcPayload::{name}({tup_arg_names})) => {{
+            let output = Ok(
+                oasis_std::reexports::serde_cbor::to_vec(
+                    &service.{name}(&ctx, {arg_names})
+                ).unwrap()
+            );
+            {sunderer}
+            output
+        }}"#,
+        name = name,
+        tup_arg_names = tuplize(&arg_names),
+        arg_names = arg_names.join(","),
+        sunderer = get_sunderer(service_name, mutable)
     )
 }
 
@@ -177,7 +227,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
     let ctor_stmt = if crate::utils::unpack_syntax_ret(&ctor.decl.output).is_result {
         format!(
             r#"
-            match <{service_ident}>::new(&ctx, {arg_names}) {{
+            match <{service_name}>::new(&ctx, {arg_names}) {{
                 Ok(service) => service,
                 Err(err) => {{
                     oasis_std::backend::err(&format!("{{:#?}}", err).into_bytes());
@@ -185,13 +235,13 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
                 }}
             }}
             "#,
-            service_ident = service_name.as_str().get(),
+            service_name = service_name,
             arg_names = arg_names.join(","),
         )
     } else {
         format!(
-            "<{service_ident}>::new(&ctx, {arg_names})",
-            service_ident = service_name.as_str().get(),
+            "<{service_name}>::new(&ctx, {arg_names})",
+            service_name = service_name,
             arg_names = arg_names.join(",")
         )
     };
@@ -210,14 +260,14 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> P<Item> {
                 let ctx = oasis_std::Context::default(); // TODO(#33)
                 {ctor_payload_unpack}
                 let mut service = {ctor_stmt};
-                <{service_ident}>::sunder(service);
+                <{service_name}>::sunder(service);
                 return 0;
             }}
         "#,
         ctor_stmt = ctor_stmt,
         ctor_payload_unpack = ctor_payload_unpack,
         ctor_payload_types = tuplize(&arg_tys),
-        service_ident = service_name.as_str().get(),
+        service_name = service_name,
     ) => parse_item)
     .unwrap()
 }
@@ -272,5 +322,13 @@ fn tuplize(items: &[String]) -> String {
         String::new()
     } else {
         format!("({},)", items.join(","))
+    }
+}
+
+fn get_sunderer(service_name: Symbol, mutable: bool) -> String {
+    if mutable {
+        format!("<{}>::sunder(service);", service_name)
+    } else {
+        "".to_string()
     }
 }

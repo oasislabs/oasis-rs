@@ -1,6 +1,6 @@
 use rustc::util::nodemap::FxHashMap;
 use syntax::{
-    ast,
+    ast::{self, Mutability, SelfKind},
     mut_visit::{self, MutVisitor},
     print::pprust,
     ptr::P,
@@ -95,6 +95,24 @@ pub struct ParsedRpc {
     pub sig: ast::MethodSig,
     pub kind: ParsedRpcKind,
     pub span: Span,
+}
+
+impl ParsedRpc {
+    pub fn is_mut(&self) -> bool {
+        if let ParsedRpcKind::Ctor = self.kind {
+            return false;
+        }
+        match &self.sig.decl.get_self().unwrap().node {
+            SelfKind::Value(mutability)
+            | SelfKind::Region(_, mutability)
+            | SelfKind::Explicit(_, mutability)
+                if *mutability == Mutability::Mutable =>
+            {
+                true
+            }
+            _ => false,
+        }
+    }
 }
 
 #[derive(PartialEq, Eq)]

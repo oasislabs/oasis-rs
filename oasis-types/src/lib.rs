@@ -2,9 +2,7 @@
 extern crate serde;
 
 /// A 160-bit little-endian hash address type.
-#[derive(
-    Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Serialize, Deserialize,
-)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Serialize)]
 #[repr(C)]
 pub struct Address(pub [u8; 20]);
 
@@ -22,7 +20,7 @@ impl Address {
     }
 
     pub const fn len() -> usize {
-        20
+        std::mem::size_of::<Self>()
     }
 }
 
@@ -54,6 +52,66 @@ impl std::str::FromStr for Address {
 impl std::fmt::Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "0x{}", hex::encode(self.0))
+    }
+}
+
+impl<'de> serde::de::Deserialize<'de> for Address {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        use serde::de;
+
+        const EXPECTATION: &str = "20 bytes";
+
+        struct AddressVisitor;
+        impl<'de> de::Visitor<'de> for AddressVisitor {
+            type Value = Address;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str(EXPECTATION)
+            }
+
+            fn visit_seq<V>(self, mut seq: V) -> Result<Self::Value, V::Error>
+            where
+                V: de::SeqAccess<'de>,
+            {
+                let mut arr = [0; Self::Value::len()];
+
+                if let Some(len) = seq.size_hint() {
+                    if len != arr.len() {
+                        return Err(de::Error::invalid_length(len, &EXPECTATION));
+                    }
+                }
+
+                let mut i = 0;
+                loop {
+                    match seq.next_element()? {
+                        Some(el) if i < arr.len() => arr[i] = el,
+                        None if i == arr.len() => break,
+                        _ => return Err(de::Error::invalid_length(i, &EXPECTATION)),
+                    }
+                    i += 1;
+                }
+
+                Ok(Address(arr))
+            }
+
+            fn visit_bytes<E>(self, value: &[u8]) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                let mut arr = [0; std::mem::size_of::<Self::Value>()];
+                if value.len() == arr.len() {
+                    arr.copy_from_slice(value);
+                    Ok(Address(arr))
+                } else {
+                    Err(de::Error::invalid_length(value.len(), &EXPECTATION))
+                }
+            }
+        }
+
+        deserializer.deserialize_any(AddressVisitor)
     }
 }
 
@@ -100,5 +158,52 @@ impl blockchain_traits::Event for Event {
 
     fn data(&self) -> &[u8] {
         self.data.as_slice()
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    #[test]
+    fn deserialize_address_from_array() {
+        let bytes = [1u8; 20];
+        let addr: Address = serde_cbor::from_slice(&serde_cbor::to_vec(&bytes).unwrap()).unwrap();
+        assert_eq!(addr.0, bytes);
+    }
+
+    #[test]
+    #[should_panic]
+    fn fail_deserialize_address_from_short_array() {
+        let bytes = [1u8; 19];
+        serde_cbor::from_slice::<Address>(&serde_cbor::to_vec(&bytes).unwrap()).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn fail_deserialize_address_from_long_array() {
+        let bytes = [1u8; 21];
+        serde_cbor::from_slice::<Address>(&serde_cbor::to_vec(&bytes).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn deserialize_address_from_slice() {
+        let bytes = vec![1u8; 20];
+        let addr: Address = serde_cbor::from_slice(&serde_cbor::to_vec(&bytes).unwrap()).unwrap();
+        assert_eq!(&addr.0, bytes.as_slice());
+    }
+
+    #[test]
+    #[should_panic]
+    fn fail_deserialize_address_from_short_slice() {
+        let bytes = vec![1u8; 19];
+        serde_cbor::from_slice::<Address>(&serde_cbor::to_vec(&bytes).unwrap()).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn fail_deserialize_address_from_long_slice() {
+        let bytes = vec![1u8; 21];
+        serde_cbor::from_slice::<Address>(&serde_cbor::to_vec(&bytes).unwrap()).unwrap();
     }
 }

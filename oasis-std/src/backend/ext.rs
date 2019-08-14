@@ -202,12 +202,7 @@ pub fn read(key: &[u8]) -> Vec<u8> {
     let mut val = Vec::with_capacity(val_len as usize);
     unsafe { val.set_len(val_len as usize) };
 
-    ext!(oasis_read(
-        key.as_ptr(),
-        key.len() as u32,
-        val.as_mut_ptr()
-    ))
-    .unwrap();
+    ext!(oasis_read(key.as_ptr(), key.len() as u32, val.as_mut_ptr())).unwrap();
     val
 }
 

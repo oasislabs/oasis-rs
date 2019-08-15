@@ -51,16 +51,6 @@ fn main() {
             path
         });
 
-        let is_wasi = get_arg("--target", &args).map(String::as_str) == Some("wasm32-wasi");
-        let build_target = if is_test {
-            BuildTarget::Test
-        } else if is_wasi || is_compiletest {
-            BuildTarget::Wasi
-        } else {
-            println!("\n{}: Compiling an Oasis service to a native target is unlikely to work as expected. Did you mean to use `cargo build --target wasm32-wasi`?\n", "error".red());
-            return Err(ErrorReported);
-        };
-
         let imports = if is_service || is_test {
             let out_dir = out_dir.as_ref().unwrap();
 

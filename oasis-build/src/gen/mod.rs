@@ -1,7 +1,6 @@
 mod common;
 mod dispatcher;
 mod imports;
-mod self_client;
 
 pub use imports::build as build_imports;
 
@@ -17,5 +16,4 @@ pub fn insert_oasis_bindings(
     service_def: ServiceDefinition,
 ) {
     dispatcher::insert(&build_ctx, krate, &service_def);
-    self_client::insert(&build_ctx, krate, &service_def);
 }

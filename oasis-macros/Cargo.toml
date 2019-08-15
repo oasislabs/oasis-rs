@@ -10,9 +10,9 @@ readme = "README.md"
 keywords = ["oasis", "blockchain"]
 
 [dependencies]
-proc-macro2 = "0.4"
-proc-quote = "0.2"
-syn = { version = "0.15", features = ["full", "extra-traits", "visit-mut"] }
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "1.0", features = ["full", "extra-traits", "visit-mut"] }
 tiny-keccak = "1.4"
 
 [lib]

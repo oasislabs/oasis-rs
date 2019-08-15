@@ -1,5 +1,5 @@
 use proc_macro2::{Literal, TokenStream};
-use proc_quote::quote;
+use quote::quote;
 use syntax::{ast, ptr::P, source_map};
 
 #[macro_export]

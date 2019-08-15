@@ -9,7 +9,7 @@ use colored::*;
 use heck::{CamelCase, SnakeCase};
 use oasis_rpc::import::ImportedService;
 use proc_macro2::{Ident, TokenStream};
-use proc_quote::quote;
+use quote::quote;
 
 use crate::format_ident;
 

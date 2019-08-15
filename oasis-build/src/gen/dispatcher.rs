@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use proc_macro2::TokenStream;
-use proc_quote::quote;
+use quote::quote;
 use syntax::{
     ast::{Arg, Crate, ItemKind, MethodSig, StmtKind},
     print::pprust,
@@ -188,7 +188,7 @@ mod armery {
         }
     }
 
-    impl proc_quote::ToTokens for DispatchArm {
+    impl quote::ToTokens for DispatchArm {
         fn to_tokens(&self, tokens: &mut TokenStream) {
             let DispatchArm {
                 guard, invocation, ..

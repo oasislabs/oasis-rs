@@ -1,7 +1,7 @@
 error[E0599]: no function or associated item named `sunder` found for type `Counter` in the current scope
-  --> /tmp/oasis_generated/no_service_derive_ctor.rs:11:16
+  --> /tmp/oasis_generated/no_service_derive_ctor.rs:10:16
    |
-11 |     <Counter>::sunder(service);
+10 |     <Counter>::sunder(service);
    |                ^^^^^^ function or associated item not found in `Counter`
    | 
   ::: $DIR/no_service_derive.rs:3:1

@@ -100,9 +100,9 @@ impl<'ast> visit::Visitor<'ast> for ServiceDefFinder {
 
 pub struct ParsedRpc {
     pub name: Symbol,
-    pub sig: ast::MethodSig,
     pub kind: ParsedRpcKind,
     pub span: Span,
+    sig: ast::MethodSig,
 }
 
 impl ParsedRpc {
@@ -120,6 +120,10 @@ impl ParsedRpc {
             }
             _ => false,
         }
+    }
+
+    pub fn returns_result(&self) -> bool {
+        crate::utils::unpack_syntax_ret(&self.sig.decl.output).is_result
     }
 }
 

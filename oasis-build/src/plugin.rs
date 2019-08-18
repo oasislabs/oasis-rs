@@ -134,7 +134,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
         let (ctor, rpcs): (Vec<_>, Vec<_>) = rpcs
             .into_iter()
             .partition(|rpc| rpc.kind == ParsedRpcKind::Ctor);
-        let ctor_sig = match ctor.as_slice() {
+        let ctor = match ctor.as_slice() {
             [] => {
                 sess.span_err(
                     struct_span,
@@ -142,7 +142,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
                 );
                 ret_err!();
             }
-            [rpc] => &rpc.sig,
+            [ctor] => &ctor,
             _ => ret_err!(), // Multiply defined `new` function. Let the compiler catch this.
         };
 
@@ -174,7 +174,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
         };
         let service_def = crate::gen::ServiceDefinition {
             name: service_name,
-            ctor: &ctor_sig,
+            ctor,
             rpcs,
         };
 

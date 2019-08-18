@@ -60,31 +60,20 @@ fn generate_rpc_dispatcher(
     let rpc_match_arms = rpcs
         .iter()
         .map(|rpc| {
-            let (arg_names, arg_tys) = split_args(&rpc.sig.decl.inputs[2..]);
+            let arg_tys = rpc.arg_tys();
 
-            let rpc_name = format_ident!("{}", rpc.name.as_str().get());
+            let rpc_name = format_ident!("{}", rpc.name);
             rpc_payload_variants.push(quote! {
                 #rpc_name((#(#arg_tys),*,),)
             });
 
-            if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
-                any_rpc_returns_result = true;
-                DispatchArm::for_result(rpc.name, &arg_names)
-            } else {
-                DispatchArm::for_infallible(rpc.name, &arg_names)
-            }
-            .sunder(rpc.is_mut())
+            any_rpc_returns_result |= rpc.returns_result();
+            DispatchArm::new(service_name, &rpc)
         })
         .collect::<Vec<_>>();
 
     let default_fn_invocation = if let Some(rpc) = default_fn {
-        let default_dispatch = if crate::utils::unpack_syntax_ret(&rpc.sig.decl.output).is_result {
-            DispatchArm::for_result(rpc.name, &[])
-        } else {
-            DispatchArm::for_infallible(rpc.name, &[])
-        }
-        .sunder(rpc.is_mut())
-        .invocation;
+        let default_dispatch = DispatchArm::new(service_name, &rpc).invocation;
         quote! {
             if input.is_empty() {
                 #default_dispatch
@@ -144,47 +133,31 @@ mod armery {
     pub struct DispatchArm {
         pub guard: TokenStream,
         pub invocation: TokenStream,
-        fn_name: proc_macro2::Ident,
         sunder: bool,
     }
 
     impl DispatchArm {
-        fn new_with_guard_only(fn_name: Symbol, arg_names: &[proc_macro2::Ident]) -> Self {
-            let fn_name = format_ident!("{}", fn_name);
+        pub fn new(service_name: Symbol, rpc: &ParsedRpc) -> Self {
+            let fn_name = format_ident!("{}", rpc.name);
+            let arg_names = rpc.arg_names();
             Self {
                 guard: quote!(RpcPayload::#fn_name((#(#arg_names),*,),)),
-                invocation: quote!(),
-                sunder: true,
-                fn_name,
+                invocation: if rpc.returns_result() {
+                    quote! {
+                                match service.#fn_name(&ctx, #(#arg_names),*) {
+                                    Ok(output) => Ok(oasis_std::reexports::serde_cbor::to_vec(&output).unwrap()),
+                                    Err(err) => Err(oasis_std::reexports::serde_cbor::to_vec(&err).unwrap()),
+                                }
+                    }
+                } else {
+                    quote! {
+                        Ok(oasis_std::reexports::serde_cbor::to_vec(
+                                &service.#fn_name(&ctx, #(#arg_names),*)
+                        ).unwrap())
+                    }
+                },
+                sunder: rpc.is_mut(),
             }
-        }
-
-        pub fn for_result(fn_name: Symbol, arg_names: &[proc_macro2::Ident]) -> Self {
-            let mut this = Self::new_with_guard_only(fn_name, arg_names);
-            let fn_name = &this.fn_name;
-            this.invocation = quote! {
-                match service.#fn_name(&ctx, #(#arg_names),*) {
-                    Ok(output) => Ok(oasis_std::reexports::serde_cbor::to_vec(&output).unwrap()),
-                    Err(err) => Err(oasis_std::reexports::serde_cbor::to_vec(&err).unwrap()),
-                }
-            };
-            this
-        }
-
-        pub fn for_infallible(fn_name: Symbol, arg_names: &[proc_macro2::Ident]) -> Self {
-            let mut this = Self::new_with_guard_only(fn_name, arg_names);
-            let fn_name = &this.fn_name;
-            this.invocation = quote! {
-                Ok(oasis_std::reexports::serde_cbor::to_vec(
-                        &service.#fn_name(&ctx, #(#arg_names),*)
-                ).unwrap())
-            };
-            this
-        }
-
-        pub fn sunder(mut self, should_sunder: bool) -> Self {
-            self.sunder = should_sunder;
-            self
         }
     }
 

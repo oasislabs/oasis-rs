@@ -1,5 +1,5 @@
 use rustc::{
-    hir::{self, intravisit, Crate},
+    hir::{self, intravisit},
     ty::{self, AdtDef, TyCtxt, TyS},
     util::nodemap::{FxHashMap, HirIdSet},
 };
@@ -7,18 +7,16 @@ use syntax::source_map::Span;
 use syntax_pos::symbol::Symbol;
 
 /// Collects public functions defined in `impl #service_name`.
-pub struct AnalyzedRpcCollector<'a, 'tcx> {
-    krate: &'a Crate,
+pub struct AnalyzedRpcCollector<'tcx> {
     tcx: TyCtxt<'tcx>,
     service_name: Symbol,
     rpc_impls: HirIdSet,
-    rpcs: Vec<(Symbol, &'tcx hir::FnDecl, &'a hir::Body)>, // the collected RPC fns
+    rpcs: Vec<(Symbol, &'tcx hir::FnDecl, &'tcx hir::Body)>, // the collected RPC fns
 }
 
-impl<'a, 'tcx> AnalyzedRpcCollector<'a, 'tcx> {
-    pub fn new(krate: &'a Crate, tcx: TyCtxt<'tcx>, service_name: Symbol) -> Self {
+impl<'tcx> AnalyzedRpcCollector<'tcx> {
+    pub fn new(tcx: TyCtxt<'tcx>, service_name: Symbol) -> Self {
         Self {
-            krate,
             tcx,
             service_name,
             rpc_impls: HirIdSet::default(),
@@ -26,12 +24,12 @@ impl<'a, 'tcx> AnalyzedRpcCollector<'a, 'tcx> {
         }
     }
 
-    pub fn rpcs(&self) -> &[(Symbol, &'tcx hir::FnDecl, &'a hir::Body)] {
+    pub fn rpcs(&self) -> &[(Symbol, &'tcx hir::FnDecl, &'tcx hir::Body)] {
         self.rpcs.as_slice()
     }
 }
 
-impl<'a, 'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx> for AnalyzedRpcCollector<'a, 'tcx> {
+impl<'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx> for AnalyzedRpcCollector<'tcx> {
     fn visit_item(&mut self, item: &'tcx hir::Item) {
         if let hir::ItemKind::Impl(_, _, _, _, None /* `trait_ref` */, ty, _) = &item.node {
             if let hir::TyKind::Path(hir::QPath::Resolved(_, path)) = &ty.node {
@@ -49,7 +47,7 @@ impl<'a, 'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx> for AnalyzedRpcCollecto
                     .rpc_impls
                     .contains(&self.tcx.hir().get_parent_item(impl_item.hir_id))
             {
-                let body = self.krate.body(*body_id);
+                let body = self.tcx.hir().body(*body_id);
                 self.rpcs.push((impl_item.ident.name, &decl, body));
             }
         }

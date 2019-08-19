@@ -3,14 +3,14 @@ use std::path::Path;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syntax::{
-    ast::{Arg, Crate, ItemKind, MethodSig, StmtKind},
+    ast::{self, Crate, ItemKind, StmtKind},
     print::pprust,
 };
 use syntax_pos::symbol::Symbol;
 
 use crate::{
     format_ident,
-    visitor::syntax::{ParsedRpc, ParsedRpcKind},
+    visitor::parsed_rpc::{ParsedRpc, ParsedRpcKind},
     BuildContext,
 };
 
@@ -60,14 +60,14 @@ fn generate_rpc_dispatcher(
     let rpc_match_arms = rpcs
         .iter()
         .map(|rpc| {
-            let arg_tys = rpc.arg_tys();
+            let arg_tys = rpc.arg_tys().map(ty_tokenizable);
 
             let rpc_name = format_ident!("{}", rpc.name);
             rpc_payload_variants.push(quote! {
                 #rpc_name((#(#arg_tys),*,),)
             });
 
-            any_rpc_returns_result |= rpc.returns_result();
+            any_rpc_returns_result |= rpc.output.is_result();
             DispatchArm::new(service_name, &rpc)
         })
         .collect::<Vec<_>>();
@@ -133,30 +133,39 @@ mod armery {
     pub struct DispatchArm {
         pub guard: TokenStream,
         pub invocation: TokenStream,
-        sunder: bool,
+        sunderer: Option<TokenStream>,
     }
 
     impl DispatchArm {
         pub fn new(service_name: Symbol, rpc: &ParsedRpc) -> Self {
             let fn_name = format_ident!("{}", rpc.name);
-            let arg_names = rpc.arg_names();
+            let arg_names: Vec<_> = rpc
+                .arg_names()
+                .map(|name| format_ident!("{}", name))
+                .collect();
+            let invocation = if rpc.output.is_result() {
+                quote! {
+                    match service.#fn_name(&ctx, #(#arg_names),*) {
+                        Ok(output) => Ok(oasis_std::reexports::serde_cbor::to_vec(&output).unwrap()),
+                        Err(err) => Err(oasis_std::reexports::serde_cbor::to_vec(&err).unwrap()),
+                    }
+                }
+            } else {
+                quote! {
+                    Ok(oasis_std::reexports::serde_cbor::to_vec(
+                            &service.#fn_name(&ctx, #(#arg_names),*)
+                    ).unwrap())
+                }
+            };
             Self {
                 guard: quote!(RpcPayload::#fn_name((#(#arg_names),*,),)),
-                invocation: if rpc.returns_result() {
-                    quote! {
-                                match service.#fn_name(&ctx, #(#arg_names),*) {
-                                    Ok(output) => Ok(oasis_std::reexports::serde_cbor::to_vec(&output).unwrap()),
-                                    Err(err) => Err(oasis_std::reexports::serde_cbor::to_vec(&err).unwrap()),
-                                }
-                    }
+                invocation,
+                sunderer: if rpc.is_mut() {
+                    let service_name = format_ident!("{}", service_name);
+                    Some(quote!(<#service_name>::sunder();))
                 } else {
-                    quote! {
-                        Ok(oasis_std::reexports::serde_cbor::to_vec(
-                                &service.#fn_name(&ctx, #(#arg_names),*)
-                        ).unwrap())
-                    }
+                    None
                 },
-                sunder: rpc.is_mut(),
             }
         }
     }
@@ -166,26 +175,31 @@ mod armery {
             let DispatchArm {
                 guard, invocation, ..
             } = self;
-            if self.sunder {
-                tokens.extend(quote! {
-                    #guard => {
-                        let output = #invocation;
-                        Self::sunder();
-                        output
+            tokens.extend(match &self.sunderer {
+                Some(sunderer) => {
+                    quote! {
+                        #guard => {
+                            let output = #invocation;
+                            #sunderer;
+                            output
+                        }
                     }
-                });
-            } else {
-                tokens.extend(quote!(#guard => #invocation));
-            }
+                }
+                None => quote!(#guard => #invocation),
+            });
         }
     }
 }
 use armery::DispatchArm;
 
-fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> TokenStream {
-    let (arg_names, arg_tys) = split_args(&ctor.decl.inputs[1..]);
+fn generate_ctor_fn(service_name: Symbol, ctor: &ParsedRpc) -> TokenStream {
+    let arg_names: Vec<_> = ctor
+        .arg_names()
+        .map(|name| format_ident!("{}", name))
+        .collect();
+    let arg_tys = ctor.arg_tys().map(ty_tokenizable);
 
-    let ctor_payload_unpack = if ctor.decl.inputs.len() > 1 {
+    let ctor_payload_unpack = if !arg_names.is_empty() {
         quote! {
             let CtorPayload((#(#arg_names),*),) =
                 oasis_std::reexports::serde_cbor::from_slice(&oasis_std::backend::input()).unwrap();
@@ -196,7 +210,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &MethodSig) -> TokenStream {
 
     let service_ident = format_ident!("{}", service_name.as_str().get());
 
-    let ctor_stmt = if crate::utils::unpack_syntax_ret(&ctor.decl.output).is_result {
+    let ctor_stmt = if ctor.output.is_result() {
         quote! {
             match <#service_ident>::new(&ctx, #(#arg_names),*) {
                 Ok(service) => service,
@@ -263,17 +277,6 @@ fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
     }
 }
 
-/// Returns (arg_names, arg_tys)
-fn split_args(args: &[Arg]) -> (Vec<proc_macro2::Ident>, Vec<syn::Type>) {
-    args.iter()
-        .map(|arg| {
-            (
-                match arg.pat.node {
-                    syntax::ast::PatKind::Ident(_, ident, _) => format_ident!("{}", ident),
-                    _ => unreachable!("Checked during visitation."),
-                },
-                syn::parse_str::<syn::Type>(&pprust::ty_to_string(&arg.ty)).unwrap(),
-            )
-        })
-        .unzip()
+fn ty_tokenizable(ty: &ast::Ty) -> syn::Type {
+    syn::parse_str::<syn::Type>(&pprust::ty_to_string(&ty)).unwrap()
 }

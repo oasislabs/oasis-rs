@@ -7,7 +7,8 @@ use syntax_pos::symbol::Symbol;
 
 use crate::visitor::{
     hir::{AnalyzedRpcCollector, DefinedTypeCollector, EventCollector},
-    syntax::{ParsedRpcCollector, ParsedRpcKind, ServiceDefFinder},
+    parsed_rpc::ParsedRpcKind,
+    syntax::{ParsedRpcCollector, ServiceDefFinder},
 };
 
 #[derive(Clone, Debug)]
@@ -131,20 +132,19 @@ impl rustc_driver::Callbacks for BuildPlugin {
             }
         };
 
-        let (ctor, rpcs): (Vec<_>, Vec<_>) = rpcs
+        let (ctors, rpcs): (Vec<_>, Vec<_>) = rpcs
             .into_iter()
             .partition(|rpc| rpc.kind == ParsedRpcKind::Ctor);
-        let ctor = match ctor.as_slice() {
-            [] => {
-                sess.span_err(
-                    struct_span,
-                    &format!("Missing definition of `{}::new`.", service_name),
-                );
-                ret_err!();
-            }
-            [ctor] => &ctor,
-            _ => ret_err!(), // Multiply defined `new` function. Let the compiler catch this.
-        };
+        if ctors.len() > 1 {
+            ret_err!(); // Multiply defined `new` function. Let the compiler catch this.
+        } else if ctors.is_empty() {
+            sess.span_err(
+                struct_span,
+                &format!("Missing definition of `{}::new`.", service_name),
+            );
+            ret_err!();
+        }
+        let ctor = ctors.into_iter().nth(0).unwrap();
 
         let default_fn_spans = rpcs
             .iter()
@@ -194,7 +194,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
 
         global_ctxt.enter(|tcx| {
             let krate = tcx.hir().krate();
-            let mut rpc_collector = AnalyzedRpcCollector::new(krate, tcx, *service_name);
+            let mut rpc_collector = AnalyzedRpcCollector::new(tcx, *service_name);
             krate.visit_all_item_likes(&mut rpc_collector);
 
             let defined_types = rpc_collector.rpcs().iter().flat_map(|(_, decl, _)| {

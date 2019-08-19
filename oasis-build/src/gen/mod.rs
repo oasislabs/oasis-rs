@@ -4,10 +4,10 @@ mod imports;
 
 pub use imports::build as build_imports;
 
-pub struct ServiceDefinition<'ast> {
+pub struct ServiceDefinition {
     pub name: syntax_pos::symbol::Symbol,
-    pub ctor: &'ast syntax::ast::MethodSig,
-    pub rpcs: Vec<crate::visitor::syntax::ParsedRpc>,
+    pub ctor: crate::visitor::parsed_rpc::ParsedRpc,
+    pub rpcs: Vec<crate::visitor::parsed_rpc::ParsedRpc>,
 }
 
 pub fn insert_oasis_bindings(

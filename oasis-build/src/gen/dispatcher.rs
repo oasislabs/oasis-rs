@@ -55,6 +55,7 @@ fn generate_rpc_dispatcher(
     rpcs: &[ParsedRpc],
     default_fn: Option<&ParsedRpc>,
 ) -> TokenStream {
+    let service_ident = format_ident!("{}", service_name.as_str().get());
     let mut any_rpc_returns_result = false;
     let mut rpc_payload_variants = Vec::with_capacity(rpcs.len());
     let rpc_match_arms = rpcs
@@ -68,12 +69,12 @@ fn generate_rpc_dispatcher(
             });
 
             any_rpc_returns_result |= rpc.output.is_result();
-            DispatchArm::new(service_name, &rpc)
+            DispatchArm::new(&service_ident, &rpc)
         })
         .collect::<Vec<_>>();
 
     let default_fn_invocation = if let Some(rpc) = default_fn {
-        let default_dispatch = DispatchArm::new(service_name, &rpc).invocation;
+        let default_dispatch = DispatchArm::new(&service_ident, &rpc).invocation;
         quote! {
             if input.is_empty() {
                 #default_dispatch
@@ -95,14 +96,10 @@ fn generate_rpc_dispatcher(
         quote!(unreachable!("No RPC function returns Err"))
     };
 
-    let service_ident = format_ident!("{}", service_name.as_str().get());
-
     quote! {
         #[allow(warnings)]
         fn _oasis_dispatcher() {
             use oasis_std::{Service as _, reexports::serde::Deserialize};
-
-            type Self = #service_ident;
 
             #[derive(Deserialize)]
             #[serde(tag = "method", content = "payload")]
@@ -111,7 +108,7 @@ fn generate_rpc_dispatcher(
             }
 
             let ctx = oasis_std::Context::default(); // TODO(#33)
-            let mut service = Self::coalesce();
+            let mut service = <#service_ident>::coalesce();
             let input = oasis_std::backend::input();
             #default_fn_invocation
             let payload: RpcPayload =
@@ -137,7 +134,7 @@ mod armery {
     }
 
     impl DispatchArm {
-        pub fn new(service_name: Symbol, rpc: &ParsedRpc) -> Self {
+        pub fn new(service_ident: &syn::Ident, rpc: &ParsedRpc) -> Self {
             let fn_name = format_ident!("{}", rpc.name);
             let arg_names: Vec<_> = rpc
                 .arg_names()
@@ -161,8 +158,7 @@ mod armery {
                 guard: quote!(RpcPayload::#fn_name((#(#arg_names),*,),)),
                 invocation,
                 sunderer: if rpc.is_mut() {
-                    let service_name = format_ident!("{}", service_name);
-                    Some(quote!(<#service_name>::sunder();))
+                    Some(quote!(<#service_ident>::sunder();))
                 } else {
                     None
                 },

@@ -65,7 +65,7 @@ fn generate_rpc_dispatcher(
 
             let rpc_name = format_ident!("{}", rpc.name);
             rpc_payload_variants.push(quote! {
-                #rpc_name((#(#arg_tys),*,),)
+                #rpc_name((#(#arg_tys),*),)
             });
 
             any_rpc_returns_result |= rpc.output.is_result();
@@ -77,7 +77,7 @@ fn generate_rpc_dispatcher(
         let default_dispatch = DispatchArm::new(&service_ident, &rpc).invocation;
         quote! {
             if input.is_empty() {
-                #default_dispatch
+                #default_dispatch;
             }
         }
     } else {
@@ -155,10 +155,10 @@ mod armery {
                 }
             };
             Self {
-                guard: quote!(RpcPayload::#fn_name((#(#arg_names),*,),)),
+                guard: quote!(RpcPayload::#fn_name((#(#arg_names),*),)),
                 invocation,
                 sunderer: if rpc.is_mut() {
-                    Some(quote!(<#service_ident>::sunder();))
+                    Some(quote!(<#service_ident>::sunder(service);))
                 } else {
                     None
                 },
@@ -181,7 +181,7 @@ mod armery {
                         }
                     }
                 }
-                None => quote!(#guard => #invocation),
+                None => quote!(#guard => { #invocation }),
             });
         }
     }

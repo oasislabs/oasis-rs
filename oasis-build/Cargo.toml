@@ -14,11 +14,12 @@ colored = "1.8"
 failure = "0.1"
 heck = "0.3"
 oasis-rpc = { version = "0.1", path = "../oasis-rpc", features = ["resolve"] }
-proc-macro2 = "0.4"
-proc-quote = "0.2"
+proc-macro2 = "1.0"
+quote = "1.0"
 serde_json = "1.0"
+syn = { version = "1.0", default-features = false, features = ["parsing"] }
 toml = "0.5"
-walrus = "0.8"
+walrus = "0.11"
 
 [dev-dependencies]
 compiletest_rs = { version = "0.3", features = ["tmp"] }

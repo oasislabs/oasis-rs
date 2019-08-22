@@ -21,6 +21,7 @@ pub fn event_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let num_topics = indexed_fields.len() + 1;
 
     proc_macro::TokenStream::from(quote! {
+        #[allow(warnings)]
         const #impl_wrapper_ident: () = {
             use oasis_std::reexports::*;
 

@@ -12,6 +12,7 @@ use std::{
 };
 
 use colored::*;
+use oasis_build::BuildTarget;
 use rustc::util::common::ErrorReported;
 
 fn main() {
@@ -38,7 +39,9 @@ fn main() {
             .map(|n| n == "build_script_build" || n == "___")
             .unwrap_or_default();
         let is_service = is_bin && !is_nonprimary_bin;
-        let is_testing = args
+        let is_test = args.iter().any(|arg| arg == "--test");
+        let is_wasi = get_arg("--target", &args).map(String::as_str) == Some("wasm32-wasi");
+        let is_compiletest = args
             .iter()
             .any(|arg| arg == "feature=\"oasis-build-compiletest\"");
 
@@ -48,7 +51,7 @@ fn main() {
             path
         });
 
-        let imports = if is_service {
+        let imports = if is_service || is_test {
             let out_dir = out_dir.as_ref().unwrap();
 
             let gen_dir = out_dir.parent().unwrap().join("build/oasis_imports");
@@ -81,10 +84,23 @@ fn main() {
             Vec::new()
         };
 
-        let mut idl8r =
-            oasis_build::BuildPlugin::new(imports.into_iter().map(|imp| (imp.name, imp.version)));
+        let build_target = if is_test {
+            BuildTarget::Test
+        } else if is_wasi || is_compiletest {
+            BuildTarget::Wasi
+        } else if !is_service {
+            BuildTarget::Dep
+        } else {
+            println!("\n{}: Compiling an Oasis service to a native target is unlikely to work as expected. Did you mean to use `cargo build --target wasm32-wasi`?\n", "error".red());
+            return Err(ErrorReported);
+        };
+
+        let mut idl8r = oasis_build::BuildPlugin::new(
+            build_target,
+            imports.into_iter().map(|imp| (imp.name, imp.version)),
+        );
         let mut default_cbs = rustc_driver::DefaultCallbacks;
-        let callbacks: &mut (dyn rustc_driver::Callbacks + Send) = if is_service || is_testing {
+        let callbacks: &mut (dyn rustc_driver::Callbacks + Send) = if is_service || is_compiletest {
             &mut idl8r
         } else {
             &mut default_cbs
@@ -151,13 +167,7 @@ fn collect_import_rustc_args(args: &[String]) -> Vec<String> {
             skip = false;
             continue;
         }
-        if arg == "-C" {
-            skip = true;
-        } else if arg == "--crate-type" {
-            import_args.push(arg.clone());
-            import_args.push("rlib".to_string());
-            skip = true;
-        } else if arg == "--crate-name" {
+        if arg == "-C" || arg == "--crate-type" || arg == "--crate-name" {
             skip = true;
         } else if arg.ends_with(".rs") {
             continue;
@@ -165,6 +175,8 @@ fn collect_import_rustc_args(args: &[String]) -> Vec<String> {
             import_args.push(arg.clone());
         }
     }
+    import_args.push("--crate-type".to_string());
+    import_args.push("rlib".to_string());
     import_args
 }
 

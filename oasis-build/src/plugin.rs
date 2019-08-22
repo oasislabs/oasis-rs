@@ -7,10 +7,26 @@ use syntax_pos::symbol::Symbol;
 
 use crate::visitor::{
     hir::{AnalyzedRpcCollector, DefinedTypeCollector, EventCollector},
-    syntax::{ParsedRpcCollector, ParsedRpcKind, ServiceDefFinder},
+    parsed_rpc::ParsedRpcKind,
+    syntax::{ParsedRpcCollector, ServiceDefFinder},
 };
 
+#[derive(Clone, Debug)]
+pub struct BuildContext {
+    pub target: BuildTarget,
+    pub crate_name: String,
+    pub out_dir: std::path::PathBuf,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuildTarget {
+    Wasi,
+    Test,
+    Dep,
+}
+
 pub struct BuildPlugin {
+    target: BuildTarget,
     imports: FxHashMap<String, String>, // crate_name -> version
     service_name: Once<Symbol>,
     event_indexed_fields: FxHashMap<Symbol, Vec<Symbol>>, // event_name -> field_name
@@ -18,8 +34,9 @@ pub struct BuildPlugin {
 }
 
 impl BuildPlugin {
-    pub fn new(imports: impl IntoIterator<Item = (String, String)>) -> Self {
+    pub fn new(target: BuildTarget, imports: impl IntoIterator<Item = (String, String)>) -> Self {
         Self {
+            target,
             imports: imports.into_iter().collect(),
             service_name: Once::new(),
             event_indexed_fields: Default::default(),
@@ -115,20 +132,19 @@ impl rustc_driver::Callbacks for BuildPlugin {
             }
         };
 
-        let (ctor, rpcs): (Vec<_>, Vec<_>) = rpcs
+        let (ctors, rpcs): (Vec<_>, Vec<_>) = rpcs
             .into_iter()
             .partition(|rpc| rpc.kind == ParsedRpcKind::Ctor);
-        let ctor_sig = match ctor.as_slice() {
-            [] => {
-                sess.span_err(
-                    struct_span,
-                    &format!("Missing definition of `{}::new`.", service_name),
-                );
-                ret_err!();
-            }
-            [rpc] => &rpc.sig,
-            _ => ret_err!(), // Multiply defined `new` function. Let the compiler catch this.
-        };
+        if ctors.len() > 1 {
+            ret_err!(); // Multiply defined `new` function. Let the compiler catch this.
+        } else if ctors.is_empty() {
+            sess.span_err(
+                struct_span,
+                &format!("Missing definition of `{}::new`.", service_name),
+            );
+            ret_err!();
+        }
+        let ctor = ctors.into_iter().nth(0).unwrap();
 
         let default_fn_spans = rpcs
             .iter()
@@ -151,14 +167,18 @@ impl rustc_driver::Callbacks for BuildPlugin {
             ret_err!();
         }
 
-        crate::dispatcher_gen::generate_and_insert(
-            &mut parse,
-            &gen_dir,
-            &crate_name,
-            service_name,
-            &ctor_sig,
+        let build_context = BuildContext {
+            target: self.target,
+            crate_name,
+            out_dir: gen_dir,
+        };
+        let service_def = crate::gen::ServiceDefinition {
+            name: service_name,
+            ctor,
             rpcs,
-        );
+        };
+
+        crate::gen::insert_oasis_bindings(build_context, &mut parse, service_def);
 
         Compilation::Continue
     }
@@ -174,7 +194,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
 
         global_ctxt.enter(|tcx| {
             let krate = tcx.hir().krate();
-            let mut rpc_collector = AnalyzedRpcCollector::new(krate, tcx, *service_name);
+            let mut rpc_collector = AnalyzedRpcCollector::new(tcx, *service_name);
             krate.visit_all_item_likes(&mut rpc_collector);
 
             let defined_types = rpc_collector.rpcs().iter().flat_map(|(_, decl, _)| {

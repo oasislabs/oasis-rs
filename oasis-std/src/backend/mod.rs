@@ -23,9 +23,9 @@ pub enum Error {
     /// Invalid input provided to transaction
     InvalidInput,
 
-    /// No account at destination of transaction
-    NoAccount,
+    /// No callable code at destination address
+    InvalidCallee,
 
     /// Transaction failed with status code and payload
-    Execution { code: u32, payload: Vec<u8> },
+    Execution { payload: Vec<u8> },
 }

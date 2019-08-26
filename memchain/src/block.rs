@@ -59,7 +59,7 @@ impl<'bc> blockchain_traits::Block for Block<'bc> {
         }
 
         if !self.state.contains_key(&callee) {
-            early_return!(NoAccount);
+            early_return!(InvalidCallee);
         }
 
         if gas < self.base_gas {
@@ -76,7 +76,7 @@ impl<'bc> blockchain_traits::Block for Block<'bc> {
                 }
                 payer_acct.balance -= gas_cost;
             }
-            None => early_return!(NoAccount),
+            None => early_return!(InvalidCallee),
         };
 
         let mut ptx_state = self.state.clone();
@@ -89,7 +89,7 @@ impl<'bc> blockchain_traits::Block for Block<'bc> {
                 }
                 caller_acct.balance -= value;
             }
-            None => early_return!(NoAccount),
+            None => early_return!(InvalidCallee),
         };
 
         ptx_state.get_mut(&callee).unwrap().to_mut().balance += value;

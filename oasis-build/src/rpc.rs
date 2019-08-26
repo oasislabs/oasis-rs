@@ -1,15 +1,15 @@
 use std::collections::BTreeSet;
 
+use heck::{CamelCase, SnakeCase};
+use oasis_rpc::{
+    Constructor, Field, Function, Import, IndexedField, Interface, StateMutability, Type, TypeDef,
+};
 use rustc::{
     hir::{self, def_id::DefId, Body, FnDecl},
     ty::{self, AdtDef, TyCtxt, TyS},
     util::nodemap::FxHashMap,
 };
 use syntax_pos::symbol::Symbol;
-
-use oasis_rpc::{
-    Constructor, Field, Function, Import, IndexedField, Interface, StateMutability, Type, TypeDef,
-};
 
 use crate::error::UnsupportedTypeError;
 
@@ -77,8 +77,8 @@ pub fn convert_interface(
         Err(errs)
     } else {
         Ok(Interface {
-            name: name.to_string(),
-            namespace: tcx.crate_name.to_string(),
+            name: name.as_str().get().to_camel_case(),
+            namespace: tcx.crate_name.as_str().get().to_snake_case(),
             version: std::env::var("CARGO_PKG_VERSION").unwrap(),
             imports,
             type_defs,
@@ -169,7 +169,7 @@ fn convert_function(
         Err(errs)
     } else {
         Ok(Function {
-            name: name.to_string(),
+            name: name.as_str().get().to_snake_case(),
             mutability,
             inputs,
             output,
@@ -182,7 +182,7 @@ fn convert_arg(tcx: TyCtxt, pat: &hir::Pat, ty: &hir::Ty) -> Result<Field, Unsup
     convert_ty(tcx, ty).map(|ty| Field {
         name: match pat.node {
             PatKind::Wild => "_".to_string(),
-            PatKind::Binding(_, _, ident, _) => ident.name.as_str().get().to_string(),
+            PatKind::Binding(_, _, ident, _) => ident.name.as_str().get().to_snake_case(),
             _ => unreachable!("arg pattern must be wild or ident"),
         },
         ty,

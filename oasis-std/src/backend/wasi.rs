@@ -69,7 +69,9 @@ pub fn code(addr: &Address) -> Option<Vec<u8>> {
     })
 }
 
+#[link(wasm_import_module = "wasi_unstable")]
 extern "C" {
+    #[link_name = "blockchain_transact"]
     fn __wasi_blockchain_transact(
         callee_addr: *const u8,
         value: u64,
@@ -97,15 +99,11 @@ pub fn transact(callee: &Address, value: u64, input: &[u8]) -> Result<Vec<u8>, E
         .unwrap_or_else(|err| panic!(err));
     match errno {
         libc::__WASI_ESUCCESS => Ok(out),
-        libc::__WASI_EFAULT | libc::__WASI_EINVAL => return Err(Error::InvalidInput),
-        libc::__WASI_ENOENT => return Err(Error::NoAccount),
-        libc::__WASI_EDQUOT => return Err(Error::InsufficientFunds),
-        _ => {
-            return Err(Error::Execution {
-                code: errno as u32,
-                payload: out,
-            })
-        }
+        libc::__WASI_EFAULT | libc::__WASI_EINVAL => Err(Error::InvalidInput),
+        libc::__WASI_ENOENT => Err(Error::InvalidCallee),
+        libc::__WASI_EDQUOT => Err(Error::InsufficientFunds),
+        libc::__WASI_ECONNABORTED => Err(Error::Execution { payload: out }),
+        _ => Err(Error::Unknown),
     }
 }
 

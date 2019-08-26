@@ -101,7 +101,7 @@ impl Context {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum RpcError<T> {
     /// There was no service at the requested address.
-    NoAccount,
+    InvalidCallee,
 
     /// The caller does not have enough balance to cover the sent value.
     InsufficientFunds,
@@ -124,7 +124,7 @@ impl<T: serde::de::DeserializeOwned> From<crate::backend::Error> for RpcError<T>
             BackendError::Unknown => panic!("Unknown error occured."),
             BackendError::InsufficientFunds => RpcError::InsufficientFunds,
             BackendError::InvalidInput => RpcError::InvalidInput,
-            BackendError::NoAccount => RpcError::NoAccount,
+            BackendError::InvalidCallee => RpcError::InvalidCallee,
             BackendError::Execution { payload, .. } => {
                 RpcError::Exec(match serde_cbor::from_slice::<T>(&payload) {
                     Ok(t) => t,

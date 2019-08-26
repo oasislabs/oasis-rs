@@ -14,7 +14,7 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 blockchain-traits = { version = "0.2", path = "../blockchain-traits" }
-nom = { version = "5.0.0-beta3", default-features = false, features = ["std"] }
+nom = { version = "5.0", default-features = false, features = ["std"] }
 oasis-types = { version = "0.2", path = "../oasis-types" }
 wasi-types = "0.1"
 

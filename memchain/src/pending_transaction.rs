@@ -63,7 +63,7 @@ impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
         }
 
         if !self.state.contains_key(&callee) {
-            receipt.outcome = TransactionOutcome::NoAccount;
+            receipt.outcome = TransactionOutcome::InvalidCallee;
             return box receipt;
         }
 

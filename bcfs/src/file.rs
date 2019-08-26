@@ -32,6 +32,7 @@ pub enum FileKind<A: Address> {
     Stdout,
     Stderr,
     Log,
+    Temporary,
     Regular { key: Vec<u8> },
     Balance { addr: A },
     Bytecode { addr: A },

@@ -13,3 +13,6 @@ keywords = ["blockchain", "oasis"]
 blockchain-traits = { version = "0.2", path = "../blockchain-traits" }
 hex = "0.3"
 serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+serde_cbor = "0.10"

@@ -18,15 +18,12 @@ extern crate rustc_target;
 extern crate syntax;
 extern crate syntax_pos;
 
-mod dispatcher_gen;
 mod error;
-mod import_gen;
+mod gen;
 mod plugin;
 mod rpc;
-#[macro_use]
 mod utils;
 mod visitor;
 
-pub use plugin::BuildPlugin;
-
-pub use import_gen::{build as build_imports, Import};
+pub use gen::{build_imports, insert_oasis_bindings};
+pub use plugin::{BuildContext, BuildPlugin, BuildTarget};

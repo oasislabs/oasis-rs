@@ -60,10 +60,8 @@ impl From<ExtStatusCode> for Error {
             ExtStatusCode::Success => unreachable!(),
             ExtStatusCode::InsufficientFunds => Error::InsufficientFunds,
             ExtStatusCode::InvalidInput => Error::InvalidInput,
-            ExtStatusCode::NoAccount => Error::NoAccount,
-            code if code.0 <= u32::from(u8::max_value()) => Error::Unknown,
-            code => Error::Execution {
-                code: code.0,
+            ExtStatusCode::NoAccount => Error::InvalidCallee,
+            _ => Error::Execution {
                 payload: fetch_err(),
             },
         }
@@ -204,12 +202,7 @@ pub fn read(key: &[u8]) -> Vec<u8> {
     let mut val = Vec::with_capacity(val_len as usize);
     unsafe { val.set_len(val_len as usize) };
 
-    ext!(oasis_read(
-        key.as_ptr(),
-        key.len() as u32,
-        val.as_mut_ptr()
-    ))
-    .unwrap();
+    ext!(oasis_read(key.as_ptr(), key.len() as u32, val.as_mut_ptr())).unwrap();
     val
 }
 

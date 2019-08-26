@@ -114,11 +114,11 @@ jobs:
       - run:
           name: Build dependency
           working_directory: tests/xcc-b
-          command: cargo build --target wasm32-wasi --bins
+          command: cargo build --target wasm32-wasi --bin xcc-b
       - run:
           name: Build toplevel
           working_directory: tests/xcc-a
-          command: cargo build --target wasm32-wasi --bins && cargo test --lib
+          command: cargo build --target wasm32-wasi --bin xcc-a && cargo test --lib
 
 
 workflows:

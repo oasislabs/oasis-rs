@@ -66,14 +66,13 @@ impl<'ast> visit::Visitor<'ast> for ServiceDefFinder {
     }
 
     fn visit_mac(&mut self, mac: &'ast ast::Mac) {
-        let mac_ = &mac.node;
-        if !crate::utils::path_ends_with(&mac_.path, &["oasis_std", "service"]) {
+        if !crate::utils::path_ends_with(&mac.path, &["oasis_std", "service"]) {
             return;
         }
-        if mac_.tts.len() != 1 {
+        if mac.tts.len() != 1 {
             return;
         }
-        if let Some(ident) = mac_
+        if let Some(ident) = mac
             .tts
             .trees()
             .next_with_joint()
@@ -183,8 +182,8 @@ struct PrintlnFinder {
 
 impl<'ast> visit::Visitor<'ast> for PrintlnFinder {
     fn visit_mac(&mut self, mac: &'ast ast::Mac) {
-        if crate::utils::path_ends_with(&mac.node.path, &["std", "println"])
-            || crate::utils::path_ends_with(&mac.node.path, &["std", "print"])
+        if crate::utils::path_ends_with(&mac.path, &["std", "println"])
+            || crate::utils::path_ends_with(&mac.path, &["std", "print"])
         {
             self.println_spans.push(mac.span);
         }

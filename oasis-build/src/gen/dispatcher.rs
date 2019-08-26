@@ -61,11 +61,16 @@ fn generate_rpc_dispatcher(
     let rpc_match_arms = rpcs
         .iter()
         .map(|rpc| {
-            let arg_tys = rpc.arg_tys().map(ty_tokenizable);
+            let arg_tys_vec: Vec<_> = rpc.arg_tys().map(ty_tokenizable).collect();
+            let arg_tys = if !arg_tys_vec.is_empty() {
+                quote!((#(#arg_tys_vec),*,))
+            } else {
+                quote!()
+            };
 
             let rpc_name = format_ident!("{}", rpc.name);
             rpc_payload_variants.push(quote! {
-                #rpc_name((#(#arg_tys),*),)
+                #rpc_name(#arg_tys)
             });
 
             any_rpc_returns_result |= rpc.output.is_result();
@@ -154,8 +159,13 @@ mod armery {
                     ).unwrap())
                 }
             };
+            let variant_args = if !arg_names.is_empty() {
+                quote!((#(#arg_names),*,))
+            } else {
+                quote!()
+            };
             Self {
-                guard: quote!(RpcPayload::#fn_name((#(#arg_names),*),)),
+                guard: quote!(RpcPayload::#fn_name(#variant_args)),
                 invocation,
                 sunderer: if rpc.is_mut() {
                     Some(quote!(<#service_ident>::sunder(service);))
@@ -176,7 +186,7 @@ mod armery {
                     quote! {
                         #guard => {
                             let output = #invocation;
-                            #sunderer;
+                            #sunderer
                             output
                         }
                     }
@@ -195,13 +205,15 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &ParsedRpc) -> TokenStream {
         .collect();
     let arg_tys = ctor.arg_tys().map(ty_tokenizable);
 
-    let ctor_payload_unpack = if !arg_names.is_empty() {
-        quote! {
-            let CtorPayload((#(#arg_names),*),) =
+    let (ctor_struct_args, ctor_payload_unpack) = if !arg_names.is_empty() {
+        let struct_args = quote!((#(#arg_tys),*,));
+        let payload_unpack = quote! {
+            let CtorPayload((#(#arg_names),*,)) =
                 oasis_std::reexports::serde_cbor::from_slice(&oasis_std::backend::input()).unwrap();
-        }
+        };
+        (struct_args, payload_unpack)
     } else {
-        quote!()
+        (quote!(), quote!())
     };
 
     let service_ident = format_ident!("{}", service_name.as_str().get());
@@ -228,7 +240,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &ParsedRpc) -> TokenStream {
 
             #[derive(Deserialize)]
             #[allow(non_camel_case_types)]
-            struct CtorPayload((#(#arg_tys),*),);
+            struct CtorPayload(#ctor_struct_args);
 
             let ctx = oasis_std::Context::default(); // TODO(#33)
             #ctor_payload_unpack
@@ -256,9 +268,8 @@ fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
             .stmts
             .iter()
             .position(|stmt| match &stmt.node {
-                StmtKind::Mac(mac) => {
-                    let mac_ = &mac.0.node;
-                    crate::utils::path_ends_with(&mac_.path, &["oasis_std", "service"])
+                StmtKind::Mac(p_mac) => {
+                    crate::utils::path_ends_with(&p_mac.0.path, &["oasis_std", "service"])
                 }
                 _ => false,
             })

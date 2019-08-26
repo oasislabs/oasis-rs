@@ -109,16 +109,16 @@ pub fn gen_include_item(include_path: impl AsRef<std::path::Path>) -> P<ast::Ite
         ident: ast::Ident::from_str(""),
         attrs: Vec::new(),
         id: ast::DUMMY_NODE_ID,
-        node: ast::ItemKind::Mac(source_map::dummy_spanned(gen_include_mac(include_path))),
+        node: ast::ItemKind::Mac(gen_include_mac(include_path)),
         vis: source_map::dummy_spanned(ast::VisibilityKind::Public),
         span: syntax_pos::DUMMY_SP,
         tokens: None,
     })
 }
 
-pub fn gen_include_mac(include_path: impl AsRef<std::path::Path>) -> ast::Mac_ {
+pub fn gen_include_mac(include_path: impl AsRef<std::path::Path>) -> ast::Mac {
     use syntax::parse::token::{LitKind, Token, TokenKind};
-    ast::Mac_ {
+    ast::Mac {
         path: ast::Path::from_ident(ast::Ident::from_str("include")),
         delim: ast::MacDelimiter::Parenthesis,
         tts: syntax::tokenstream::TokenTree::Token(Token {
@@ -130,6 +130,8 @@ pub fn gen_include_mac(include_path: impl AsRef<std::path::Path>) -> ast::Mac_ {
             span: syntax_pos::DUMMY_SP,
         })
         .into(),
+        prior_type_ascription: None,
+        span: syntax_pos::DUMMY_SP,
     }
 }
 

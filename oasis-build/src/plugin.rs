@@ -158,10 +158,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
             .collect::<Vec<_>>();
         if default_fn_spans.len() > 1 {
             sess.span_err(
-                default_fn_spans
-                    .into_iter()
-                    .flat_map(std::convert::identity)
-                    .collect::<Vec<_>>(),
+                default_fn_spans.into_iter().flatten().collect::<Vec<_>>(),
                 "Only one RPC method can be marked with `#[default]`",
             );
             ret_err!();

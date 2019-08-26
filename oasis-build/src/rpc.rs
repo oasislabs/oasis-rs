@@ -336,7 +336,10 @@ fn convert_sty_with_arg_at<'tcx>(
         Float(ty) => convert_float(ty, tcx.def_span(did))?,
         Adt(AdtDef { did, .. }, substs) => convert_def!(tcx, *did, *did, |i| arg_at(substs, i))?,
         Str => Type::String,
-        Array(ty, len) => Type::Array(box convert_sty(tcx, did, ty)?, len.unwrap_usize(tcx)),
+        Array(ty, len) => Type::Array(
+            box convert_sty(tcx, did, ty)?,
+            len.val.try_to_scalar().unwrap().to_usize(&tcx).unwrap(),
+        ),
         Slice(ty) => Type::List(box convert_sty(tcx, did, ty)?),
         Ref(_, ty, _) => return convert_sty(tcx, did, ty),
         Tuple(substs) => Type::Tuple(

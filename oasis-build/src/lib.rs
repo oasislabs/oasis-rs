@@ -13,7 +13,6 @@ extern crate rustc;
 extern crate rustc_data_structures;
 extern crate rustc_driver;
 extern crate rustc_interface;
-extern crate rustc_plugin;
 extern crate rustc_target;
 extern crate syntax;
 extern crate syntax_pos;

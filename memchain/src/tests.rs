@@ -13,15 +13,11 @@ fn giga(num: u64) -> u64 {
     num * 1_000_000_000
 }
 
-extern "C" fn nop_main(
-    _ptx: *const *mut dyn PendingTransaction<Address = Address, AccountMeta = AccountMeta>,
-) -> u16 {
+extern "C" fn nop_main(_ptx: *const *mut dyn PendingTransaction) -> u16 {
     0
 }
 
-extern "C" fn simple_main(
-    ptx: *const *mut dyn PendingTransaction<Address = Address, AccountMeta = AccountMeta>,
-) -> u16 {
+extern "C" fn simple_main(ptx: *const *mut dyn PendingTransaction) -> u16 {
     let ptx = unsafe { &mut **ptx };
 
     assert_eq!(ptx.sender(), &ADDR_2);
@@ -35,17 +31,13 @@ extern "C" fn simple_main(
     0
 }
 
-extern "C" fn fail_main(
-    ptx: *const *mut dyn PendingTransaction<Address = Address, AccountMeta = AccountMeta>,
-) -> u16 {
+extern "C" fn fail_main(ptx: *const *mut dyn PendingTransaction) -> u16 {
     let ptx = unsafe { &mut **ptx };
     ptx.err(r"¯\_(ツ)_/¯".as_bytes());
     1
 }
 
-extern "C" fn subtx_main(
-    ptx: *const *mut dyn PendingTransaction<Address = Address, AccountMeta = AccountMeta>,
-) -> u16 {
+extern "C" fn subtx_main(ptx: *const *mut dyn PendingTransaction) -> u16 {
     let ptx = unsafe { &mut **ptx };
     let subtx = ptx.transact(ADDR_1, 0 /* value */, &ptx.input().to_vec());
 
@@ -63,13 +55,7 @@ extern "C" fn subtx_main(
 }
 
 fn create_bc<'bc>(
-    mains: Vec<
-        Option<
-            extern "C" fn(
-                *const *mut dyn PendingTransaction<Address = Address, AccountMeta = AccountMeta>,
-            ) -> u16,
-        >,
-    >,
+    mains: Vec<Option<extern "C" fn(*const *mut dyn PendingTransaction) -> u16>>,
 ) -> Memchain<'bc> {
     let genesis_state = mains
         .into_iter()
@@ -217,8 +203,8 @@ fn subtx_ok() {
 
     let events = bc.last_block().events();
     assert_eq!(events.len(), 1);
-    assert_eq!(events[0].topics(), vec![[42u8; 32]]);
-    assert_eq!(events[0].data(), &[0, 0, 0]);
+    assert_eq!(events[0].topics, vec![[42u8; 32]]);
+    assert_eq!(events[0].data, &[0, 0, 0]);
 
     assert_eq!(
         bc.last_block()

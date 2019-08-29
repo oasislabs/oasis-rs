@@ -9,7 +9,7 @@ use std::{
 
 use blockchain_traits::{Blockchain, TransactionOutcome};
 use memchain::{Account, Memchain};
-use oasis_types::{AccountMeta, Address};
+use oasis_types::Address;
 use wasi_types::{ErrNo, Fd, FdFlags, OpenFlags, Whence};
 
 use crate::BCFS;
@@ -24,9 +24,7 @@ fn giga(val: u64) -> u64 {
     val * 1_000_000_000
 }
 
-fn create_memchain(
-    mains: Vec<Option<memchain::AccountMain>>,
-) -> impl Blockchain<Address = Address, AccountMeta = AccountMeta> {
+fn create_memchain(mains: Vec<Option<memchain::AccountMain>>) -> impl Blockchain {
     let genesis_state = mains
         .into_iter()
         .enumerate()

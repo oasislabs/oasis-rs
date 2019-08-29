@@ -4,11 +4,11 @@ use std::{
     path::PathBuf,
 };
 
-use blockchain_traits::Address;
+use oasis_types::Address;
 use wasi_types::{FdFlags, FileStat};
 
-pub struct File<A: Address> {
-    pub kind: FileKind<A>,
+pub struct File {
+    pub kind: FileKind,
 
     pub flags: FdFlags,
 
@@ -27,19 +27,19 @@ pub enum FileCache {
     Present(Cursor<Vec<u8>>),
 }
 
-pub enum FileKind<A: Address> {
+pub enum FileKind {
     Stdin,
     Stdout,
     Stderr,
     Log,
     Temporary,
     Regular { key: Vec<u8> },
-    Balance { addr: A },
-    Bytecode { addr: A },
+    Balance { addr: Address },
+    Bytecode { addr: Address },
     Directory { path: PathBuf },
 }
 
-impl<A: Address> FileKind<A> {
+impl FileKind {
     pub fn is_log(&self) -> bool {
         match self {
             FileKind::Log => true,
@@ -88,7 +88,7 @@ macro_rules! special_file_ctor {
     }
 }
 
-impl<A: Address> File<A> {
+impl File {
     special_file_ctor!(Stdin, Stdout, Stderr);
 }
 

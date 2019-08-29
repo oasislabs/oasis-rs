@@ -10,7 +10,6 @@ readme = "README.md"
 keywords = ["blockchain", "oasis"]
 
 [dependencies]
-blockchain-traits = { version = "0.2", path = "../blockchain-traits" }
 hex = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 

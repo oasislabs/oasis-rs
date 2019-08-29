@@ -8,3 +8,6 @@ description = "A minimal description of a programmable blockchain."
 repository = "https://github.com/oasislabs/oasis-rs.git"
 readme = "README.md"
 keywords = ["blockchain"]
+
+[dependencies]
+oasis-types = { path = "../oasis-types", version = "0.2" }

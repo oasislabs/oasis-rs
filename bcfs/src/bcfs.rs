@@ -1,11 +1,13 @@
 use std::{
     cell::{Cell, RefCell},
-    convert::TryFrom,
-    io::{Cursor, IoSlice, IoSliceMut, Read, Seek as _, SeekFrom, Write},
+    convert::TryFrom as _,
+    io::{Cursor, IoSlice, IoSliceMut, Read as _, Seek as _, SeekFrom, Write as _},
     path::{Path, PathBuf},
+    str::FromStr as _,
 };
 
-use blockchain_traits::{AccountMeta, Address, PendingTransaction};
+use blockchain_traits::PendingTransaction;
+use oasis_types::Address;
 use wasi_types::{
     ErrNo, Fd, FdFlags, FdStat, FileDelta, FileSize, FileStat, FileType, OpenFlags, Rights, Whence,
 };
@@ -15,32 +17,26 @@ use crate::{
     Result,
 };
 
-pub struct BCFS<A: Address, M: AccountMeta> {
-    files: Vec<Option<File<A>>>,
-    home_addr: A,
-    _account_meta: std::marker::PhantomData<M>,
+pub struct BCFS {
+    files: Vec<Option<File>>,
+    home_addr: Address,
 }
 
-impl<A: Address, M: AccountMeta> BCFS<A, M> {
+impl BCFS {
     /// Creates a new ptx FS with a backing `ptx` and hex stringified
     /// owner address.
     pub fn new<S: AsRef<str>>(
-        home_addr: A,
-        // ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        home_addr: Address,
+        // ptx: &mut dyn PendingTransaction< AccountMeta = M>,
         blockchain_name: S,
     ) -> Self {
         Self {
             files: File::defaults(blockchain_name.as_ref()),
             home_addr,
-            _account_meta: std::marker::PhantomData,
         }
     }
 
-    pub fn prestat(
-        &mut self,
-        _ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
-        fd: Fd,
-    ) -> Result<&Path> {
+    pub fn prestat(&mut self, _ptx: &mut dyn PendingTransaction, fd: Fd) -> Result<&Path> {
         match &self.file(fd)?.kind {
             FileKind::Directory { path } => Ok(path),
             _ => Err(ErrNo::BadF),
@@ -49,7 +45,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
 
     pub fn open(
         &mut self,
-        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        ptx: &mut dyn PendingTransaction,
         curdir: Fd,
         path: &Path,
         open_flags: OpenFlags,
@@ -121,10 +117,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         Ok(fd)
     }
 
-    pub fn tempfile(
-        &mut self,
-        _ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
-    ) -> Result<Fd> {
+    pub fn tempfile(&mut self, _ptx: &mut dyn PendingTransaction) -> Result<Fd> {
         let fd = self.alloc_fd()?;
         self.files.push(Some(File {
             kind: FileKind::Temporary,
@@ -136,20 +129,12 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         Ok(fd)
     }
 
-    pub fn flush(
-        &mut self,
-        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
-        fd: Fd,
-    ) -> Result<()> {
+    pub fn flush(&mut self, ptx: &mut dyn PendingTransaction, fd: Fd) -> Result<()> {
         self.do_flush(ptx, self.file(fd)?);
         Ok(())
     }
 
-    pub fn close(
-        &mut self,
-        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
-        fd: Fd,
-    ) -> Result<()> {
+    pub fn close(&mut self, ptx: &mut dyn PendingTransaction, fd: Fd) -> Result<()> {
         self.flush(ptx, fd)?;
         match self.files.get_mut(fd_usize(fd)) {
             Some(f) if f.is_some() => {
@@ -163,7 +148,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
     /// Removes the file at `path` and returns the number of bytes previously in the file.
     pub fn unlink(
         &mut self,
-        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        ptx: &mut dyn PendingTransaction,
         curdir: Fd,
         path: &Path,
     ) -> Result<u64> {
@@ -191,7 +176,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
 
     pub fn seek(
         &mut self,
-        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        ptx: &mut dyn PendingTransaction,
         fd: Fd,
         offset: FileDelta,
         whence: Whence,
@@ -231,11 +216,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         }
     }
 
-    pub fn fdstat(
-        &self,
-        _ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
-        fd: Fd,
-    ) -> Result<FdStat> {
+    pub fn fdstat(&self, _ptx: &mut dyn PendingTransaction, fd: Fd) -> Result<FdStat> {
         let file = self.file(fd)?;
         Ok(FdStat {
             file_type: FileType::RegularFile,
@@ -245,20 +226,12 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         })
     }
 
-    pub fn filestat(
-        &self,
-        ptx: &dyn PendingTransaction<Address = A, AccountMeta = M>,
-        fd: Fd,
-    ) -> Result<FileStat> {
+    pub fn filestat(&self, ptx: &dyn PendingTransaction, fd: Fd) -> Result<FileStat> {
         let file = self.file(fd)?;
         Self::populate_file(ptx, file, &mut *file.buf.borrow_mut())
     }
 
-    pub fn tell(
-        &self,
-        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
-        fd: Fd,
-    ) -> Result<FileSize> {
+    pub fn tell(&self, ptx: &mut dyn PendingTransaction, fd: Fd) -> Result<FileSize> {
         let file = self.file(fd)?;
         let mut buf = file.buf.borrow_mut();
         if let FileCache::Absent(SeekFrom::End(_)) = &*buf {
@@ -276,7 +249,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
 
     pub fn read_vectored(
         &mut self,
-        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        ptx: &mut dyn PendingTransaction,
         fd: Fd,
         bufs: &mut [IoSliceMut],
     ) -> Result<usize> {
@@ -285,7 +258,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
 
     pub fn pread_vectored(
         &self,
-        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        ptx: &mut dyn PendingTransaction,
         fd: Fd,
         bufs: &mut [IoSliceMut],
         offset: FileSize,
@@ -295,7 +268,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
 
     pub fn write_vectored(
         &mut self,
-        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        ptx: &mut dyn PendingTransaction,
         fd: Fd,
         bufs: &[IoSlice],
     ) -> Result<usize> {
@@ -304,7 +277,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
 
     pub fn pwrite_vectored(
         &mut self,
-        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        ptx: &mut dyn PendingTransaction,
         fd: Fd,
         bufs: &[IoSlice],
         offset: FileSize,
@@ -314,7 +287,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
 
     pub fn renumber(
         &mut self,
-        _ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        _ptx: &mut dyn PendingTransaction,
         fd: Fd,
         new_fd: Fd,
     ) -> Result<()> {
@@ -327,7 +300,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         }
     }
 
-    pub fn sync(&mut self, ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>) {
+    pub fn sync(&mut self, ptx: &mut dyn PendingTransaction) {
         // flush stdout and stderr
         for file in self.files[1..=3].iter() {
             if let Some(file) = file {
@@ -353,8 +326,8 @@ fn seekfrom_from_offset_whence(offset: FileDelta, whence: Whence) -> Result<Seek
     })
 }
 
-impl<A: Address, M: AccountMeta> BCFS<A, M> {
-    fn canonicalize_path(&self, curdir: Fd, path: &Path) -> Result<(Option<A>, PathBuf)> {
+impl BCFS {
+    fn canonicalize_path(&self, curdir: Fd, path: &Path) -> Result<(Option<Address>, PathBuf)> {
         use std::path::Component;
 
         if path.has_root() {
@@ -372,13 +345,15 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
 
         let addr = if curdir_fileno == CHAIN_DIR_FILENO {
             match comps.peek() {
-                Some(Component::Normal(maybe_addr)) => match maybe_addr.to_str().map(A::from_str) {
-                    Some(Ok(addr)) => {
-                        comps.next();
-                        Some(addr)
+                Some(Component::Normal(maybe_addr)) => {
+                    match maybe_addr.to_str().map(Address::from_str) {
+                        Some(Ok(addr)) => {
+                            comps.next();
+                            Some(addr)
+                        }
+                        _ => None,
                     }
-                    _ => None,
-                },
+                }
                 Some(Component::Prefix(_)) | Some(Component::RootDir) => return Err(ErrNo::NoEnt),
                 _ => None,
             }
@@ -417,14 +392,14 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         }
     }
 
-    fn file(&self, fd: Fd) -> Result<&File<A>> {
+    fn file(&self, fd: Fd) -> Result<&File> {
         match self.files.get(fd_usize(fd)) {
             Some(Some(file)) => Ok(file),
             _ => Err(ErrNo::BadF),
         }
     }
 
-    fn file_mut(&mut self, fd: Fd) -> Result<&mut File<A>> {
+    fn file_mut(&mut self, fd: Fd) -> Result<&mut File> {
         match self
             .files
             .get_mut(usize::try_from(u64::from(fd)).map_err(|_| ErrNo::BadF)?)
@@ -457,8 +432,8 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
     }
 
     fn populate_file(
-        ptx: &dyn PendingTransaction<Address = A, AccountMeta = M>,
-        file: &File<A>,
+        ptx: &dyn PendingTransaction,
+        file: &File,
         cache: &mut FileCache,
     ) -> Result<FileStat> {
         let file_size = match cache {
@@ -471,7 +446,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
                         None => return Err(ErrNo::NoEnt),
                     },
                     FileKind::Balance { addr } => match ptx.account_meta_at(&addr) {
-                        Some(meta) => meta.balance().to_le_bytes().to_vec(),
+                        Some(meta) => meta.balance.to_le_bytes().to_vec(),
                         None => return Err(ErrNo::NoEnt),
                     },
                     FileKind::Regular { key } => match ptx.state().get(&key) {
@@ -509,7 +484,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
 
     fn do_pread_vectored(
         &self,
-        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        ptx: &mut dyn PendingTransaction,
         fd: Fd,
         bufs: &mut [IoSliceMut],
         offset: Option<SeekFrom>,
@@ -544,7 +519,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
 
     fn do_pwrite_vectored(
         &mut self,
-        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
+        ptx: &mut dyn PendingTransaction,
         fd: Fd,
         bufs: &[IoSlice],
         offset: Option<SeekFrom>,
@@ -581,11 +556,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
         Ok(nbytes)
     }
 
-    fn do_flush(
-        &self,
-        ptx: &mut dyn PendingTransaction<Address = A, AccountMeta = M>,
-        file: &File<A>,
-    ) {
+    fn do_flush(&self, ptx: &mut dyn PendingTransaction, file: &File) {
         if !file.dirty.get() {
             return;
         }
@@ -616,7 +587,7 @@ impl<A: Address, M: AccountMeta> BCFS<A, M> {
                     }) = f
                     {
                         let f = f.as_ref().unwrap();
-                        if key != f_key || f as *const File<A> == file as *const File<A> {
+                        if key != f_key || f as *const File == file as *const File {
                             continue;
                         }
                         let mut f_buf = f.buf.borrow_mut();

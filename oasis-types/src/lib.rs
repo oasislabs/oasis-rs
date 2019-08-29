@@ -22,17 +22,15 @@ impl Address {
     pub const fn len() -> usize {
         std::mem::size_of::<Self>()
     }
+
+    pub fn path_repr(&self) -> String {
+        hex::encode(self)
+    }
 }
 
 impl AsRef<[u8]> for Address {
     fn as_ref(&self) -> &[u8] {
         &self.0
-    }
-}
-
-impl blockchain_traits::Address for Address {
-    fn path_repr(&self) -> String {
-        hex::encode(self)
     }
 }
 
@@ -128,37 +126,17 @@ impl ExtStatusCode {
     pub const NoAccount: ExtStatusCode = ExtStatusCode(3);
 }
 
+#[derive(Clone, Default, Debug)]
 pub struct AccountMeta {
     pub balance: u64,
     pub expiry: Option<std::time::Duration>,
 }
 
-impl blockchain_traits::AccountMeta for AccountMeta {
-    fn balance(&self) -> u64 {
-        self.balance
-    }
-}
-
+#[derive(Clone, Default, Debug)]
 pub struct Event {
     pub emitter: Address,
-    pub topics: Vec<Vec<u8>>,
+    pub topics: Vec<[u8; 32]>,
     pub data: Vec<u8>,
-}
-
-impl blockchain_traits::Event for Event {
-    type Address = Address;
-
-    fn emitter(&self) -> &Self::Address {
-        &self.emitter
-    }
-
-    fn topics(&self) -> Vec<&[u8]> {
-        self.topics.iter().map(Vec::as_slice).collect()
-    }
-
-    fn data(&self) -> &[u8] {
-        self.data.as_slice()
-    }
 }
 
 #[cfg(test)]

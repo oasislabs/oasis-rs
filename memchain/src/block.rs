@@ -67,11 +67,11 @@ impl<'bc> blockchain_traits::Block for Block<'bc> {
             Some(payer_acct) => {
                 let payer_acct = payer_acct.to_mut();
                 let gas_cost = gas * gas_price;
-                if payer_acct.balance < gas_cost as u128 {
+                if payer_acct.balance < u128::from(gas_cost) {
                     payer_acct.balance = 0;
                     early_return!(InsufficientFunds);
                 }
-                payer_acct.balance -= gas_cost as u128;
+                payer_acct.balance -= u128::from(gas_cost);
             }
             None => early_return!(InvalidCallee),
         };

@@ -6,7 +6,7 @@ use oasis_types::{Address, ExtStatusCode};
 static oasis_testing: bool = true;
 
 #[no_mangle]
-pub extern "C" fn oasis_balance(addr: *const Address, balance: *mut u64) -> ExtStatusCode {
+pub extern "C" fn oasis_balance(addr: *const Address, balance: *mut u128) -> ExtStatusCode {
     ExtStatusCode::Success
 }
 
@@ -73,7 +73,7 @@ pub extern "C" fn oasis_err_len(len: *mut u32) -> ExtStatusCode {
 #[no_mangle]
 pub extern "C" fn oasis_transact(
     callee: *const Address,
-    value: u64,
+    value: u128,
     input: *const u8,
     input_len: u32,
 ) -> ExtStatusCode {
@@ -91,7 +91,7 @@ pub extern "C" fn oasis_sender(addr: *mut Address) -> ExtStatusCode {
 }
 
 #[no_mangle]
-pub extern "C" fn oasis_value(value: *mut u64) -> ExtStatusCode {
+pub extern "C" fn oasis_value(value: *mut u128) -> ExtStatusCode {
     ExtStatusCode::Success
 }
 

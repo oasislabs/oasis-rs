@@ -6,7 +6,7 @@ pub struct Receipt {
     pub outcome: TransactionOutcome,
     pub caller: Address,
     pub callee: Address,
-    pub value: u64,
+    pub value: u128,
     pub gas_used: u64,
     pub events: Vec<Event>,
     pub output: Vec<u8>,

@@ -32,7 +32,7 @@ impl<'bc> blockchain_traits::Block for Block<'bc> {
         caller: Address,
         callee: Address,
         payer: Address,
-        value: u64,
+        value: u128,
         input: &[u8],
         gas: u64,
         gas_price: u64,
@@ -67,11 +67,11 @@ impl<'bc> blockchain_traits::Block for Block<'bc> {
             Some(payer_acct) => {
                 let payer_acct = payer_acct.to_mut();
                 let gas_cost = gas * gas_price;
-                if payer_acct.balance < gas_cost {
+                if payer_acct.balance < gas_cost as u128 {
                     payer_acct.balance = 0;
                     early_return!(InsufficientFunds);
                 }
-                payer_acct.balance -= gas_cost;
+                payer_acct.balance -= gas_cost as u128;
             }
             None => early_return!(InvalidCallee),
         };

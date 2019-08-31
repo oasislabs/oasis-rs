@@ -7,7 +7,7 @@ use crate::{output::Receipt, State};
 pub struct PendingTransaction<'bc> {
     pub caller: Address,
     pub callee: Address,
-    pub value: u64,
+    pub value: u128,
     pub state: State<'bc>,
     pub input: Vec<u8>,
     pub outcome: TransactionOutcome,
@@ -26,7 +26,7 @@ impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
         &self.caller
     }
 
-    fn value(&self) -> u64 {
+    fn value(&self) -> u128 {
         self.value
     }
 
@@ -37,7 +37,7 @@ impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
     fn transact(
         &mut self,
         callee: Address,
-        value: u64,
+        value: u128,
         input: &[u8],
     ) -> Box<dyn blockchain_traits::Receipt> {
         let caller = self.callee;

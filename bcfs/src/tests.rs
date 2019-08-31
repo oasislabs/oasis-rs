@@ -20,7 +20,7 @@ const BASE_GAS: u64 = 2100;
 const GAS_PRICE: u64 = 0;
 const CHAIN_NAME: &str = "testchain";
 
-fn giga(val: u64) -> u64 {
+fn giga(val: u128) -> u128 {
     val * 1_000_000_000
 }
 
@@ -33,7 +33,7 @@ fn create_memchain(mains: Vec<Option<memchain::AccountMain>>) -> impl Blockchain
             (
                 Address([i as u8; 20]),
                 Cow::Owned(Account {
-                    balance: giga(i as u64),
+                    balance: giga(i as u128),
                     code: format!("\0asm not wasm {}", i).into_bytes(),
                     storage: {
                         let mut storage = HashMap::new();

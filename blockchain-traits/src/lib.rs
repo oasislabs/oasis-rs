@@ -31,7 +31,7 @@ pub trait Block {
         caller: Address,
         callee: Address,
         payer: Address,
-        value: u64,
+        value: u128,
         input: &[u8],
         gas: u64,
         gas_price: u64,
@@ -63,7 +63,7 @@ pub trait PendingTransaction {
     fn sender(&self) -> &Address;
 
     /// Returns the value sent to the current transaction.
-    fn value(&self) -> u64;
+    fn value(&self) -> u128;
 
     /// Returns the input provided by the calling context.
     fn input(&self) -> &[u8];
@@ -71,7 +71,7 @@ pub trait PendingTransaction {
     /// Executes a balance-transferring RPC to `callee` with provided input and value.
     /// The new transaction will inherit the gas parameters and gas payer of the top level
     /// transaction. The current account will be set as the sender.
-    fn transact(&mut self, callee: Address, value: u64, input: &[u8]) -> Box<dyn Receipt>;
+    fn transact(&mut self, callee: Address, value: u128, input: &[u8]) -> Box<dyn Receipt>;
 
     /// Returns data to the calling transaction.
     fn ret(&mut self, data: &[u8]);

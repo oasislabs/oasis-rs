@@ -71,7 +71,7 @@ impl<'bc> Blockchain for Memchain<'bc> {
 
 #[derive(Clone, Default, Debug)]
 pub struct Account {
-    pub balance: u64,
+    pub balance: u128,
     pub code: Vec<u8>,
     pub storage: HashMap<Vec<u8>, Vec<u8>>,
     pub expiry: Option<std::time::Duration>,

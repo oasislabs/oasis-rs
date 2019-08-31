@@ -9,7 +9,7 @@ const ADDR_2: Address = Address([2u8; 20]);
 
 const BASE_GAS: u64 = 2100;
 
-fn giga(num: u64) -> u64 {
+fn giga(num: u128) -> u128 {
     num * 1_000_000_000
 }
 
@@ -65,7 +65,7 @@ fn create_bc<'bc>(
             (
                 Address([i as u8; 20]),
                 Cow::Owned(Account {
-                    balance: giga(i as u64),
+                    balance: giga(i as u128),
                     code: format!("\0asm not wasm {}", i).into_bytes(),
                     storage: {
                         let mut storage = HashMap::new();
@@ -105,7 +105,7 @@ fn transfer() {
         .transact(ADDR_1, ADDR_2, ADDR_1, value, &Vec::new(), BASE_GAS, 1);
     assert_eq!(
         bc.last_block().account_meta_at(&ADDR_1).unwrap().balance,
-        giga(1) - BASE_GAS - value,
+        giga(1) - BASE_GAS as u128 - value,
     );
     assert_eq!(
         bc.last_block().account_meta_at(&ADDR_2).unwrap().balance,
@@ -176,7 +176,7 @@ fn revert_tx() {
         .transact(ADDR_1, ADDR_2, ADDR_2, 10_000, &Vec::new(), BASE_GAS, 1);
     assert_eq!(
         bc.last_block().account_meta_at(&ADDR_2).unwrap().balance,
-        giga(2) - BASE_GAS,
+        giga(2) - BASE_GAS as u128,
     );
     assert_eq!(
         bc.last_block().account_meta_at(&ADDR_1).unwrap().balance,

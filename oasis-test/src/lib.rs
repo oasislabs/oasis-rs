@@ -14,7 +14,7 @@ thread_local! {
         RefCell::new(Memchain::new("testnet".to_string(), {
             let mut genesis_state = std::collections::HashMap::new();
             genesis_state.insert(SEED_ADDR, std::borrow::Cow::Owned(memchain::Account {
-                balance: u64::max_value(),
+                balance: u128::max_value(),
                 ..Default::default()
             }));
             genesis_state
@@ -22,7 +22,7 @@ thread_local! {
     static NEXT_ADDR: RefCell<u64> = RefCell::new(0);
 }
 
-pub fn create_account(initial_balance: u64) -> Address {
+pub fn create_account(initial_balance: u128) -> Address {
     MEMCHAIN.with(|memchain| {
         let mut memchain = memchain.borrow_mut();
 

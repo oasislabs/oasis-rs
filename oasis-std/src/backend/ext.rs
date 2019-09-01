@@ -4,7 +4,8 @@ use super::Error;
 
 /// @see the `blockchain-traits` crate for descriptions of these methods.
 extern "C" {
-    pub fn oasis_balance(addr: *const Address, balance: *mut u64) -> ExtStatusCode;
+    #[allow(improper_ctypes)] // u128 is just 2 u64s
+    pub fn oasis_balance(addr: *const Address, balance: *mut u128) -> ExtStatusCode;
 
     pub fn oasis_code(addr: *const Address, buf: *mut u8) -> ExtStatusCode;
     pub fn oasis_code_len(addr: *const Address, len: *mut u32) -> ExtStatusCode;
@@ -24,9 +25,10 @@ extern "C" {
     pub fn oasis_fetch_aad(buf: *mut u8) -> ExtStatusCode;
     pub fn oasis_aad_len(len: *mut u32) -> ExtStatusCode;
 
+    #[allow(improper_ctypes)] // u128 is just 2 u64s
     pub fn oasis_transact(
         callee: *const Address,
-        value: u64,
+        value: *const u128,
         input: *const u8,
         input_len: u32,
     ) -> ExtStatusCode;
@@ -34,7 +36,8 @@ extern "C" {
     pub fn oasis_address(addr: *mut Address) -> ExtStatusCode;
     pub fn oasis_sender(addr: *mut Address) -> ExtStatusCode;
     pub fn oasis_payer(addr: *mut Address) -> ExtStatusCode;
-    pub fn oasis_value(value: *mut u64) -> ExtStatusCode;
+    #[allow(improper_ctypes)] // u128 is just 2 u64s
+    pub fn oasis_value(value: *mut u128) -> ExtStatusCode;
 
     pub fn oasis_read(key: *const u8, key_len: u32, value: *mut u8) -> ExtStatusCode;
     pub fn oasis_read_len(key: *const u8, key_len: u32, value_len: *mut u32) -> ExtStatusCode;
@@ -108,13 +111,13 @@ pub fn aad() -> Vec<u8> {
     aad
 }
 
-pub fn value() -> u64 {
+pub fn value() -> u128 {
     let mut value = 0;
     ext!(oasis_value(&mut value as *mut _)).unwrap();
     value
 }
 
-pub fn balance(addr: &Address) -> Option<u64> {
+pub fn balance(addr: &Address) -> Option<u128> {
     let mut balance = 0;
     ext!(oasis_balance(addr as *const _, &mut balance as *mut _))
         .ok()
@@ -137,10 +140,10 @@ pub fn code(addr: &Address) -> Option<Vec<u8>> {
         .map(|_| code)
 }
 
-pub fn transact(callee: &Address, value: u64, input: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn transact(callee: &Address, value: u128, input: &[u8]) -> Result<Vec<u8>, Error> {
     ext!(oasis_transact(
         callee as *const _,
-        value,
+        &value as *const u128,
         input.as_ptr(),
         if input.len() > u32::max_value() as usize {
             return Err(Error::InvalidInput);

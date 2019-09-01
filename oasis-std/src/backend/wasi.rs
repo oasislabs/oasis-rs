@@ -46,17 +46,19 @@ pub fn aad() -> Vec<u8> {
     base64::decode(&std::env::var_os("AAD").unwrap().into_vec()).unwrap()
 }
 
-pub fn value() -> u64 {
-    u64::from_str(&std::env::var("VALUE").unwrap()).unwrap()
+pub fn value() -> u128 {
+    u128::from_str(&std::env::var("VALUE").unwrap()).unwrap()
 }
 
-pub fn balance(addr: &Address) -> Option<u64> {
-    Some(unsafe {
-        *std::mem::transmute::<*const u8, *const u64>(match fs::read(home(&*addr, "balance")) {
-            Ok(balance) => balance.as_ptr(),
-            Err(err) if err.kind() == io::ErrorKind::NotFound => return None,
-            Err(err) => panic!(err),
-        })
+pub fn balance(addr: &Address) -> Option<u128> {
+    Some(match fs::read(home(&*addr, "balance")) {
+        Ok(balance) => {
+            let mut buf = [0u8; 16];
+            buf.copy_from_slice(&balance);
+            u128::from_le_bytes(buf)
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return None,
+        Err(err) => panic!(err),
     })
 }
 
@@ -71,21 +73,22 @@ pub fn code(addr: &Address) -> Option<Vec<u8>> {
 #[link(wasm_import_module = "wasi_unstable")]
 extern "C" {
     #[link_name = "blockchain_transact"]
+    #[allow(improper_ctypes)] // u128 is just 2 u64s
     fn __wasi_blockchain_transact(
         callee_addr: *const u8,
-        value: u64,
+        value: *const u128,
         input: *const u8,
         input_len: u64,
         fd: *mut __wasi_fd_t,
     ) -> __wasi_errno_t;
 }
 
-pub fn transact(callee: &Address, value: u64, input: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn transact(callee: &Address, value: u128, input: &[u8]) -> Result<Vec<u8>, Error> {
     let mut fd: __wasi_fd_t = 0;
     let errno = unsafe {
         __wasi_blockchain_transact(
             callee.0.as_ptr(),
-            value,
+            &value as *const u128,
             input.as_ptr(),
             input.len() as u64,
             &mut fd as *mut _,

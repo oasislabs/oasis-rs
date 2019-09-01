@@ -111,3 +111,50 @@ impl<'de> serde::de::Deserialize<'de> for Address {
         deserializer.deserialize_any(AddressVisitor)
     }
 }
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    #[test]
+    fn deserialize_address_from_array() {
+        let bytes = [1u8; 20];
+        let addr: Address = serde_cbor::from_slice(&serde_cbor::to_vec(&bytes).unwrap()).unwrap();
+        assert_eq!(addr.0, bytes);
+    }
+
+    #[test]
+    #[should_panic]
+    fn fail_deserialize_address_from_short_array() {
+        let bytes = [1u8; 19];
+        serde_cbor::from_slice::<Address>(&serde_cbor::to_vec(&bytes).unwrap()).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn fail_deserialize_address_from_long_array() {
+        let bytes = [1u8; 21];
+        serde_cbor::from_slice::<Address>(&serde_cbor::to_vec(&bytes).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn deserialize_address_from_slice() {
+        let bytes = vec![1u8; 20];
+        let addr: Address = serde_cbor::from_slice(&serde_cbor::to_vec(&bytes).unwrap()).unwrap();
+        assert_eq!(&addr.0, bytes.as_slice());
+    }
+
+    #[test]
+    #[should_panic]
+    fn fail_deserialize_address_from_short_slice() {
+        let bytes = vec![1u8; 19];
+        serde_cbor::from_slice::<Address>(&serde_cbor::to_vec(&bytes).unwrap()).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn fail_deserialize_address_from_long_slice() {
+        let bytes = vec![1u8; 21];
+        serde_cbor::from_slice::<Address>(&serde_cbor::to_vec(&bytes).unwrap()).unwrap();
+    }
+}

@@ -6,7 +6,6 @@ use std::{
     str::FromStr,
 };
 
-use blockchain_traits::Address as _;
 use libc::{__wasi_errno_t, __wasi_fd_t};
 use oasis_types::Address;
 

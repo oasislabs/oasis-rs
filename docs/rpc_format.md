@@ -49,7 +49,7 @@ An interface definition will link to other interface definitions that it depends
 A note on defined types: you can only expose types in an RPC interface that were (transitively) also defined in an RPC interface.
 This is to say that you can't just return a type from a crate--even if it's serializable.
 This is because non-*your preferred language* clients and services aren't able to pull down libraries written in other languages.
-The quick solution is to re-define the type in your own interface, but if you find this annoying, you should file an issue, so that we know to work on automating this step.
+The quick solution is to re-define the type in your own interface, but if you find this annoying, please upvote [oasislabs/oasis-rs#213](https://github.com/oasislabs/oasis-rs/issues/213), so that we know to prioritize automating this step.
 
 ### Functions
 
@@ -60,5 +60,17 @@ A `Function` can be marked as mutable or immutable, but this isn't enforced by t
 
 ## Wire format
 
-The wire format is standard CBOR; nothing fancy.
-Probably the only thing worth mentioning is that `Address` is serialized as a byte array and `Balance` is a CBOR bigint.
+Messages are structured as
+
+```json
+{
+  "method": "<method name>",
+  "payload": [args, "..."],
+}
+```
+
+`method` identifies the name of the RPC to be called and `payload` is a (possibly empty) list of positional arguments.
+Keyword arguments are not supported since language support is far from ubiquitious; the IDL contains the names only for ease of debugging generated clients.
+
+The wire format for an argument is the canonical CBOR encoding of the argument's type.
+Possibly the only thing worth mentioning is that `Address` is serialized as a byte array and `Balance` is a CBOR bigint.

@@ -24,7 +24,7 @@ pub struct Context {
     pub sender: Option<Address>,
 
     #[doc(hidden)]
-    pub value: Option<u64>,
+    pub value: Option<u128>,
 
     #[doc(hidden)]
     pub gas: Option<u64>,
@@ -78,7 +78,7 @@ impl Context {
     }
 
     /// Returns the value with which this `Context` was created.
-    pub fn value(&self) -> u64 {
+    pub fn value(&self) -> u128 {
         self.value.unwrap_or_else(crate::backend::value)
     }
 }
@@ -92,7 +92,7 @@ impl Context {
     }
 
     /// Amends a Context with the value that should be transferred to the callee.
-    pub fn with_value(mut self, value: u64) -> Self {
+    pub fn with_value(mut self, value: u128) -> Self {
         self.value = Some(value);
         self
     }

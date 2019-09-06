@@ -1,6 +1,6 @@
 [package]
 name = "blockchain-traits"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
 license = "Apache-2.0"
@@ -8,3 +8,6 @@ description = "A minimal description of a programmable blockchain."
 repository = "https://github.com/oasislabs/oasis-rs.git"
 readme = "README.md"
 keywords = ["blockchain"]
+
+[dependencies]
+oasis-types = { path = "../oasis-types", version = "0.2" }

@@ -9,19 +9,15 @@ const ADDR_2: Address = Address([2u8; 20]);
 
 const BASE_GAS: u64 = 2100;
 
-fn giga(num: u64) -> u64 {
+fn giga(num: u128) -> u128 {
     num * 1_000_000_000
 }
 
-extern "C" fn nop_main(
-    _ptx: *const *mut dyn PendingTransaction<Address = Address, AccountMeta = AccountMeta>,
-) -> u16 {
+extern "C" fn nop_main(_ptx: *const *mut dyn PendingTransaction) -> u16 {
     0
 }
 
-extern "C" fn simple_main(
-    ptx: *const *mut dyn PendingTransaction<Address = Address, AccountMeta = AccountMeta>,
-) -> u16 {
+extern "C" fn simple_main(ptx: *const *mut dyn PendingTransaction) -> u16 {
     let ptx = unsafe { &mut **ptx };
 
     assert_eq!(ptx.sender(), &ADDR_2);
@@ -35,17 +31,13 @@ extern "C" fn simple_main(
     0
 }
 
-extern "C" fn fail_main(
-    ptx: *const *mut dyn PendingTransaction<Address = Address, AccountMeta = AccountMeta>,
-) -> u16 {
+extern "C" fn fail_main(ptx: *const *mut dyn PendingTransaction) -> u16 {
     let ptx = unsafe { &mut **ptx };
     ptx.err(r"¯\_(ツ)_/¯".as_bytes());
     1
 }
 
-extern "C" fn subtx_main(
-    ptx: *const *mut dyn PendingTransaction<Address = Address, AccountMeta = AccountMeta>,
-) -> u16 {
+extern "C" fn subtx_main(ptx: *const *mut dyn PendingTransaction) -> u16 {
     let ptx = unsafe { &mut **ptx };
     let subtx = ptx.transact(ADDR_1, 0 /* value */, &ptx.input().to_vec());
 
@@ -63,13 +55,7 @@ extern "C" fn subtx_main(
 }
 
 fn create_bc<'bc>(
-    mains: Vec<
-        Option<
-            extern "C" fn(
-                *const *mut dyn PendingTransaction<Address = Address, AccountMeta = AccountMeta>,
-            ) -> u16,
-        >,
-    >,
+    mains: Vec<Option<extern "C" fn(*const *mut dyn PendingTransaction) -> u16>>,
 ) -> Memchain<'bc> {
     let genesis_state = mains
         .into_iter()
@@ -79,7 +65,7 @@ fn create_bc<'bc>(
             (
                 Address([i as u8; 20]),
                 Cow::Owned(Account {
-                    balance: giga(i as u64),
+                    balance: giga(i as u128),
                     code: format!("\0asm not wasm {}", i).into_bytes(),
                     storage: {
                         let mut storage = HashMap::new();
@@ -119,7 +105,7 @@ fn transfer() {
         .transact(ADDR_1, ADDR_2, ADDR_1, value, &Vec::new(), BASE_GAS, 1);
     assert_eq!(
         bc.last_block().account_meta_at(&ADDR_1).unwrap().balance,
-        giga(1) - BASE_GAS - value,
+        giga(1) - BASE_GAS as u128 - value,
     );
     assert_eq!(
         bc.last_block().account_meta_at(&ADDR_2).unwrap().balance,
@@ -190,7 +176,7 @@ fn revert_tx() {
         .transact(ADDR_1, ADDR_2, ADDR_2, 10_000, &Vec::new(), BASE_GAS, 1);
     assert_eq!(
         bc.last_block().account_meta_at(&ADDR_2).unwrap().balance,
-        giga(2) - BASE_GAS,
+        giga(2) - BASE_GAS as u128,
     );
     assert_eq!(
         bc.last_block().account_meta_at(&ADDR_1).unwrap().balance,
@@ -217,8 +203,8 @@ fn subtx_ok() {
 
     let events = bc.last_block().events();
     assert_eq!(events.len(), 1);
-    assert_eq!(events[0].topics(), vec![[42u8; 32]]);
-    assert_eq!(events[0].data(), &[0, 0, 0]);
+    assert_eq!(events[0].topics, vec![[42u8; 32]]);
+    assert_eq!(events[0].data, &[0, 0, 0]);
 
     assert_eq!(
         bc.last_block()

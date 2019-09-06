@@ -20,7 +20,7 @@ pub mod reexports {
 }
 
 pub use oasis_macros::{default, Event, Service};
-pub use oasis_types::Address;
+pub use oasis_types::{Address, Balance};
 
 pub use crate::exe::*;
 
@@ -39,19 +39,19 @@ macro_rules! service {
 }
 
 pub trait AddressExt {
-    fn transfer(&self, value: u64) -> Result<(), crate::backend::Error>;
+    fn transfer(&self, value: u128) -> Result<(), crate::backend::Error>;
 
-    fn balance(&self) -> u64;
+    fn balance(&self) -> u128;
 
     fn code(&self) -> Vec<u8>;
 }
 
 impl AddressExt for Address {
-    fn transfer(&self, value: u64) -> Result<(), crate::backend::Error> {
+    fn transfer(&self, value: u128) -> Result<(), crate::backend::Error> {
         crate::backend::transact(self, value, &[]).map(|_| ())
     }
 
-    fn balance(&self) -> u64 {
+    fn balance(&self) -> u128 {
         crate::backend::balance(self).unwrap()
     }
 

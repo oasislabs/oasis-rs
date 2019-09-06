@@ -1,16 +1,13 @@
 use blockchain_traits::TransactionOutcome;
-use oasis_types::{AccountMeta, Address};
+use oasis_types::{AccountMeta, Address, Event};
 
-use crate::{
-    output::{Event, Receipt},
-    State,
-};
+use crate::{output::Receipt, State};
 
 #[derive(Debug)]
 pub struct PendingTransaction<'bc> {
     pub caller: Address,
     pub callee: Address,
-    pub value: u64,
+    pub value: u128,
     pub state: State<'bc>,
     pub input: Vec<u8>,
     pub outcome: TransactionOutcome,
@@ -21,18 +18,15 @@ pub struct PendingTransaction<'bc> {
 }
 
 impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
-    type Address = Address;
-    type AccountMeta = AccountMeta;
-
-    fn address(&self) -> &Self::Address {
+    fn address(&self) -> &Address {
         &self.callee
     }
 
-    fn sender(&self) -> &Self::Address {
+    fn sender(&self) -> &Address {
         &self.caller
     }
 
-    fn value(&self) -> u64 {
+    fn value(&self) -> u128 {
         self.value
     }
 
@@ -42,10 +36,10 @@ impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
 
     fn transact(
         &mut self,
-        callee: Self::Address,
-        value: u64,
+        callee: Address,
+        value: u128,
         input: &[u8],
-    ) -> Box<dyn blockchain_traits::Receipt<Address = Self::Address>> {
+    ) -> Box<dyn blockchain_traits::Receipt> {
         let caller = self.callee;
         let mut receipt = Receipt {
             caller,
@@ -96,10 +90,7 @@ impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
         let main_fn = self.state.get(&callee).unwrap().main;
 
         if let Some(main) = main_fn {
-            let ptx: &mut dyn blockchain_traits::PendingTransaction<
-                Address = Address,
-                AccountMeta = AccountMeta,
-            > = &mut pending_transaction;
+            let ptx: &mut dyn blockchain_traits::PendingTransaction = &mut pending_transaction;
             let errno = main(unsafe {
                 // Extend the lifetime, as required by the FFI type.
                 // This is only unsafe if the `main` fn stores the pointer,
@@ -162,11 +153,11 @@ impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
             .unwrap()
     }
 
-    fn code_at(&self, addr: &Self::Address) -> Option<&[u8]> {
+    fn code_at(&self, addr: &Address) -> Option<&[u8]> {
         self.state.get(addr).map(|acct| acct.code.as_ref())
     }
 
-    fn account_meta_at(&self, addr: &Self::Address) -> Option<Self::AccountMeta> {
+    fn account_meta_at(&self, addr: &Address) -> Option<AccountMeta> {
         self.state.get(addr).map(|acct| AccountMeta {
             balance: acct.balance,
             expiry: acct.expiry,

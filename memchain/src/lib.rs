@@ -8,16 +8,13 @@ mod pending_transaction;
 use std::{borrow::Cow, collections::HashMap, convert::TryInto};
 
 use blockchain_traits::Blockchain;
-use oasis_types::{AccountMeta, Address};
+use oasis_types::Address;
 
 use block::Block;
 
 type State<'bc> = HashMap<Address, Cow<'bc, Account>>;
 
-pub type PtxPtr = *const *mut dyn blockchain_traits::PendingTransaction<
-    Address = Address,
-    AccountMeta = AccountMeta,
->;
+pub type PtxPtr = *const *mut dyn blockchain_traits::PendingTransaction;
 pub type AccountMain = extern "C" fn(PtxPtr) -> u16;
 
 #[derive(Debug)]
@@ -53,45 +50,28 @@ impl<'bc> Memchain<'bc> {
 }
 
 impl<'bc> Blockchain for Memchain<'bc> {
-    type Address = Address;
-    type AccountMeta = AccountMeta;
-
     fn name(&self) -> &str {
         &self.name
     }
 
-    fn block(
-        &self,
-        height: usize,
-    ) -> Option<
-        &dyn blockchain_traits::Block<Address = Self::Address, AccountMeta = Self::AccountMeta>,
-    > {
-        self.blocks.get(height).map(|b| {
-            b as &dyn blockchain_traits::Block<
-                Address = Self::Address,
-                AccountMeta = Self::AccountMeta,
-            >
-        })
+    fn block(&self, height: usize) -> Option<&dyn blockchain_traits::Block> {
+        self.blocks
+            .get(height)
+            .map(|b| b as &dyn blockchain_traits::Block)
     }
 
-    fn last_block(
-        &self,
-    ) -> &dyn blockchain_traits::Block<Address = Self::Address, AccountMeta = Self::AccountMeta>
-    {
+    fn last_block(&self) -> &dyn blockchain_traits::Block {
         self.blocks.last().unwrap()
     }
 
-    fn last_block_mut(
-        &mut self,
-    ) -> &mut dyn blockchain_traits::Block<Address = Self::Address, AccountMeta = Self::AccountMeta>
-    {
+    fn last_block_mut(&mut self) -> &mut dyn blockchain_traits::Block {
         self.blocks.last_mut().unwrap()
     }
 }
 
 #[derive(Clone, Default, Debug)]
 pub struct Account {
-    pub balance: u64,
+    pub balance: u128,
     pub code: Vec<u8>,
     pub storage: HashMap<Vec<u8>, Vec<u8>>,
     pub expiry: Option<std::time::Duration>,

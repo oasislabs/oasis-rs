@@ -1,5 +1,5 @@
 use blockchain_traits::TransactionOutcome;
-use oasis_types::{AccountMeta, Address};
+use oasis_types::{AccountMeta, Address, Event};
 
 use crate::{output::Receipt, pending_transaction::PendingTransaction, State};
 
@@ -23,23 +23,20 @@ impl<'bc> Block<'bc> {
 }
 
 impl<'bc> blockchain_traits::Block for Block<'bc> {
-    type Address = Address;
-    type AccountMeta = AccountMeta;
-
     fn height(&self) -> u64 {
         self.height
     }
 
     fn transact(
         &mut self,
-        caller: Self::Address,
-        callee: Self::Address,
-        payer: Self::Address,
-        value: u64,
+        caller: Address,
+        callee: Address,
+        payer: Address,
+        value: u128,
         input: &[u8],
         gas: u64,
         gas_price: u64,
-    ) -> Box<dyn blockchain_traits::Receipt<Address = Self::Address>> {
+    ) -> Box<dyn blockchain_traits::Receipt> {
         let mut receipt = Receipt {
             caller,
             callee,
@@ -70,11 +67,11 @@ impl<'bc> blockchain_traits::Block for Block<'bc> {
             Some(payer_acct) => {
                 let payer_acct = payer_acct.to_mut();
                 let gas_cost = gas * gas_price;
-                if payer_acct.balance < gas_cost {
+                if payer_acct.balance < u128::from(gas_cost) {
                     payer_acct.balance = 0;
                     early_return!(InsufficientFunds);
                 }
-                payer_acct.balance -= gas_cost;
+                payer_acct.balance -= u128::from(gas_cost);
             }
             None => early_return!(InvalidCallee),
         };
@@ -108,10 +105,7 @@ impl<'bc> blockchain_traits::Block for Block<'bc> {
         };
 
         if let Some(main) = self.state.get(&callee).unwrap().main {
-            let ptx: &mut dyn blockchain_traits::PendingTransaction<
-                Address = Address,
-                AccountMeta = AccountMeta,
-            > = &mut pending_transaction;
+            let ptx: &mut dyn blockchain_traits::PendingTransaction = &mut pending_transaction;
             let errno = main(unsafe {
                 // Extend the lifetime, as required by the FFI type.
                 // This is only unsafe if the `main` fn stores the pointer,
@@ -135,29 +129,29 @@ impl<'bc> blockchain_traits::Block for Block<'bc> {
         box receipt
     }
 
-    fn code_at(&self, addr: &Self::Address) -> Option<&[u8]> {
+    fn code_at(&self, addr: &Address) -> Option<&[u8]> {
         self.state.get(addr).map(|acct| acct.code.as_ref())
     }
 
-    fn account_meta_at(&self, addr: &Self::Address) -> Option<Self::AccountMeta> {
+    fn account_meta_at(&self, addr: &Address) -> Option<AccountMeta> {
         self.state.get(addr).map(|acct| AccountMeta {
             balance: acct.balance,
             expiry: acct.expiry,
         })
     }
 
-    fn state_at(&self, addr: &Self::Address) -> Option<&dyn blockchain_traits::KVStore> {
+    fn state_at(&self, addr: &Address) -> Option<&dyn blockchain_traits::KVStore> {
         self.state.get(addr).map(|acct| &**acct as _)
     }
 
-    fn events(&self) -> Vec<&dyn blockchain_traits::Event<Address = Self::Address>> {
+    fn events(&self) -> Vec<&Event> {
         self.completed_transactions
             .iter()
             .flat_map(|r| blockchain_traits::Receipt::events(r))
             .collect()
     }
 
-    fn receipts(&self) -> Vec<&dyn blockchain_traits::Receipt<Address = Self::Address>> {
+    fn receipts(&self) -> Vec<&dyn blockchain_traits::Receipt> {
         self.completed_transactions.iter().map(|r| r as _).collect()
     }
 }

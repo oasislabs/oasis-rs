@@ -5,8 +5,8 @@ extern crate serde;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use oasis_std::{Address, Context, Event, Service};
 use map_vec::{Map, Set};
+use oasis_std::{Address, Balance, Context, Event, Service};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum InnerTy {
@@ -14,7 +14,7 @@ pub enum InnerTy {
     Field2,
 }
 
-pub type Tuple = (Address, u64, Address);
+pub type Tuple = (Address, Balance);
 
 #[derive(Serialize, Deserialize, Event, Default)]
 pub struct TestEvent {

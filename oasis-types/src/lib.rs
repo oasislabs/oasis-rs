@@ -1,9 +1,13 @@
 #[macro_use]
+extern crate derive_more;
+#[macro_use]
 extern crate serde;
 
 mod address;
+mod balance;
 
 pub use address::Address;
+pub use balance::Balance;
 
 #[repr(C)]
 #[derive(PartialEq, Eq)]

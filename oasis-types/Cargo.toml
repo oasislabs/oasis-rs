@@ -10,6 +10,7 @@ readme = "README.md"
 keywords = ["blockchain", "oasis"]
 
 [dependencies]
+derive_more = "0.15"
 hex = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 

@@ -91,10 +91,7 @@
                 "type": "address"
               },
               {
-                "type": "u64"
-              },
-              {
-                "type": "address"
+                "type": "balance"
               }
             ]
           }
@@ -278,5 +275,5 @@
       }
     }
   ],
-  "oasis_build_version": "0.2.3"
+  "oasis_build_version": "0.2.4"
 }

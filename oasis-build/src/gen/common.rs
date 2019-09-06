@@ -33,6 +33,7 @@ pub fn quote_ty(ty: &oasis_rpc::Type) -> TokenStream {
         Type::Bytes => quote!(Vec<u8>),
         Type::String => quote!(&str),
         Type::Address => quote!(oasis_std::Address),
+        Type::Balance => quote!(oasis_std::Balance),
         Type::Defined { namespace, ty } => {
             let tyq = format_ident!("{}", ty);
             match namespace {

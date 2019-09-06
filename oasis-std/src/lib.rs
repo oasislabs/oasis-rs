@@ -20,7 +20,7 @@ pub mod reexports {
 }
 
 pub use oasis_macros::{default, Event, Service};
-pub use oasis_types::Address;
+pub use oasis_types::{Address, Balance};
 
 pub use crate::exe::*;
 

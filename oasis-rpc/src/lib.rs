@@ -135,6 +135,7 @@ pub enum Type {
     Bytes,
     String,
     Address,
+    Balance,
     Defined {
         #[serde(skip_serializing_if = "Option::is_none", default)]
         namespace: Option<Ident>, // `None` if local, otherwise refers to an entry in `Imports`

@@ -213,6 +213,8 @@ macro_rules! convert_def {
                 Type::Set(box $arg_at(0)?)
             } else if ty_str == "Address" {
                 Type::Address
+            } else if ty_str == "Balance" {
+                Type::Balance
             } else {
                 // this branch includes `sync`, among other things
                 return Err(UnsupportedTypeError::NotReprC(

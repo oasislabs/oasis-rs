@@ -1,5 +1,6 @@
 #![feature(
     bind_by_move_pattern_guards,
+    linkage,
     non_exhaustive,
     proc_macro_hygiene,
     trait_alias
@@ -38,7 +39,44 @@ macro_rules! service {
     ($svc:path) => {};
 }
 
+/// Makes a transaction to an address using Oasis RPC semantics.
+///
+/// ## Usage
+///
+/// ```norun
+/// invoke!(addr: Address, method: impl AsRef<str>, ctx: &Context, args: ..impl Serialize);
+/// ```
+///
+/// ## Example
+///
+/// ```norun
+/// invoke!(
+///     some_address,
+///     "method",
+///     &Context::default(),
+///     "an arg",
+///     &["some", "more", "args"],
+///     42,
+/// )
+/// ```
+#[macro_export]
+macro_rules! invoke {
+    ($address:expr, $method:expr, $ctx:expr, $( $arg:expr ),* $(,)?) => {{
+        use crate::serde::ser::{Serializer as _, SerializeStruct as _};
+        let mut serializer = $crate::reexports::serde_cbor::Serializer::new(Vec::new());
+        serializer.serialize_struct("Message", 2).and_then(|mut message| {
+            message.serialize_field("method", $method)?;
+            message.serialize_field("payload", &( $( &$arg ),* ))?;
+            message.end()
+        })
+        .map_err(|_| $crate::backend::Error::InvalidInput)
+        .and_then(|_| $address.call($ctx, &serializer.into_inner()))
+    }}
+}
+
 pub trait AddressExt {
+    fn call(&self, ctx: &Context, payload: &[u8]) -> Result<Vec<u8>, crate::backend::Error>;
+
     fn transfer(&self, value: u128) -> Result<(), crate::backend::Error>;
 
     fn balance(&self) -> u128;
@@ -47,6 +85,10 @@ pub trait AddressExt {
 }
 
 impl AddressExt for Address {
+    fn call(&self, ctx: &Context, payload: &[u8]) -> Result<Vec<u8>, crate::backend::Error> {
+        crate::backend::transact(self, ctx.value(), payload)
+    }
+
     fn transfer(&self, value: u128) -> Result<(), crate::backend::Error> {
         crate::backend::transact(self, value, &[]).map(|_| ())
     }
@@ -57,5 +99,25 @@ impl AddressExt for Address {
 
     fn code(&self) -> Vec<u8> {
         crate::backend::code(self).unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    extern crate oasis_test;
+
+    #[test]
+    fn test_invoke() {
+        invoke!(
+            Address::default(),
+            "method",
+            &Context::default(),
+            "an arg",
+            &["some", "more", "args"],
+            42,
+        )
+        .unwrap();
     }
 }

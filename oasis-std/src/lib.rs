@@ -77,9 +77,9 @@ macro_rules! invoke {
 pub trait AddressExt {
     fn call(&self, ctx: &Context, payload: &[u8]) -> Result<Vec<u8>, crate::backend::Error>;
 
-    fn transfer(&self, value: u128) -> Result<(), crate::backend::Error>;
+    fn transfer<B: Into<Balance>>(&self, value: B) -> Result<(), crate::backend::Error>;
 
-    fn balance(&self) -> u128;
+    fn balance(&self) -> Balance;
 
     fn code(&self) -> Vec<u8>;
 }
@@ -89,11 +89,11 @@ impl AddressExt for Address {
         crate::backend::transact(self, ctx.value(), payload)
     }
 
-    fn transfer(&self, value: u128) -> Result<(), crate::backend::Error> {
-        crate::backend::transact(self, value, &[]).map(|_| ())
+    fn transfer<B: Into<Balance>>(&self, value: B) -> Result<(), crate::backend::Error> {
+        crate::backend::transact(self, value.into(), &[]).map(|_| ())
     }
 
-    fn balance(&self) -> u128 {
+    fn balance(&self) -> Balance {
         crate::backend::balance(self).unwrap()
     }
 

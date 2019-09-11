@@ -1,4 +1,4 @@
-use oasis_types::Address;
+use oasis_types::{Address, Balance};
 
 /// A type that can be stored in blockchain storage.
 pub trait Storage = serde::Serialize + serde::de::DeserializeOwned;
@@ -24,7 +24,7 @@ pub struct Context {
     pub sender: Option<Address>,
 
     #[doc(hidden)]
-    pub value: Option<u128>,
+    pub value: Option<Balance>,
 
     #[doc(hidden)]
     pub gas: Option<u64>,
@@ -78,7 +78,7 @@ impl Context {
     }
 
     /// Returns the value with which this `Context` was created.
-    pub fn value(&self) -> u128 {
+    pub fn value(&self) -> Balance {
         self.value.unwrap_or_else(crate::backend::value)
     }
 }
@@ -92,8 +92,8 @@ impl Context {
     }
 
     /// Amends a Context with the value that should be transferred to the callee.
-    pub fn with_value(mut self, value: u128) -> Self {
-        self.value = Some(value);
+    pub fn with_value<B: Into<Balance>>(mut self, value: B) -> Self {
+        self.value = Some(value.into());
         self
     }
 }

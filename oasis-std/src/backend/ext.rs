@@ -1,4 +1,4 @@
-use oasis_types::{Address, ExtStatusCode};
+use oasis_types::{Address, Balance, ExtStatusCode};
 
 use super::Error;
 
@@ -111,17 +111,17 @@ pub fn aad() -> Vec<u8> {
     aad
 }
 
-pub fn value() -> u128 {
+pub fn value() -> Balance {
     let mut value = 0;
     ext!(oasis_value(&mut value as *mut _)).unwrap();
-    value
+    Balance(value)
 }
 
-pub fn balance(addr: &Address) -> Option<u128> {
+pub fn balance(addr: &Address) -> Option<Balance> {
     let mut balance = 0;
     ext!(oasis_balance(addr as *const _, &mut balance as *mut _))
         .ok()
-        .map(|_| balance)
+        .map(|_| Balance(balance))
 }
 
 pub fn code(addr: &Address) -> Option<Vec<u8>> {
@@ -140,10 +140,10 @@ pub fn code(addr: &Address) -> Option<Vec<u8>> {
         .map(|_| code)
 }
 
-pub fn transact(callee: &Address, value: u128, input: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn transact(callee: &Address, value: Balance, input: &[u8]) -> Result<Vec<u8>, Error> {
     ext!(oasis_transact(
         callee as *const _,
-        &value as *const u128,
+        &value.0 as *const u128,
         input.as_ptr(),
         if input.len() > u32::max_value() as usize {
             return Err(Error::InvalidInput);

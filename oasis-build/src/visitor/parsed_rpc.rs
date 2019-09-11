@@ -1,9 +1,7 @@
-use syntax::{
-    ast, mut_visit::MutVisitor as _, print::pprust, ptr::P, source_map::Span, visit::Visitor as _,
-};
+use syntax::{ast, ptr::P, source_map::Span};
 use syntax_pos::symbol::Symbol;
 
-use crate::error::RpcError;
+use crate::{error::RpcError, visitor::syntax::ArgLifetimeTransducer};
 
 pub struct ParsedRpc {
     pub name: Symbol,
@@ -32,7 +30,15 @@ impl ParsedRpc {
             ast::ImplItemKind::Method(msig, _) => msig,
             _ => return None,
         };
-        if !impl_item.generics.params.is_empty() {
+        if impl_item
+            .generics
+            .params
+            .iter()
+            .fold(false, |has_generic, param| match param.kind {
+                ast::GenericParamKind::Type { .. } => true,
+                _ => has_generic,
+            })
+        {
             errors.push(RpcError::HasGenerics(impl_item.generics.span));
         }
 
@@ -104,17 +110,6 @@ impl ParsedRpc {
                     ast::PatKind::Ident(..) => (),
                     _ => errors.push(RpcError::BadArgPat(arg.pat.span)),
                 }
-
-                let mut ref_checker = super::syntax::RefChecker::default();
-                ref_checker.visit_ty(&*arg.ty);
-                if ref_checker.has_ref {
-                    let mut suggested_ty = arg.ty.clone();
-                    super::syntax::Deborrower {}.visit_ty(&mut suggested_ty);
-                    errors.push(RpcError::BadArgTy {
-                        span: arg.ty.span,
-                        suggestion: pprust::ty_to_string(&suggested_ty),
-                    });
-                }
             }
         }
 
@@ -179,8 +174,9 @@ impl ParsedRpc {
         })
     }
 
-    pub fn arg_tys(&self) -> impl Iterator<Item = &ast::Ty> + '_ {
-        self.inputs().map(|arg| &*arg.ty)
+    pub fn arg_lifetimes<'a>(&'a self) -> impl Iterator<Item = (Vec<Symbol>, P<ast::Ty>)> + 'a {
+        let mut lc = ArgLifetimeTransducer::default();
+        self.inputs().map(move |inp| lc.transduce(&inp.ty))
     }
 
     fn inputs(&self) -> impl Iterator<Item = &ast::Arg> {

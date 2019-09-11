@@ -340,7 +340,24 @@ fn convert_sty_with_arg_at<'tcx>(
         Str => Type::String,
         Array(ty, len) => Type::Array(
             box convert_sty(tcx, did, ty)?,
-            len.val.try_to_scalar().unwrap().to_usize(&tcx).unwrap(),
+            // The following is a mightly workaround for rustc not evaluating
+            // literal array lengths in structs, for whatever reason,
+            len.val
+                .try_to_scalar()
+                .and_then(|c| c.to_usize(&tcx).ok())
+                .unwrap_or_else(|| {
+                    let arr_str = tcx
+                        .sess
+                        .source_map()
+                        .span_to_snippet(tcx.def_span(did))
+                        .unwrap();
+                    arr_str
+                        .get((arr_str.rfind(';').unwrap() + 1)..arr_str.rfind(']').unwrap())
+                        .unwrap()
+                        .trim()
+                        .parse()
+                        .unwrap()
+                }),
         ),
         Slice(ty) => Type::List(box convert_sty(tcx, did, ty)?),
         Ref(_, ty, _) => return convert_sty(tcx, did, ty),

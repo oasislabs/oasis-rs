@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{collections::BTreeSet, path::Path};
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -58,19 +58,34 @@ fn generate_rpc_dispatcher(
     let service_ident = format_ident!("{}", service_name.as_str().get());
     let mut any_rpc_returns_result = false;
     let mut rpc_payload_variants = Vec::with_capacity(rpcs.len());
+    let mut rpc_payload_lifetimes = BTreeSet::new();
     let rpc_match_arms = rpcs
         .iter()
         .map(|rpc| {
-            let arg_tys_vec: Vec<_> = rpc.arg_tys().map(ty_tokenizable).collect();
-            let arg_tys = if !arg_tys_vec.is_empty() {
-                quote!((#(#arg_tys_vec),*,))
+            let mut arg_tys = Vec::new();
+            let mut needs_borrow = false;
+            for (arg_lifetimes, arg_ty) in rpc.arg_lifetimes() {
+                arg_tys.push(ty_tokenizable(&arg_ty));
+                needs_borrow |= !arg_lifetimes.is_empty();
+                rpc_payload_lifetimes.extend(arg_lifetimes.into_iter().map(lifetime_tokenizable));
+            }
+
+            let variant_arg_tys = if !arg_tys.is_empty() {
+                quote!((#(#arg_tys),*,))
+            } else {
+                quote!()
+            };
+
+            let serde_borrow = if needs_borrow {
+                quote!(#[serde(borrow)])
             } else {
                 quote!()
             };
 
             let rpc_name = format_ident!("{}", rpc.name);
             rpc_payload_variants.push(quote! {
-                #rpc_name(#arg_tys)
+                #serde_borrow
+                #rpc_name(#variant_arg_tys)
             });
 
             any_rpc_returns_result |= rpc.output.is_result();
@@ -101,6 +116,12 @@ fn generate_rpc_dispatcher(
         quote!(unreachable!("No RPC function returns Err"))
     };
 
+    let rpc_payload_lifetimes = if !rpc_payload_lifetimes.is_empty() {
+        quote!(<#(#rpc_payload_lifetimes),*>)
+    } else {
+        quote!()
+    };
+
     quote! {
         #[allow(warnings)]
         fn _oasis_dispatcher() {
@@ -108,7 +129,7 @@ fn generate_rpc_dispatcher(
 
             #[derive(Deserialize)]
             #[serde(tag = "method", content = "payload")]
-            enum RpcPayload {
+            enum RpcPayload#rpc_payload_lifetimes {
                 #(#rpc_payload_variants),*
             }
 
@@ -203,13 +224,30 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &ParsedRpc) -> TokenStream {
         .arg_names()
         .map(|name| format_ident!("{}", name))
         .collect();
-    let arg_tys = ctor.arg_tys().map(ty_tokenizable);
+    let mut lifetimes = Vec::new();
+    let mut payload_arg_tys = Vec::new();
+    for (arg_lifetimes, arg_ty) in ctor.arg_lifetimes() {
+        payload_arg_tys.push(ty_tokenizable(&arg_ty));
+        lifetimes.extend(arg_lifetimes.into_iter().map(lifetime_tokenizable));
+    }
+    let payload_lifetimes = if !lifetimes.is_empty() {
+        quote!(<#(#lifetimes),*>)
+    } else {
+        quote!()
+    };
+
+    let serde_borrow = if !lifetimes.is_empty() {
+        quote!(#[serde(borrow)])
+    } else {
+        quote!()
+    };
 
     let (ctor_struct_args, ctor_payload_unpack) = if !arg_names.is_empty() {
-        let struct_args = quote!((#(#arg_tys),*,));
+        let struct_args = quote!((#(#payload_arg_tys),*,));
         let payload_unpack = quote! {
+            let input = oasis_std::backend::input();
             let CtorPayload((#(#arg_names),*,)) =
-                oasis_std::reexports::serde_cbor::from_slice(&oasis_std::backend::input()).unwrap();
+                oasis_std::reexports::serde_cbor::from_slice(&input).unwrap();
         };
         (struct_args, payload_unpack)
     } else {
@@ -240,7 +278,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &ParsedRpc) -> TokenStream {
 
             #[derive(Deserialize)]
             #[allow(non_camel_case_types)]
-            struct CtorPayload(#ctor_struct_args);
+            struct CtorPayload#payload_lifetimes(#serde_borrow #ctor_struct_args);
 
             let ctx = oasis_std::Context::default(); // TODO(#33)
             #ctor_payload_unpack
@@ -286,4 +324,8 @@ fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
 
 fn ty_tokenizable(ty: &ast::Ty) -> syn::Type {
     syn::parse_str::<syn::Type>(&pprust::ty_to_string(&ty)).unwrap()
+}
+
+fn lifetime_tokenizable(name: Symbol) -> syn::Lifetime {
+    syn::Lifetime::new(&format!("{}", name), proc_macro2::Span::call_site())
 }

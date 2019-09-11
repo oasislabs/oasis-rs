@@ -2,6 +2,7 @@
 pub fn event_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as syn::DeriveInput);
     let event_name = &input.ident;
+    let generics = &input.generics;
 
     let indexed_fields = match input.data {
         syn::Data::Struct(syn::DataStruct { fields, .. }) => fields
@@ -25,9 +26,9 @@ pub fn event_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
         const #impl_wrapper_ident: () = {
             use oasis_std::reexports::*;
 
-            impl oasis_std::exe::Event for #event_name  {
+            impl#generics oasis_std::exe::Event for #event_name#generics  {
                 fn emit(&self) {
-                    let hashes = vec![
+                    let hashes: Vec<[u8; 32]> = vec![
                         #(tiny_keccak::keccak256(&serde_cbor::to_vec(&self.#indexed_field_idents).unwrap())),*
                     ];
                     let mut topics: Vec<&[u8]> = Vec::with_capacity(#num_topics);

@@ -13,7 +13,6 @@ keywords = ["oasis", "test", "testing"]
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-blockchain-traits = { version = "0.2", path = "../blockchain-traits" }
 memchain = { version = "0.2", path = "../memchain" }
 oasis-macros = { version = "0.2", path = "../oasis-macros" }
 oasis-types = { version = "0.2", path = "../oasis-types" }

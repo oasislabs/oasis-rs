@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use blockchain_traits::PendingTransaction;
+use oasis_types::PendingTransaction;
 
 use crate::*;
 
@@ -191,10 +191,7 @@ fn subtx_ok() {
         bc.last_block_mut()
             .transact(ADDR_1, ADDR_2, ADDR_2, 1000, &[1, 2, 3], BASE_GAS * 2, 0);
 
-    assert_eq!(
-        receipt.outcome(),
-        blockchain_traits::TransactionOutcome::Success
-    );
+    assert_eq!(receipt.outcome(), oasis_types::TransactionOutcome::Success);
 
     assert_eq!(
         bc.last_block().receipts().last().unwrap().output(),

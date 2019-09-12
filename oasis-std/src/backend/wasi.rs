@@ -7,7 +7,7 @@ use std::{
 };
 
 use libc::{__wasi_errno_t, __wasi_fd_t};
-use oasis_types::{Address, Balance};
+use oasis_types::{Address, Blaance, CallType};
 
 use super::Error;
 
@@ -76,6 +76,7 @@ extern "C" {
     #[allow(improper_ctypes)] // u128 is just 2 u64s
     fn __wasi_blockchain_transact(
         callee_addr: *const u8,
+        call_type: u8,
         value: *const u128,
         input: *const u8,
         input_len: u64,
@@ -83,11 +84,17 @@ extern "C" {
     ) -> __wasi_errno_t;
 }
 
-pub fn transact(callee: &Address, value: Balance, input: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn transact(
+    callee: &Address,
+    call_type: CallType,
+    value: Balance,
+    input: &[u8],
+) -> Result<Vec<u8>, Error> {
     let mut fd: __wasi_fd_t = 0;
     let errno = unsafe {
         __wasi_blockchain_transact(
             callee.0.as_ptr(),
+            call_type,
             &value.0 as *const u128,
             input.as_ptr(),
             input.len() as u64,

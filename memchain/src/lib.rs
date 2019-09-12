@@ -7,14 +7,13 @@ mod pending_transaction;
 
 use std::{borrow::Cow, collections::HashMap, convert::TryInto};
 
-use blockchain_traits::Blockchain;
-use oasis_types::Address;
+use oasis_types::{Address, Blockchain};
 
 use block::Block;
 
 type State<'bc> = HashMap<Address, Cow<'bc, Account>>;
 
-pub type PtxPtr = *const *mut dyn blockchain_traits::PendingTransaction;
+pub type PtxPtr = *const *mut dyn oasis_types::PendingTransaction;
 pub type AccountMain = extern "C" fn(PtxPtr) -> u16;
 
 #[derive(Debug)]
@@ -54,17 +53,17 @@ impl<'bc> Blockchain for Memchain<'bc> {
         &self.name
     }
 
-    fn block(&self, height: usize) -> Option<&dyn blockchain_traits::Block> {
+    fn block(&self, height: usize) -> Option<&dyn oasis_types::Block> {
         self.blocks
             .get(height)
-            .map(|b| b as &dyn blockchain_traits::Block)
+            .map(|b| b as &dyn oasis_types::Block)
     }
 
-    fn last_block(&self) -> &dyn blockchain_traits::Block {
+    fn last_block(&self) -> &dyn oasis_types::Block {
         self.blocks.last().unwrap()
     }
 
-    fn last_block_mut(&mut self) -> &mut dyn blockchain_traits::Block {
+    fn last_block_mut(&mut self) -> &mut dyn oasis_types::Block {
         self.blocks.last_mut().unwrap()
     }
 }
@@ -83,7 +82,7 @@ pub struct Account {
     pub main: Option<AccountMain>,
 }
 
-impl blockchain_traits::KVStore for Account {
+impl oasis_types::KVStore for Account {
     fn contains(&self, key: &[u8]) -> bool {
         self.storage.contains_key(key)
     }
@@ -93,7 +92,7 @@ impl blockchain_traits::KVStore for Account {
     }
 }
 
-impl blockchain_traits::KVStoreMut for Account {
+impl oasis_types::KVStoreMut for Account {
     fn set(&mut self, key: &[u8], value: &[u8]) {
         self.storage.insert(key.to_vec(), value.to_vec());
     }

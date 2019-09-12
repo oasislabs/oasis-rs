@@ -1,4 +1,4 @@
-use oasis_types::{Address, Balance, ExtStatusCode};
+use oasis_types::{Address, Balance, CallType, ExtStatusCode};
 
 use super::Error;
 
@@ -28,6 +28,7 @@ extern "C" {
     #[allow(improper_ctypes)] // u128 is just 2 u64s
     pub fn oasis_transact(
         callee: *const Address,
+        call_type: u8,
         value: *const u128,
         input: *const u8,
         input_len: u32,
@@ -140,9 +141,15 @@ pub fn code(addr: &Address) -> Option<Vec<u8>> {
         .map(|_| code)
 }
 
-pub fn transact(callee: &Address, value: Balance, input: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn transact(
+    callee: &Address,
+    call_type: CallType,
+    value: Balance,
+    input: &[u8],
+) -> Result<Vec<u8>, Error> {
     ext!(oasis_transact(
         callee as *const _,
+        call_type as u8,
         &value.0 as *const u128,
         input.as_ptr(),
         if input.len() > u32::max_value() as usize {

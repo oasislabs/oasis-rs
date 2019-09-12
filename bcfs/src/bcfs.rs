@@ -6,8 +6,7 @@ use std::{
     str::FromStr as _,
 };
 
-use blockchain_traits::PendingTransaction;
-use oasis_types::Address;
+use oasis_types::{Address, PendingTransaction};
 use wasi_types::{
     ErrNo, Fd, FdFlags, FdStat, FileDelta, FileSize, FileStat, FileType, OpenFlags, Rights, Whence,
 };

@@ -13,7 +13,6 @@ keywords = ["blockchain", "testing", "ethereum"]
 crate_type = ["rlib", "cdylib"]
 
 [dependencies]
-blockchain-traits = { version = "0.2", path = "../blockchain-traits" }
 oasis-types = { version = "0.2", path = "../oasis-types" }
 
 [features]

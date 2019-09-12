@@ -21,7 +21,7 @@ pub mod reexports {
 }
 
 pub use oasis_macros::{default, Event, Service};
-pub use oasis_types::{Address, Balance};
+pub use oasis_types::{Address, Balance, CallType};
 
 pub use crate::exe::*;
 
@@ -86,11 +86,11 @@ pub trait AddressExt {
 
 impl AddressExt for Address {
     fn call(&self, ctx: &Context, payload: &[u8]) -> Result<Vec<u8>, crate::backend::Error> {
-        crate::backend::transact(self, ctx.value(), payload)
+        crate::backend::transact(self, ctx.call_type, ctx.value(), payload)
     }
 
     fn transfer<B: Into<Balance>>(&self, value: B) -> Result<(), crate::backend::Error> {
-        crate::backend::transact(self, value.into(), &[]).map(|_| ())
+        crate::backend::transact(self, CallType::Default, value.into(), &[]).map(|_| ())
     }
 
     fn balance(&self) -> Balance {

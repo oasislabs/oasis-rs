@@ -1,5 +1,4 @@
-use blockchain_traits::TransactionOutcome;
-use oasis_types::{AccountMeta, Address, Event};
+use oasis_types::{AccountMeta, Address, CallType, Event, TransactionOutcome};
 
 use crate::{output::Receipt, State};
 
@@ -17,7 +16,7 @@ pub struct PendingTransaction<'bc> {
     pub base_gas: u64,
 }
 
-impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
+impl<'bc> oasis_types::PendingTransaction for PendingTransaction<'bc> {
     fn address(&self) -> &Address {
         &self.callee
     }
@@ -37,9 +36,10 @@ impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
     fn transact(
         &mut self,
         callee: Address,
+        call_type: CallType,
         value: u128,
         input: &[u8],
-    ) -> Box<dyn blockchain_traits::Receipt> {
+    ) -> Box<dyn oasis_types::Receipt> {
         let caller = self.callee;
         let mut receipt = Receipt {
             caller,
@@ -90,7 +90,7 @@ impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
         let main_fn = self.state.get(&callee).unwrap().main;
 
         if let Some(main) = main_fn {
-            let ptx: &mut dyn blockchain_traits::PendingTransaction = &mut pending_transaction;
+            let ptx: &mut dyn oasis_types::PendingTransaction = &mut pending_transaction;
             let errno = main(unsafe {
                 // Extend the lifetime, as required by the FFI type.
                 // This is only unsafe if the `main` fn stores the pointer,
@@ -104,7 +104,7 @@ impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
 
         receipt.outcome = pending_transaction.outcome;
         receipt.output = pending_transaction.output;
-        if blockchain_traits::Receipt::reverted(&receipt) {
+        if oasis_types::Receipt::reverted(&receipt) {
             receipt.events.clear();
         } else {
             self.state = pending_transaction.state;
@@ -142,11 +142,11 @@ impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
         });
     }
 
-    fn state(&self) -> &dyn blockchain_traits::KVStore {
+    fn state(&self) -> &dyn oasis_types::KVStore {
         self.state.get(&self.callee).map(|acct| &**acct).unwrap()
     }
 
-    fn state_mut(&mut self) -> &mut dyn blockchain_traits::KVStoreMut {
+    fn state_mut(&mut self) -> &mut dyn oasis_types::KVStoreMut {
         self.state
             .get_mut(&self.callee)
             .map(std::borrow::Cow::to_mut)

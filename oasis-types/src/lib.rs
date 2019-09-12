@@ -1,3 +1,5 @@
+#![feature(non_exhaustive)]
+
 #[macro_use]
 extern crate derive_more;
 #[macro_use]
@@ -5,9 +7,14 @@ extern crate serde;
 
 mod address;
 mod balance;
+mod blockchain;
 
 pub use address::Address;
 pub use balance::Balance;
+pub use blockchain::{
+    Block, Blockchain, CallType, KVStore, KVStoreMut, PendingTransaction, Receipt,
+    TransactionOutcome,
+};
 
 #[repr(C)]
 #[derive(PartialEq, Eq)]

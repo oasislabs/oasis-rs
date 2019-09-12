@@ -10,7 +10,6 @@ readme = "README.md"
 keywords = ["oasis"]
 
 [dependencies]
-blockchain-traits = { version = "0.2", path = "../blockchain-traits" }
 cfg-if = "0.1"
 oasis-macros = { version = "0.2", path = "../oasis-macros" }
 oasis-types = { version = "0.2", path = "../oasis-types" }

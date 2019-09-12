@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "bcfs",
-    "blockchain-traits",
     "examples/ballot",
     "examples/erc20",
     "examples/hello-world",

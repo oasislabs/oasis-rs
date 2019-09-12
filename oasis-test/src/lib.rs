@@ -2,9 +2,8 @@ mod ext;
 
 use std::cell::RefCell;
 
-use blockchain_traits::Blockchain as _;
 use memchain::Memchain;
-use oasis_types::Address;
+use oasis_types::{Address, Blockchain as _, CallType};
 
 const SEED_ADDR: Address = Address([0xffu8; 20]);
 const BASE_GAS: u64 = 2100;
@@ -44,11 +43,12 @@ pub fn create_account(initial_balance: u128) -> Address {
         memchain.last_block_mut().transact(
             SEED_ADDR,
             new_addr,
-            SEED_ADDR,
+            CallType::default(),
             initial_balance,
             &[], /* input */
             BASE_GAS,
-            0, /* gas price */
+            0,         /* gas price */
+            SEED_ADDR, /* payer */
         );
 
         new_addr

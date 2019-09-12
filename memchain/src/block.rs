@@ -1,5 +1,4 @@
-use blockchain_traits::TransactionOutcome;
-use oasis_types::{AccountMeta, Address, Event};
+use oasis_types::{AccountMeta, Address, Event, TransactionOutcome};
 
 use crate::{output::Receipt, pending_transaction::PendingTransaction, State};
 
@@ -22,7 +21,7 @@ impl<'bc> Block<'bc> {
     }
 }
 
-impl<'bc> blockchain_traits::Block for Block<'bc> {
+impl<'bc> oasis_types::Block for Block<'bc> {
     fn height(&self) -> u64 {
         self.height
     }
@@ -31,12 +30,12 @@ impl<'bc> blockchain_traits::Block for Block<'bc> {
         &mut self,
         caller: Address,
         callee: Address,
-        payer: Address,
         value: u128,
         input: &[u8],
         gas: u64,
         gas_price: u64,
-    ) -> Box<dyn blockchain_traits::Receipt> {
+        payer: Address,
+    ) -> Box<dyn oasis_types::Receipt> {
         let mut receipt = Receipt {
             caller,
             callee,
@@ -105,7 +104,7 @@ impl<'bc> blockchain_traits::Block for Block<'bc> {
         };
 
         if let Some(main) = self.state.get(&callee).unwrap().main {
-            let ptx: &mut dyn blockchain_traits::PendingTransaction = &mut pending_transaction;
+            let ptx: &mut dyn oasis_types::PendingTransaction = &mut pending_transaction;
             let errno = main(unsafe {
                 // Extend the lifetime, as required by the FFI type.
                 // This is only unsafe if the `main` fn stores the pointer,
@@ -119,7 +118,7 @@ impl<'bc> blockchain_traits::Block for Block<'bc> {
 
         receipt.outcome = pending_transaction.outcome;
         receipt.output = pending_transaction.output;
-        if blockchain_traits::Receipt::reverted(&receipt) {
+        if oasis_types::Receipt::reverted(&receipt) {
             receipt.events.clear();
         } else {
             self.state = pending_transaction.state;
@@ -140,18 +139,18 @@ impl<'bc> blockchain_traits::Block for Block<'bc> {
         })
     }
 
-    fn state_at(&self, addr: &Address) -> Option<&dyn blockchain_traits::KVStore> {
+    fn state_at(&self, addr: &Address) -> Option<&dyn oasis_types::KVStore> {
         self.state.get(addr).map(|acct| &**acct as _)
     }
 
     fn events(&self) -> Vec<&Event> {
         self.completed_transactions
             .iter()
-            .flat_map(|r| blockchain_traits::Receipt::events(r))
+            .flat_map(|r| oasis_types::Receipt::events(r))
             .collect()
     }
 
-    fn receipts(&self) -> Vec<&dyn blockchain_traits::Receipt> {
+    fn receipts(&self) -> Vec<&dyn oasis_types::Receipt> {
         self.completed_transactions.iter().map(|r| r as _).collect()
     }
 }

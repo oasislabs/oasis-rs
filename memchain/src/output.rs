@@ -1,5 +1,4 @@
-use blockchain_traits::TransactionOutcome;
-use oasis_types::{Address, Event};
+use oasis_types::{Address, Event, TransactionOutcome};
 
 #[derive(Clone, Debug)]
 pub struct Receipt {
@@ -12,7 +11,7 @@ pub struct Receipt {
     pub output: Vec<u8>,
 }
 
-impl blockchain_traits::Receipt for Receipt {
+impl oasis_types::Receipt for Receipt {
     fn caller(&self) -> &Address {
         &self.caller
     }

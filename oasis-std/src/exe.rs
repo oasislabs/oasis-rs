@@ -1,4 +1,4 @@
-use oasis_types::{Address, Balance};
+use oasis_types::{Address, Balance, CallType};
 
 /// A type that can be stored in blockchain storage.
 pub trait Storage = serde::Serialize + serde::de::DeserializeOwned;
@@ -31,19 +31,6 @@ pub struct Context {
 
     #[doc(hidden)]
     pub call_type: CallType,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum CallType {
-    Default,
-    Delegated,
-    Constant,
-}
-
-impl Default for CallType {
-    fn default() -> Self {
-        CallType::Default
-    }
 }
 
 impl Context {

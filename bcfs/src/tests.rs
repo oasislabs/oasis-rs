@@ -7,9 +7,8 @@ use std::{
     path::PathBuf,
 };
 
-use blockchain_traits::{Blockchain, TransactionOutcome};
 use memchain::{Account, Memchain};
-use oasis_types::Address;
+use oasis_types::{Address, Blockchain, TransactionOutcome};
 use wasi_types::{ErrNo, Fd, FdFlags, OpenFlags, Whence};
 
 use crate::BCFS;

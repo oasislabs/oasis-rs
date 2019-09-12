@@ -1,6 +1,4 @@
-#![feature(non_exhaustive)]
-
-use oasis_types::{AccountMeta, Address, Event};
+use crate::{AccountMeta, Address, Event};
 
 pub trait Blockchain {
     /// Returns the name of this blockchain.
@@ -30,11 +28,11 @@ pub trait Block {
         &mut self,
         caller: Address,
         callee: Address,
-        payer: Address,
         value: u128,
         input: &[u8],
         gas: u64,
         gas_price: u64,
+        payer: Address,
     ) -> Box<dyn Receipt>;
 
     /// Returns the bytecode stored at `addr` or `None` if the account does not exist.
@@ -71,7 +69,13 @@ pub trait PendingTransaction {
     /// Executes a balance-transferring RPC to `callee` with provided input and value.
     /// The new transaction will inherit the gas parameters and gas payer of the top level
     /// transaction. The current account will be set as the sender.
-    fn transact(&mut self, callee: Address, value: u128, input: &[u8]) -> Box<dyn Receipt>;
+    fn transact(
+        &mut self,
+        callee: Address,
+        call_type: CallType,
+        value: u128,
+        input: &[u8],
+    ) -> Box<dyn Receipt>;
 
     /// Returns data to the calling transaction.
     fn ret(&mut self, data: &[u8]);
@@ -137,6 +141,19 @@ pub trait Receipt {
             TransactionOutcome::Success => false,
             _ => true,
         }
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum CallType {
+    Default,
+    Delegated,
+    Constant,
+}
+
+impl Default for CallType {
+    fn default() -> Self {
+        CallType::Default
     }
 }
 

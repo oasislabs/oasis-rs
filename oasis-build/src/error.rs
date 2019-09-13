@@ -28,10 +28,6 @@ impl UnsupportedTypeError {
 
 pub enum RpcError {
     BadArgPat(Span),
-    BadArgTy {
-        span: Span,
-        suggestion: String,
-    },
     BadStruct(Span),
     BadCtorReturn {
         self_ty: syntax::ast::Ty,
@@ -55,11 +51,6 @@ impl std::fmt::Display for RpcError {
         use RpcError::*;
         match self {
             BadArgPat(..) => write!(f, "Argument name must be a valid identifier."),
-            BadArgTy { suggestion, .. } => write!(
-                f,
-                "RPC argument must be an owned type. Maybe try `{}`?",
-                suggestion
-            ),
             BadStruct(..) => write!(f, "Service state definition must have named fields."),
             BadCtorReturn { self_ty, .. } => {
                 let self_ty_str = format!("{:?}", self_ty);
@@ -100,7 +91,6 @@ impl RpcError {
         use RpcError::*;
         match self {
             BadArgPat(span)
-            | BadArgTy { span, .. }
             | BadStruct(span)
             | BadCtorReturn { span, .. }
             | CtorIsDefault(span)

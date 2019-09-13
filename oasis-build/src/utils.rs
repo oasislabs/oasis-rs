@@ -2,7 +2,6 @@ use rustc::{
     hir::{self, def_id::DefId},
     ty::TyCtxt,
 };
-use syntax::ast;
 use syntax_pos::symbol::Symbol;
 
 pub fn is_std(crate_name: Symbol) -> bool {
@@ -68,12 +67,4 @@ pub fn path_ends_with(path: &syntax::ast::Path, suffix: &[&'static str]) -> bool
         }
     }
     true
-}
-
-pub fn gen_ty(node: ast::TyKind) -> syntax::ptr::P<ast::Ty> {
-    syntax::ptr::P(ast::Ty {
-        id: ast::DUMMY_NODE_ID,
-        span: syntax_pos::DUMMY_SP,
-        node,
-    })
 }

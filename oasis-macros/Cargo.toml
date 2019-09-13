@@ -1,6 +1,6 @@
 [package]
 name = "oasis-macros"
-version = "0.2.0"
+version = "0.2.1"
 license = "Apache-2.0"
 description = "Macros used internally by the Oasis framework."
 edition = "2018"

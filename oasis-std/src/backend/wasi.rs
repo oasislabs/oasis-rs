@@ -7,7 +7,7 @@ use std::{
 };
 
 use libc::{__wasi_errno_t, __wasi_fd_t};
-use oasis_types::Address;
+use oasis_types::{Address, Balance};
 
 use super::Error;
 
@@ -46,16 +46,16 @@ pub fn aad() -> Vec<u8> {
     base64::decode(&std::env::var_os("AAD").unwrap().into_vec()).unwrap()
 }
 
-pub fn value() -> u128 {
-    u128::from_str(&std::env::var("VALUE").unwrap()).unwrap()
+pub fn value() -> Balance {
+    Balance(u128::from_str(&std::env::var("VALUE").unwrap()).unwrap())
 }
 
-pub fn balance(addr: &Address) -> Option<u128> {
+pub fn balance(addr: &Address) -> Option<Balance> {
     Some(match fs::read(home(&*addr, "balance")) {
         Ok(balance) => {
             let mut buf = [0u8; 16];
             buf.copy_from_slice(&balance);
-            u128::from_le_bytes(buf)
+            Balance(u128::from_le_bytes(buf))
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => return None,
         Err(err) => panic!(err),
@@ -83,12 +83,12 @@ extern "C" {
     ) -> __wasi_errno_t;
 }
 
-pub fn transact(callee: &Address, value: u128, input: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn transact(callee: &Address, value: Balance, input: &[u8]) -> Result<Vec<u8>, Error> {
     let mut fd: __wasi_fd_t = 0;
     let errno = unsafe {
         __wasi_blockchain_transact(
             callee.0.as_ptr(),
-            &value as *const u128,
+            &value.0 as *const u128,
             input.as_ptr(),
             input.len() as u64,
             &mut fd as *mut _,

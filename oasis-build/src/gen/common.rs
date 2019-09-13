@@ -156,7 +156,7 @@ pub fn gen_call_stmt(fn_ident: source_map::symbol::Ident) -> ast::Stmt {
     }
 }
 
-pub fn write_include(path: &std::path::Path, contents: &str) {
+pub fn write_generated(path: &std::path::Path, contents: &str) {
     std::fs::write(path, contents).unwrap();
     std::process::Command::new("rustfmt")
         .args(&[

@@ -13,7 +13,7 @@ use quote::quote;
 
 use crate::format_ident;
 
-use super::common::{quote_borrow, quote_ty, sanitize_ident};
+use super::common::{quote_borrow, quote_ty, sanitize_ident, write_generated};
 
 pub struct Import {
     pub name: String,
@@ -80,8 +80,7 @@ pub fn build(
             #client
         };
 
-        std::fs::write(&mod_path, service_toks.to_string())
-            .unwrap_or_else(|err| panic!("Could not generate `{}`: {}", mod_name, err));
+        write_generated(&mod_path, &service_toks.to_string());
 
         eprintln!(
             "   {} {name} v{version} ({path})",
@@ -228,7 +227,7 @@ fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = To
                 #[cfg(target_os = "wasi")] {
                     let output = oasis_std::backend::transact(
                         &self.address,
-                        ctx.value.unwrap_or(0),
+                        ctx.value.unwrap_or_default(),
                         &oasis_std::reexports::serde_cbor::to_vec(&payload).unwrap()
                     )?;
                     Ok(oasis_std::reexports::serde_cbor::from_slice(&output)

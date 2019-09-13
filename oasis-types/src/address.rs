@@ -1,3 +1,5 @@
+use std::fmt;
+
 /// A 160-bit little-endian hash address type.
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Serialize)]
 #[repr(C)]
@@ -46,9 +48,15 @@ impl std::str::FromStr for Address {
     }
 }
 
-impl std::fmt::Display for Address {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Address {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "0x{}", hex::encode(self.0))
+    }
+}
+
+impl fmt::LowerHex for Address {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&hex::encode(self.0))
     }
 }
 
@@ -65,7 +73,7 @@ impl<'de> serde::de::Deserialize<'de> for Address {
         impl<'de> de::Visitor<'de> for AddressVisitor {
             type Value = Address;
 
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 f.write_str(EXPECTATION)
             }
 

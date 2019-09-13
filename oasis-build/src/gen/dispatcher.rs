@@ -37,13 +37,13 @@ pub fn insert(build_ctx: &BuildContext, krate: &mut Crate, service_def: &Service
     if !rpcs.is_empty() {
         let rpcs_dispatcher = generate_rpc_dispatcher(*service_name, &rpcs, default_fn);
         let rpcs_include_file = out_dir.join(format!("{}_dispatcher.rs", crate_name));
-        common::write_include(&rpcs_include_file, &rpcs_dispatcher.to_string());
+        common::write_generated(&rpcs_include_file, &rpcs_dispatcher.to_string());
         insert_rpc_dispatcher_stub(krate, &rpcs_include_file);
     }
 
     let ctor_fn = generate_ctor_fn(*service_name, &ctor);
     let ctor_include_file = out_dir.join(format!("{}_ctor.rs", crate_name));
-    common::write_include(&ctor_include_file, &ctor_fn.to_string());
+    common::write_generated(&ctor_include_file, &ctor_fn.to_string());
     krate
         .module
         .items

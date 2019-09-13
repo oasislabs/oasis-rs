@@ -36,7 +36,7 @@ fn main() {
             .unwrap_or(false);
         let is_nonprimary_bin = crate_name
             .as_ref()
-            .map(|n| n == "build_script_build" || n == "___")
+            .map(|n| n.starts_with("build_script") || n.starts_with("_"))
             .unwrap_or_default();
         let is_service = is_bin && !is_nonprimary_bin;
         let is_test = args.iter().any(|arg| arg == "--test");

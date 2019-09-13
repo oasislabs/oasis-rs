@@ -29,3 +29,21 @@ pub enum Error {
     /// Transaction failed with status code and payload
     Execution { payload: Vec<u8> },
 }
+
+impl Error {
+    #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
+    pub fn exit_code(&self) -> u16 {
+        match self {
+            Error::Unknown => libc::__WASI_EBADMSG,
+            Error::InsufficientFunds => libc::__WASI_EDQUOT,
+            Error::InvalidCallee => libc::__WASI_ENOENT,
+            Error::InvalidInput => libc::__WASI_EINVAL,
+            Error::Execution { .. } => libc::__WASI_ECONNABORTED,
+        }
+    }
+
+    #[cfg(not(all(target_arch = "wasm32", target_os = "wasi")))]
+    pub fn exit_code(&self) -> u16 {
+        0
+    }
+}

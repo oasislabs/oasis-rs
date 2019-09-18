@@ -2,7 +2,7 @@
 
 [![Build status](https://circleci.com/gh/oasislabs/oasis-rs.svg?style=svg)](https://circleci.com/gh/oasislabs/oasis-rs)
 [![LICENSE](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
-[![Join the Slack Community channel](https://img.shields.io/badge/slack-join%20chat-%2346BC99)](https://oasiscommunity.slack.com/)
+[![Join the Slack Community channel](https://img.shields.io/badge/slack-join%20chat-%2346BC99)](https://oasiscommunity.slack.com/join/shared_invite/enQtNjQ5MTA3NTgyOTkzLWIxNTg1ZWZmOTIwNmQ2MTg1YmU0MzgyMzk3OWM2ZWQ4NTQ0ZDJkNTBmMTdlM2JhODllYjg5YmJkODc2NzgwNTg)
 [![crates.io version](https://img.shields.io/crates/v/oasis-std.svg)](https://crates.io/crates/oasis-std)
 [![Docs](https://docs.rs/oasis-std/badge.svg)](https://docs.rs/oasis)
 

@@ -23,5 +23,5 @@ oasis-test = { version = "0.2", path = "../oasis-test" }
 
 [target.'cfg(target_os = "wasi")'.dependencies]
 base64 = "0.10"
-hex = "0.3"
+hex = "0.4"
 libc = "0.2"

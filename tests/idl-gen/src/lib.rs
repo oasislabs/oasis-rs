@@ -1,6 +1,6 @@
 pub fn test_oasis_interface(bin_name: &str, service_name: &str) {
     let mf_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    let wasm_path = mf_dir.join(format!("../target/wasm32-wasi/debug/{}.wasm", bin_name));
+    let wasm_path = mf_dir.join(format!("../target/wasm32-wasi/release/{}.wasm", bin_name));
 
     let iface_bytes = walrus::Module::from_file(wasm_path)
         .expect("No wasm")

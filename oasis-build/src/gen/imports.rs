@@ -7,7 +7,7 @@ use std::{
 
 use colored::*;
 use heck::{CamelCase, SnakeCase};
-use oasis_rpc::import::ImportedService;
+use oasis_rpc::import::{resolve_imports, ImportLocation, ImportedService};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
@@ -22,18 +22,17 @@ pub struct Import {
 }
 
 pub fn build(
-    top_level_deps: impl IntoIterator<Item = (String, String)>,
+    top_level_deps: impl IntoIterator<Item = (String, ImportLocation)>,
     gen_dir: impl AsRef<Path>,
     out_dir: impl AsRef<Path>,
     mut rustc_args: Vec<String>,
 ) -> Result<Vec<Import>, failure::Error> {
     let out_dir = out_dir.as_ref();
 
-    let services = oasis_rpc::import::Resolver::new(
-        top_level_deps.into_iter().collect(),
-        std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()),
-    )
-    .resolve()?;
+    let services = resolve_imports(
+        top_level_deps,
+        Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()),
+    )?;
 
     let mut imports = Vec::with_capacity(services.len());
 

@@ -13,6 +13,7 @@ use std::{
 
 use colored::*;
 use oasis_build::BuildTarget;
+use oasis_rpc::import::ImportLocation;
 use rustc::util::common::ErrorReported;
 
 fn main() {
@@ -180,17 +181,18 @@ fn collect_import_rustc_args(args: &[String]) -> Vec<String> {
     import_args
 }
 
-fn load_deps(manifest_path: &Path) -> Result<BTreeMap<String, String>, failure::Error> {
+fn load_deps(manifest_path: &Path) -> Result<BTreeMap<String, ImportLocation>, failure::Error> {
     let cargo_toml: toml::Value = toml::from_slice(&std::fs::read(manifest_path).unwrap()).unwrap();
     Ok(cargo_toml
         .as_table()
         .and_then(|c_t| c_t.get("package").and_then(toml::Value::as_table))
         .and_then(|p| p.get("metadata").and_then(toml::Value::as_table))
-        .and_then(|m| m.get("oasis-dependencies"))
+        .and_then(|m| m.get("oasis").and_then(toml::Value::as_table))
+        .and_then(|m| m.get("dependencies"))
         .cloned()
-        .map(|d| d.try_into::<BTreeMap<String, String>>())
+        .map(|d| d.try_into::<BTreeMap<String, ImportLocation>>())
         .unwrap_or_else(|| Ok(BTreeMap::new()))
-        .map_err(|err| failure::format_err!("Could not parse Oasis dependencies: {}", err))?)
+        .map_err(|err| failure::format_err!("could not parse Oasis dependencies: {}", err))?)
 }
 
 fn pack_iface_into_wasm(

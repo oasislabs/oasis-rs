@@ -169,14 +169,14 @@ fn collect_import_rustc_args(args: &[String]) -> Vec<String> {
         }
         if arg == "-C" || arg == "--crate-type" || arg == "--crate-name" {
             skip = true;
-        } else if arg.ends_with(".rs") {
+        } else if arg.ends_with(".rs") || arg == "--test" {
             continue;
         } else {
             import_args.push(arg.clone());
         }
     }
     import_args.push("--crate-type".to_string());
-    import_args.push("rlib".to_string());
+    import_args.push("lib".to_string());
     import_args
 }
 

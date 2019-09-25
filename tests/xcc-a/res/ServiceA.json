@@ -5,7 +5,7 @@
   "imports": [
     {
       "name": "xcc_b",
-      "version": "0.1.1"
+      "version": "0.1.0"
     }
   ],
   "constructor": {

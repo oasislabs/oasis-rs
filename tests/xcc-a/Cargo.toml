@@ -12,5 +12,5 @@ serde = { version = "1.0", features = ["derive"] }
 [dev-dependencies]
 idl-gen = { path = "../idl-gen" }
 
-[package.metadata.oasis.dependencies]
+[package.metadata.oasis.xcc-a.dependencies]
 xcc-b = { path = "../target/wasm32-wasi/release/xcc-b.wasm" }

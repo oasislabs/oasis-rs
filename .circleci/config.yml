@@ -85,7 +85,7 @@ jobs:
       - run:
           name: cargo build
           command: |
-            RUSTC_WRAPPER=oasis-build cargo build --target=wasm32-wasi \
+            RUSTC_WRAPPER=oasis-build cargo build --release --target=wasm32-wasi \
               -p ballot \
               -p erc20 \
               -p hello-world \
@@ -102,7 +102,7 @@ jobs:
       - run:
           name: Test IDL generation
           working_directory: tests/idl-gen
-          command: cargo build --target wasm32-wasi --bins && cargo test --lib
+          command: cargo build --release --target wasm32-wasi --bins && cargo test --lib
 
   test_imports:
     executor: rust
@@ -114,11 +114,11 @@ jobs:
       - run:
           name: Build dependency
           working_directory: tests/xcc-b
-          command: cargo build --target wasm32-wasi --bin xcc-b
+          command: cargo build --release --target wasm32-wasi --bin xcc-b
       - run:
           name: Build toplevel
           working_directory: tests/xcc-a
-          command: cargo build --target wasm32-wasi --bin xcc-a && cargo test --lib
+          command: cargo build --release --target wasm32-wasi --bin xcc-a && cargo test --lib
 
 
 workflows:

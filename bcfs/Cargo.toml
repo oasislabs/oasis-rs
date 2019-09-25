@@ -19,7 +19,7 @@ oasis-types = { version = "0.2", path = "../oasis-types" }
 wasi-types = "0.1"
 
 [dev-dependencies]
-hex = "0.3"
+hex = "0.4"
 memchain = { version = "0.2", path = "../memchain" }
 
 [features]

@@ -8,6 +8,7 @@ description = "Rust compiler plugin that builds Oasis services"
 repository = "https://github.com/oasislabs/oasis-rs.git"
 readme = "README.md"
 keywords = ["idl", "interface", "rpc", "plugin"]
+publish = false
 
 [dependencies]
 colored = "1.8"

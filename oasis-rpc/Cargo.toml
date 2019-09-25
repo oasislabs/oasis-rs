@@ -15,7 +15,7 @@ libflate = { version = "0.1", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", optional = true }
 url = { version = "2.1", optional = true, features = ["serde"] }
-walrus = { version = "0.11", optional = true }
+walrus = { version = "0.12", optional = true }
 
 [features]
 resolve = ["import"]

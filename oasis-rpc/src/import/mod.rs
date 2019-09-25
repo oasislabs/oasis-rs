@@ -54,6 +54,18 @@ pub enum ImportLocation {
     // Address(oasis_types::Address),
 }
 
+impl ImportLocation {
+    pub fn as_path(&self) -> Option<&std::path::Path> {
+        match self {
+            ImportLocation::Path(path) => Some(path),
+            ImportLocation::Url(url) if url.scheme() == "file" => {
+                Some(std::path::Path::new(url.path()))
+            }
+            _ => None,
+        }
+    }
+}
+
 impl<'de> serde::Deserialize<'de> for ImportLocation {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

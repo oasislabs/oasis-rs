@@ -184,7 +184,7 @@ pub fn gen_client(service: &ImportedService) -> TokenStream {
 }
 
 fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = TokenStream> + 'a {
-    functions.iter().enumerate().map(|(fn_idx, func)| {
+    functions.iter().map(|func| {
         let fn_name = format_ident!("{}", func.name);
 
         let self_ref = match func.mutability {
@@ -192,7 +192,6 @@ fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = To
             oasis_rpc::StateMutability::Mutable => quote! { &mut self },
         };
 
-        let num_args = func.inputs.len();
         let (arg_names, arg_tys): (Vec<Ident>, Vec<TokenStream>) = func
             .inputs
             .iter()

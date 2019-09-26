@@ -1,31 +1,21 @@
-pub struct Resolver {
-    deps: Vec<(String, String)>,
-    base_dir: std::path::PathBuf,
-}
+use crate::import::{ImportError, ImportLocation, ImportedService, Importer};
 
-impl Resolver {
-    pub fn new(initial_deps: Vec<(String, String)>, base_dir: std::path::PathBuf) -> Self {
-        Self {
-            deps: initial_deps,
-            base_dir,
-        }
-    }
-
-    pub fn resolve(&self) -> Result<Vec<super::ImportedService>, ResolveError> {
-        self.deps
-            .iter()
-            .map(|(name, url)| {
-                super::Importer::for_url(url, self.base_dir.clone())
-                    .and_then(|importer| importer.import(name))
-                    .map_err(ResolveError::Import)
-            })
-            .collect()
-    }
+pub fn resolve_imports(
+    deps: impl IntoIterator<Item = (String, ImportLocation)>,
+    base_dir: &std::path::Path,
+) -> Result<Vec<ImportedService>, ResolveError> {
+    deps.into_iter()
+        .map(|(name, loc)| {
+            Importer::for_location(loc, base_dir)
+                .and_then(|importer| importer.import(&name))
+                .map_err(ResolveError::Import)
+        })
+        .collect()
 }
 
 #[derive(Debug, failure::Fail)]
 pub enum ResolveError {
-    Import(#[fail(cause)] super::ImportError),
+    Import(#[fail(cause)] ImportError),
     DependencyMismatch { name: String, versions: Vec<String> },
 }
 

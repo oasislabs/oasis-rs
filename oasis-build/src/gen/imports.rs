@@ -7,7 +7,7 @@ use std::{
 
 use colored::*;
 use heck::{CamelCase, SnakeCase};
-use oasis_rpc::import::ImportedService;
+use oasis_rpc::import::{resolve_imports, ImportLocation, ImportedService};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
@@ -22,18 +22,17 @@ pub struct Import {
 }
 
 pub fn build(
-    top_level_deps: impl IntoIterator<Item = (String, String)>,
+    top_level_deps: impl IntoIterator<Item = (String, ImportLocation)>,
     gen_dir: impl AsRef<Path>,
     out_dir: impl AsRef<Path>,
     mut rustc_args: Vec<String>,
 ) -> Result<Vec<Import>, failure::Error> {
     let out_dir = out_dir.as_ref();
 
-    let services = oasis_rpc::import::Resolver::new(
-        top_level_deps.into_iter().collect(),
-        std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()),
-    )
-    .resolve()?;
+    let services = resolve_imports(
+        top_level_deps,
+        Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()),
+    )?;
 
     let mut imports = Vec::with_capacity(services.len());
 
@@ -185,7 +184,7 @@ pub fn gen_client(service: &ImportedService) -> TokenStream {
 }
 
 fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = TokenStream> + 'a {
-    functions.iter().enumerate().map(|(fn_idx, func)| {
+    functions.iter().map(|func| {
         let fn_name = format_ident!("{}", func.name);
 
         let self_ref = match func.mutability {
@@ -193,7 +192,6 @@ fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = To
             oasis_rpc::StateMutability::Mutable => quote! { &mut self },
         };
 
-        let num_args = func.inputs.len();
         let (arg_names, arg_tys): (Vec<Ident>, Vec<TokenStream>) = func
             .inputs
             .iter()
@@ -206,29 +204,33 @@ fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = To
             None => (quote!(()), quote!(())),
         };
 
+        let (payload_ty, payload_def) = if arg_names.is_empty() {
+            (quote!(&[()]), quote!(&[]))
+        } else {
+            (quote!(_), quote!(&(#(#arg_names.borrow()),*,)))
+        };
+
         quote! {
             pub fn #fn_name(
                 #self_ref,
                 ctx: &oasis_std::Context,
                 #(#arg_names: #arg_tys),*
            ) -> Result<#output_ty, oasis_std::RpcError<#err_ty>> {
-                use serde::ser::{Serializer as _, SerializeTupleVariant as _};
+                use serde::ser::{Serializer as _, SerializeStruct as _};
+
                 let mut serializer = oasis_std::reexports::serde_cbor::Serializer::new(Vec::new());
-                let mut state = serializer.serialize_tuple_variant(
-                    "" /* unused enum name */,
-                    #fn_idx as u32 /* unused */,
-                    stringify!(#fn_name),
-                    #num_args
-                ) .unwrap();
-                #(state.serialize_field(#arg_names.borrow()).unwrap();)*
-                state.end().unwrap();
+                let mut sstruct = serializer.serialize_struct("RpcPayload", 2).unwrap();
+                sstruct.serialize_field("method", stringify!(#fn_name)).unwrap();
+                let payload: #payload_ty = #payload_def;
+                sstruct.serialize_field("payload", payload).unwrap();
+                sstruct.end().unwrap();
                 let payload = serializer.into_inner();
 
                 #[cfg(target_os = "wasi")] {
                     let output = oasis_std::backend::transact(
                         &self.address,
                         ctx.value.unwrap_or_default(),
-                        &oasis_std::reexports::serde_cbor::to_vec(&payload).unwrap()
+                        &payload,
                     )?;
                     Ok(oasis_std::reexports::serde_cbor::from_slice(&output)
                        .map_err(|_| oasis_std::RpcError::InvalidOutput(output))?)

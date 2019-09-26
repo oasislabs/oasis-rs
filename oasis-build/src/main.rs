@@ -13,6 +13,7 @@ use std::{
 
 use colored::*;
 use oasis_build::BuildTarget;
+use oasis_rpc::import::ImportLocation;
 use rustc::util::common::ErrorReported;
 
 fn main() {
@@ -59,7 +60,7 @@ fn main() {
 
             let mut manifest_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
             manifest_path.push("Cargo.toml");
-            match load_deps(&manifest_path).and_then(|services| {
+            match load_deps(&manifest_path, crate_name.as_ref().unwrap()).and_then(|services| {
                 oasis_build::build_imports(
                     services,
                     gen_dir,
@@ -169,28 +170,37 @@ fn collect_import_rustc_args(args: &[String]) -> Vec<String> {
         }
         if arg == "-C" || arg == "--crate-type" || arg == "--crate-name" {
             skip = true;
-        } else if arg.ends_with(".rs") {
+        } else if arg.ends_with(".rs") || arg == "--test" {
             continue;
         } else {
             import_args.push(arg.clone());
         }
     }
     import_args.push("--crate-type".to_string());
-    import_args.push("rlib".to_string());
+    import_args.push("lib".to_string());
     import_args
 }
 
-fn load_deps(manifest_path: &Path) -> Result<BTreeMap<String, String>, failure::Error> {
+fn load_deps(
+    manifest_path: &Path,
+    service_name: &str,
+) -> Result<BTreeMap<String, ImportLocation>, failure::Error> {
     let cargo_toml: toml::Value = toml::from_slice(&std::fs::read(manifest_path).unwrap()).unwrap();
     Ok(cargo_toml
         .as_table()
         .and_then(|c_t| c_t.get("package").and_then(toml::Value::as_table))
         .and_then(|p| p.get("metadata").and_then(toml::Value::as_table))
-        .and_then(|m| m.get("oasis-dependencies"))
+        .and_then(|m| m.get("oasis").and_then(toml::Value::as_table))
+        .and_then(|m| {
+            m.get(service_name).or_else(
+                || m.get(&service_name.replace("_", "-")), /* cargo doesn't expose this */
+            )
+        })
+        .and_then(|s| s.get("dependencies"))
         .cloned()
-        .map(|d| d.try_into::<BTreeMap<String, String>>())
+        .map(|d| d.try_into())
         .unwrap_or_else(|| Ok(BTreeMap::new()))
-        .map_err(|err| failure::format_err!("Could not parse Oasis dependencies: {}", err))?)
+        .map_err(|err| failure::format_err!("could not parse Oasis dependencies: {}", err))?)
 }
 
 fn pack_iface_into_wasm(

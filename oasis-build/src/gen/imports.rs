@@ -211,23 +211,20 @@ fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = To
                 ctx: &oasis_std::Context,
                 #(#arg_names: #arg_tys),*
            ) -> Result<#output_ty, oasis_std::RpcError<#err_ty>> {
-                use serde::ser::{Serializer as _, SerializeTupleVariant as _};
+                use serde::ser::{Serializer as _, SerializeStruct as _};
+
                 let mut serializer = oasis_std::reexports::serde_cbor::Serializer::new(Vec::new());
-                let mut state = serializer.serialize_tuple_variant(
-                    "" /* unused enum name */,
-                    #fn_idx as u32 /* unused */,
-                    stringify!(#fn_name),
-                    #num_args
-                ) .unwrap();
-                #(state.serialize_field(#arg_names.borrow()).unwrap();)*
-                state.end().unwrap();
+                let mut sstruct = serializer.serialize_struct("RpcPayload", 2).unwrap();
+                sstruct.serialize_field("method", stringify!(#fn_name)).unwrap();
+                sstruct.serialize_field("payload", &(#(#arg_names.borrow()),*,)).unwrap();
+                sstruct.end().unwrap();
                 let payload = serializer.into_inner();
 
                 #[cfg(target_os = "wasi")] {
                     let output = oasis_std::backend::transact(
                         &self.address,
                         ctx.value.unwrap_or_default(),
-                        &oasis_std::reexports::serde_cbor::to_vec(&payload).unwrap()
+                        &payload,
                     )?;
                     Ok(oasis_std::reexports::serde_cbor::from_slice(&output)
                        .map_err(|_| oasis_std::RpcError::InvalidOutput(output))?)

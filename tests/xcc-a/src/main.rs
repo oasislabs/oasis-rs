@@ -10,6 +10,8 @@ impl ServiceA {
 
     pub fn call_b(&self, _ctx: &Context, b_addr: Address) -> Result<Vec<xcc_b::Number>, ()> {
         let b = xcc_b::ServiceBClient::at(b_addr);
+        b.say_hello(&Context::default()).unwrap();
+        b.return_ref_struct(&Context::default(), "value").unwrap();
         Ok(b.random(&Context::default(), xcc_b::Number(42)).unwrap())
     }
 }

@@ -31,7 +31,7 @@ pub fn quote_ty(ty: &oasis_rpc::Type) -> TokenStream {
         Type::F32 => quote!(f32),
         Type::F64 => quote!(f64),
         Type::Bytes => quote!(Vec<u8>),
-        Type::String => quote!(&str),
+        Type::String => quote!(String),
         Type::Address => quote!(oasis_std::Address),
         Type::Balance => quote!(oasis_std::Balance),
         Type::Defined { namespace, ty } => {

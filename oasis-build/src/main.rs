@@ -60,9 +60,9 @@ fn main() {
 
             let mut manifest_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
             manifest_path.push("Cargo.toml");
-            match load_deps(&manifest_path, crate_name.as_ref().unwrap()).and_then(|services| {
+            match load_deps(&manifest_path, crate_name.as_ref().unwrap()).and_then(|imports| {
                 oasis_build::build_imports(
-                    services,
+                    imports,
                     gen_dir,
                     out_dir,
                     collect_import_rustc_args(&args),

@@ -8,23 +8,20 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, failure::Fail)]
 pub enum Error {
-    #[fail(display = "Unknown error occured.")]
+    #[fail(display = "unknown error occured")]
     Unknown,
 
-    #[fail(display = "Only existing admins can perform this operation.")]
+    #[fail(display = "only admins can perform this operation")]
     AdminPrivilegesRequired,
 
-    #[fail(display = "Insuffient funds for transfer from {:?}.", address)]
-    InsufficientFunds { address: Address },
+    #[fail(display = "insuffient funds")]
+    InsufficientFunds,
 
-    #[fail(display = "Address {:?} has no allowance from address {:?}.", from, to)]
-    NoAllowanceGiven { from: Address, to: Address },
+    #[fail(display = "no allowance for withdrawal")]
+    NoAllowanceGiven,
 
-    #[fail(
-        display = "Transfer request {} exceeds allowance {}.",
-        amount, allowance
-    )]
-    RequestExceedsAllowance { amount: u64, allowance: u64 },
+    #[fail(display = "transfer amount exceeds allowance")]
+    RequestExceedsAllowance,
 }
 
 #[derive(oasis_std::Service, Default)]
@@ -130,7 +127,7 @@ impl ERC20Token {
         if do_transfer(&mut self.accounts, ctx.sender(), to, amount) {
             return Ok(Transfer { from, to, amount });
         }
-        Err(Error::InsufficientFunds { address: from })
+        Err(Error::InsufficientFunds)
     }
 
     /// allowance
@@ -177,12 +174,12 @@ impl ERC20Token {
         // if the spender is not in the list of addresses that are approved for automatic
         // withdrawal by the from address, then nothing can be done
         if !allowances.contains_key(&spender) {
-            return Err(Error::NoAllowanceGiven { from, to: spender });
+            return Err(Error::NoAllowanceGiven);
         }
         let allowance = allowances.get(&spender).copied().unwrap_or_default();
         // err if request is higher than allowance
         if allowance < amount {
-            return Err(Error::RequestExceedsAllowance { amount, allowance });
+            return Err(Error::RequestExceedsAllowance);
         }
         if do_transfer(&mut self.accounts, from, spender, amount) {
             allowances.insert(spender, allowance - amount);
@@ -192,7 +189,7 @@ impl ERC20Token {
                 amount,
             });
         }
-        Err(Error::InsufficientFunds { address: from })
+        Err(Error::InsufficientFunds)
     }
 }
 

@@ -1,5 +1,9 @@
 use rustc::{
-    hir::{self, intravisit},
+    hir::{
+        self,
+        def::{DefKind, Res},
+        intravisit,
+    },
     ty::{self, AdtDef, TyCtxt, TyS},
     util::nodemap::{FxHashMap, HirIdSet},
 };
@@ -77,7 +81,10 @@ impl<'tcx> DefinedTypeCollector<'tcx> {
 
     // called by `<DefinedTypeCollector as intravisit::Visitor>::visit_ty`.
     fn visit_sty(&mut self, ty: &'tcx TyS, originating_span: Span) {
-        if let ty::TyKind::Adt(adt_def, ..) = ty.sty {
+        if let ty::TyKind::Adt(adt_def, substs) = ty.sty {
+            substs
+                .types()
+                .for_each(|ty| self.visit_sty(ty, originating_span));
             if crate::utils::is_std(self.tcx.crate_name(adt_def.did.krate))
                 || self.adt_defs.contains_key(adt_def)
             {
@@ -102,7 +109,6 @@ impl<'tcx> DefinedTypeCollector<'tcx> {
 impl<'tcx> hir::intravisit::Visitor<'tcx> for DefinedTypeCollector<'tcx> {
     fn visit_ty(&mut self, ty: &'tcx hir::Ty) {
         if let hir::TyKind::Path(hir::QPath::Resolved(_, path)) = &ty.node {
-            use hir::def::{DefKind, Res};
             if let Res::Def(kind, id) = path.res {
                 match kind {
                     DefKind::Struct | DefKind::Union | DefKind::Enum | DefKind::TyAlias => {

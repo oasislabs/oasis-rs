@@ -22,7 +22,7 @@ pub struct Import {
 }
 
 pub fn build(
-    top_level_deps: impl IntoIterator<Item = (String, ImportLocation)>,
+    top_level_deps: impl IntoIterator<Item = (String, ImportLocation)>, // name -
     gen_dir: impl AsRef<Path>,
     out_dir: impl AsRef<Path>,
     mut rustc_args: Vec<String>,

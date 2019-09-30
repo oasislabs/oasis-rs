@@ -149,7 +149,7 @@ fn gen_def_tys<'a>(defs: &'a [oasis_rpc::TypeDef]) -> impl Iterator<Item = Token
                     }
                 });
                 quote! {
-                    #[derive(#derives, Event)]
+                    #[derive(#derives, oasis_std::Event)]
                     pub struct #name {
                         #(#indexeds #field_names: #tys),*
                     }

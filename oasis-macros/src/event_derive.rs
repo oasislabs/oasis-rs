@@ -5,11 +5,18 @@ pub fn event_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let generics = &input.generics;
 
     let indexed_fields = match input.data {
-        syn::Data::Struct(syn::DataStruct { fields, .. }) => fields
+        syn::Data::Struct(syn::DataStruct {
+            fields: syn::Fields::Named(syn::FieldsNamed { named, .. }),
+            ..
+        }) => named
             .iter()
             .filter(|f| f.attrs.iter().any(|attr| attr.path.is_ident("indexed")))
             .cloned()
             .collect::<Vec<_>>(),
+        syn::Data::Struct(syn::DataStruct {
+            fields: syn::Fields::Unit,
+            ..
+        }) => Vec::new(),
         _ => {
             err!(input: "An `Event` must be a non-tuple struct.");
             return proc_macro::TokenStream::new();

@@ -17,11 +17,13 @@ pub trait Event {
 }
 
 /// The context of the current RPC.
-/// To get the address of the service running the RPC, use `Context::default()`.
-/// Although the derived Rust implementation will be an address of all zeros, the runtime will insert the correct address.
-/// To reuse the address of the current sender, use `Context::delegated()`.
-/// `Context.with_sender()` does not work from within a service since it would allow cross contract calls to spoof other addresses.
-// `Option` values are set by the user during testing.
+/// To create a `Context`, use `Context::default()` or `Context::delegated()`.
+/// The default `Context` will have its `sender` be the address of the current service
+/// or, when testing, the sender set by `Context::with_sender`. A delegated `Context`
+/// sets the sender to the address of the caller; this is similar to Ethereum's DELEGATECALL.
+///
+/// You can use `Context::with_value` to transfer native tokens along with the call.
+// *Note*: `Option` values are set by the user during testing.
 #[derive(Default, Copy, Clone, Debug)]
 pub struct Context {
     #[doc(hidden)]
@@ -51,8 +53,9 @@ impl Default for CallType {
 }
 
 impl Context {
-    /// Creates a context with the sender set as that of the current context.
-    /// This would be the same as running `Context::default().with_sender(ctx.address)` if it was enabled in services.
+    /// Creates a context with the sender set to the address of
+    /// the current service (i.e. `ctx.sender()`).
+    #[cfg(any(test, target_os = "wasi"))]
     pub fn delegated() -> Self {
         Self {
             call_type: CallType::Delegated,
@@ -92,6 +95,7 @@ impl Context {
 impl Context {
     /// Sets the sender of the RPC receiving this `Context` as an argument.
     /// Has no effect when called inside of a service.
+    #[cfg(any(test, not(target_os = "wasi")))]
     pub fn with_sender(mut self, sender: Address) -> Self {
         self.sender = Some(sender);
         self

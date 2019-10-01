@@ -156,7 +156,19 @@ pub fn gen_call_stmt(fn_ident: source_map::symbol::Ident) -> ast::Stmt {
     }
 }
 
+#[macro_export]
+macro_rules! hash {
+    ($( $arg:expr ),+) => {{
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        $( std::hash::Hash::hash(&$arg, &mut hasher); )+
+        std::hash::Hasher::finish(&hasher)
+    }}
+}
+
 pub fn write_generated(path: &std::path::Path, contents: &str) {
+    if path.exists() {
+        return;
+    }
     std::fs::write(path, contents).unwrap();
     std::process::Command::new("rustfmt")
         .args(&[

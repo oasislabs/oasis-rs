@@ -9,7 +9,7 @@ use syntax::{
 use syntax_pos::symbol::Symbol;
 
 use crate::{
-    format_ident,
+    format_ident, hash,
     visitor::parsed_rpc::{ParsedRpc, ParsedRpcKind},
     BuildContext,
 };
@@ -36,13 +36,23 @@ pub fn insert(build_ctx: &BuildContext, krate: &mut Crate, service_def: &Service
 
     if !rpcs.is_empty() {
         let rpcs_dispatcher = generate_rpc_dispatcher(*service_name, &rpcs, default_fn);
-        let rpcs_include_file = out_dir.join(format!("{}_dispatcher.rs", crate_name));
-        common::write_generated(&rpcs_include_file, &rpcs_dispatcher.to_string());
+        let dispatcher_str = rpcs_dispatcher.to_string();
+        let rpcs_include_file = out_dir.join(format!(
+            "{}_dispatcher-{:016x}.rs",
+            crate_name,
+            hash!(dispatcher_str)
+        ));
+        common::write_generated(&rpcs_include_file, &dispatcher_str);
         insert_rpc_dispatcher_stub(krate, &rpcs_include_file);
     }
 
     let ctor_fn = generate_ctor_fn(*service_name, &ctor);
-    let ctor_include_file = out_dir.join(format!("{}_ctor.rs", crate_name));
+    let ctor_fn_str = ctor_fn.to_string();
+    let ctor_include_file = out_dir.join(format!(
+        "{}_ctor-{:016x}.rs",
+        crate_name,
+        hash!(ctor_fn_str)
+    ));
     common::write_generated(&ctor_include_file, &ctor_fn.to_string());
     krate
         .module

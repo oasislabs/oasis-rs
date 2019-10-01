@@ -1,9 +1,4 @@
-use std::{
-    collections::hash_map::DefaultHasher,
-    hash::{Hash as _, Hasher as _},
-    path::Path,
-    str::FromStr,
-};
+use std::{path::Path, str::FromStr};
 
 use colored::*;
 use heck::{CamelCase, SnakeCase};
@@ -11,7 +6,7 @@ use oasis_rpc::import::{resolve_imports, ImportLocation, ImportedService};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
-use crate::format_ident;
+use crate::{format_ident, hash};
 
 use super::common::{quote_borrow, quote_ty, sanitize_ident, write_generated};
 
@@ -39,13 +34,12 @@ pub fn build(
     rustc_args.push("--crate-name".to_string());
 
     for service in services {
-        let mut hasher = DefaultHasher::new();
-        service.interface.hash(&mut hasher);
-        get_rustc_version().hash(&mut hasher);
-        let interface_hash = hasher.finish();
+        let interface_hash = hash!(service.interface, get_rustc_version());
 
         let mod_name = sanitize_ident(&service.interface.namespace).to_snake_case();
-        let mod_path = gen_dir.as_ref().join(format!("{}.rs", mod_name));
+        let mod_path = gen_dir
+            .as_ref()
+            .join(format!("{}-{:016x}.rs", mod_name, interface_hash));
         let lib_path = out_dir.join(format!("lib{}-{:016x}.rlib", mod_name, interface_hash));
 
         imports.push(Import {

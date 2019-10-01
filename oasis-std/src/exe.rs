@@ -1,3 +1,5 @@
+use std::fmt;
+
 use oasis_types::{Address, Balance};
 
 /// A type that can be stored in blockchain storage.
@@ -108,8 +110,8 @@ impl Context {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum RpcError<T> {
+#[derive(Clone, Serialize, Deserialize, failure::Fail)]
+pub enum RpcError<E: Send + Sync + 'static> {
     /// There was no service at the requested address.
     InvalidCallee,
 
@@ -124,10 +126,13 @@ pub enum RpcError<T> {
     InvalidOutput(Vec<u8>),
 
     /// The application returned an error.
-    Exec(T),
+    Exec(E),
 }
 
-impl<T: serde::de::DeserializeOwned> From<crate::backend::Error> for RpcError<T> {
+impl<E> From<crate::backend::Error> for RpcError<E>
+where
+    E: serde::de::DeserializeOwned + Send + Sync,
+{
     fn from(err: crate::backend::Error) -> Self {
         use crate::backend::Error as BackendError;
         match err {
@@ -136,11 +141,48 @@ impl<T: serde::de::DeserializeOwned> From<crate::backend::Error> for RpcError<T>
             BackendError::InvalidInput => RpcError::InvalidInput,
             BackendError::InvalidCallee => RpcError::InvalidCallee,
             BackendError::Execution { payload, .. } => {
-                RpcError::Exec(match serde_cbor::from_slice::<T>(&payload) {
-                    Ok(t) => t,
-                    Err(_) => return RpcError::InvalidOutput(payload),
-                })
+                match serde_cbor::from_slice::<E>(&payload) {
+                    Ok(e) => RpcError::Exec(e),
+                    Err(_) => RpcError::InvalidOutput(payload),
+                }
             }
+        }
+    }
+}
+
+impl<E: Send + Sync> fmt::Debug for RpcError<E> {
+    default fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RpcError::InvalidCallee => write!(f, "invalid callee"),
+            RpcError::InsufficientFunds => write!(f, "caller has insufficient funds"),
+            RpcError::InsufficientGas => write!(f, "not enough gas to complete transaction"),
+            RpcError::InvalidInput => write!(f, "invalid input provided to RPC"),
+            RpcError::InvalidOutput(_) => write!(f, "invalid output returned by RPC"),
+            RpcError::Exec(_) => write!(f, "execution error"),
+        }
+    }
+}
+
+impl<E: Send + Sync> fmt::Display for RpcError<E> {
+    default fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
+}
+
+impl<E: Send + Sync + fmt::Debug> fmt::Debug for RpcError<E> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RpcError::Exec(e) => write!(f, "execution error {:?}", e),
+            _ => fmt::Debug::fmt(self, f),
+        }
+    }
+}
+
+impl<E: Send + Sync + fmt::Display> fmt::Display for RpcError<E> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RpcError::Exec(e) => write!(f, "execution error: {}", e),
+            _ => fmt::Display::fmt(self, f),
         }
     }
 }

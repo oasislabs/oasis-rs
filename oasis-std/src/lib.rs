@@ -3,6 +3,7 @@
     linkage,
     non_exhaustive,
     proc_macro_hygiene,
+    specialization,
     trait_alias
 )]
 #![cfg_attr(target_os = "wasi", feature(wasi_ext))]

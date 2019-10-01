@@ -17,7 +17,13 @@ pub trait Event {
 }
 
 /// The context of the current RPC.
-// `Option` values are set by the user during testing.
+/// To create a `Context`, use `Context::default()` or `Context::delegated()`.
+/// The default `Context` will have its `sender` be the address of the current service
+/// or, when testing, the sender set by `Context::with_sender`. A delegated `Context`
+/// sets the sender to the address of the caller; this is similar to Ethereum's DELEGATECALL.
+///
+/// You can use `Context::with_value` to transfer native tokens along with the call.
+// *Note*: `Option` values are set by the user during testing.
 #[derive(Default, Copy, Clone, Debug)]
 pub struct Context {
     #[doc(hidden)]
@@ -47,6 +53,9 @@ impl Default for CallType {
 }
 
 impl Context {
+    /// Creates a context with the sender set to the address of
+    /// the current service (i.e. `ctx.sender()`).
+    #[cfg(any(test, target_os = "wasi"))]
     pub fn delegated() -> Self {
         Self {
             call_type: CallType::Delegated,
@@ -86,6 +95,7 @@ impl Context {
 impl Context {
     /// Sets the sender of the RPC receiving this `Context` as an argument.
     /// Has no effect when called inside of a service.
+    #[cfg(any(test, not(target_os = "wasi")))]
     pub fn with_sender(mut self, sender: Address) -> Self {
         self.sender = Some(sender);
         self

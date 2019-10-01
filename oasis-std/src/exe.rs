@@ -17,6 +17,10 @@ pub trait Event {
 }
 
 /// The context of the current RPC.
+/// To get the address of the service running the RPC, use `Context::default()`.
+/// Although the derived Rust implementation will be an address of all zeros, the runtime will insert the correct address.
+/// To reuse the address of the current sender, use `Context::delegated()`.
+/// `Context.with_sender()` does not work from within a service since it would allow cross contract calls to spoof other addresses.
 // `Option` values are set by the user during testing.
 #[derive(Default, Copy, Clone, Debug)]
 pub struct Context {
@@ -47,6 +51,8 @@ impl Default for CallType {
 }
 
 impl Context {
+    /// Creates a context with the sender set as that of the current context.
+    /// This would be the same as running `Context::default().with_sender(ctx.address)` if it was enabled in services.
     pub fn delegated() -> Self {
         Self {
             call_type: CallType::Delegated,

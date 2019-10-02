@@ -1,4 +1,4 @@
-use std::collections::BTreeSet; // BTree for reproducability
+use std::collections::{BTreeMap, BTreeSet}; // BTree for reproducability
 
 use rustc::{hir::intravisit::Visitor, util::nodemap::FxHashMap};
 use rustc_data_structures::sync::Once;
@@ -205,19 +205,17 @@ impl rustc_driver::Callbacks for BuildPlugin {
                 .krate()
                 .visit_all_item_likes(&mut event_collector.as_deep_visitor());
 
-            let all_adt_defs = defined_types
-                .map(|(def, spans)| (def, spans, false /* is_import */))
-                .chain(
-                    event_collector
-                        .adt_defs()
-                        .map(|(def, spans)| (def, spans, true)),
-                );
+            let all_adt_defs = event_collector
+                .adt_defs()
+                .map(|(def, spans)| (def, spans, true /* is_event */))
+                .chain(defined_types.map(|(def, spans)| (def, spans, false)));
+            // ^ Ensure that events are inserted first so that the structs derive `Event`.
 
             let mut imports = BTreeSet::default();
-            let mut adt_defs = BTreeSet::default();
+            let mut adt_defs = BTreeMap::default();
             for (def, spans, is_event) in all_adt_defs {
                 if def.did.is_local() {
-                    adt_defs.insert((def, is_event));
+                    adt_defs.insert(def, is_event);
                 } else {
                     let crate_name = tcx.original_crate_name(def.did.krate);
                     match self.imports.get(crate_name.as_str().get()) {

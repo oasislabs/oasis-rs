@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use heck::{CamelCase, SnakeCase};
 use oasis_rpc::{
@@ -19,7 +19,7 @@ pub fn convert_interface(
     name: Symbol,
     // the following use BTreeSets to ensure idl is deterministic
     imports: BTreeSet<(Symbol, String)>, // (name, version)
-    adt_defs: BTreeSet<(&AdtDef, bool)>, // (adt_def, is_event)
+    adt_defs: BTreeMap<&AdtDef, bool>,   // adt_def -> is_event
     event_indices: &FxHashMap<Symbol, Vec<Symbol>>,
     fns: &[(Symbol, &FnDecl, &Body)],
 ) -> Result<Interface, Vec<UnsupportedTypeError>> {

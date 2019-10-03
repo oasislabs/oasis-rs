@@ -9,7 +9,7 @@ use rustc::{
         def::{DefKind, Res},
         intravisit,
     },
-    ty::{self, subst::SubstsRef, AdtDef, TyCtxt, TyS},
+    ty::{self, subst::SubstsRef, AdtDef, TyCtxt, TyKind, TyS},
     util::nodemap::{FxHashMap, HirIdSet},
 };
 use syntax::source_map::Span;
@@ -86,7 +86,7 @@ impl<'tcx> DefinedTypeCollector<'tcx> {
 
     // called by `<DefinedTypeCollector as intravisit::Visitor>::visit_ty`.
     fn visit_sty(&mut self, ty: &'tcx TyS, originating_span: Span) {
-        if let ty::TyKind::Adt(adt_def, substs) = ty.sty {
+        if let TyKind::Adt(adt_def, substs) = ty.sty {
             substs
                 .types()
                 .for_each(|ty| self.visit_sty(ty, originating_span));
@@ -196,10 +196,10 @@ impl<'tcx> hir::intravisit::Visitor<'tcx> for EventCollector<'tcx> {
             match emit_arg_ty.ty_adt_def() {
                 Some(adt_def) => insert_def_ty!(adt_def, self.tcx.empty_substs_for_def_id(did)),
                 None => {
-                    if let ty::TyKind::Ref(
+                    if let TyKind::Ref(
                         _,
                         TyS {
-                            sty: ty::TyKind::Adt(adt_def, substs),
+                            sty: TyKind::Adt(adt_def, substs),
                             ..
                         },
                         _,

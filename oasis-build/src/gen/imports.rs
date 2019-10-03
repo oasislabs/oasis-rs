@@ -67,6 +67,8 @@ pub fn build(
 
             #[macro_use]
             extern crate serde;
+            
+            use std::borrow::Borrow;
 
             #(#def_tys)*
 

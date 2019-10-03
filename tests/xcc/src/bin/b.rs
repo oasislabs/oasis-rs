@@ -14,13 +14,22 @@ pub struct RefWrapper<'a> {
     pub field: &'a str,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub enum Greeting {
+    Formal { title: String, name: String },
+    Informal(String),
+}
+
 impl ServiceB {
     pub fn new(_ctx: &Context, seed: Number) -> Self {
         Self { seed }
     }
 
-    pub fn say_hello(&self, _ctx: &Context) -> &str {
-        "hello!"
+    pub fn say_hello(&self, _ctx: &Context, greeting: Greeting) -> String {
+        match greeting {
+            Greeting::Formal { title, name } => format!("hello {} {}", title, name),
+            Greeting::Informal(name) => format!("yo {}. what up?", name),
+        }
     }
 
     pub fn return_ref_struct<'a>(&self, _ctx: &Context, value: &'a str) -> RefWrapper<'a> {

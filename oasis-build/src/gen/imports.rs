@@ -121,7 +121,25 @@ fn gen_def_tys<'a>(defs: &'a [oasis_rpc::TypeDef]) -> impl Iterator<Item = Token
                 }
             }
             oasis_rpc::TypeDef::Enum { variants, .. } => {
-                let variants = variants.iter().map(|v| format_ident!("{}", v.name));
+                let variants = variants.iter().map(|v| {
+                    let name = format_ident!("{}", v.name);
+                    match &v.fields {
+                        Some(oasis_rpc::EnumFields::Named(fields)) => {
+                            let field_names = fields.iter().map(|f| format_ident!("{}", f.name));
+                            let tys = fields.iter().map(|f| quote_ty(&f.ty));
+                            quote! {
+                                #name {
+                                    #(#field_names: #tys),*
+                                }
+                            }
+                        }
+                        Some(oasis_rpc::EnumFields::Tuple(tys)) => {
+                            let tys = tys.iter().map(quote_ty);
+                            quote!(#name(#(#tys),*))
+                        }
+                        None => quote!(#name),
+                    }
+                });
                 quote! {
                     #[derive(#derives)]
                     pub enum #name {
@@ -210,6 +228,7 @@ fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = To
                 ctx: &oasis_std::Context,
                 #(#arg_names: #arg_tys),*
            ) -> Result<#output_ty, oasis_std::RpcError<#err_ty>> {
+                use std::borrow::Borrow as _;
                 use serde::ser::{Serializer as _, SerializeStruct as _};
 
                 let mut serializer = oasis_std::reexports::serde_cbor::Serializer::new(Vec::new());

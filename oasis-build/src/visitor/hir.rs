@@ -9,7 +9,7 @@ use rustc::{
         def::{DefKind, Res},
         intravisit,
     },
-    ty::{self, subst::SubstsRef, AdtDef, TyCtxt, TyKind, TyS},
+    ty::{subst::SubstsRef, AdtDef, TyCtxt, TyKind, TyS},
     util::nodemap::{FxHashMap, HirIdSet},
 };
 use syntax::source_map::Span;

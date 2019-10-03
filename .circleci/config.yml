@@ -113,12 +113,12 @@ jobs:
       - restore_oasis_build
       - run:
           name: Build dependency
-          working_directory: tests/xcc-b
-          command: cargo build --release --target wasm32-wasi --bin xcc-b
+          working_directory: tests
+          command: cargo build --release --target wasm32-wasi --bin b
       - run:
           name: Build toplevel
-          working_directory: tests/xcc-a
-          command: cargo build --release --target wasm32-wasi --bin xcc-a && cargo test --lib
+          working_directory: tests
+          command: cargo build --release --target wasm32-wasi --bin a && cargo test --lib
 
 
 workflows:

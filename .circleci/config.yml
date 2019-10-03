@@ -120,6 +120,14 @@ jobs:
           working_directory: tests
           command: cargo build --release --target wasm32-wasi --bin a && cargo test xcc --lib
 
+  codecov:
+    machine: true
+    steps:
+      - checkout
+      - run:
+          name: Tarpaulin code coverage
+          command: docker run --security-opt seccomp=unconfined -v "${PWD}:/volume" xd009642/tarpaulin cargo tarpaulin --ciserver circle-ci --coveralls $COVERALLS_REPO_TOKEN -p bcfs -p oasis-types --ignore-tests --exclude-files oasis-std --exclude-files memchain --exclude-files oasis-build --exclude-files oasis-rpc
+
 
 workflows:
   version: 2
@@ -129,6 +137,7 @@ workflows:
       - init
       - clippy
       - wasm_build
+      - codecov
       - test_idl:
           requires:
             - init

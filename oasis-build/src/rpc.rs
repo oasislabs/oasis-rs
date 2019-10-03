@@ -12,7 +12,7 @@ use rustc::{
 };
 use syntax_pos::symbol::Symbol;
 
-use crate::{error::UnsupportedTypeError, visitor::hir::DefTy};
+use crate::{error::UnsupportedTypeError, visitor::hir::DefinedType};
 
 // faq: why return a vec of errors? so that the user can see and correct them all at once.
 pub fn convert_interface<'tcx>(
@@ -20,7 +20,7 @@ pub fn convert_interface<'tcx>(
     name: Symbol,
     // the following use BTreeSets to ensure idl is deterministic
     imports: BTreeSet<(Symbol, String)>, // (name, version)
-    def_tys: BTreeSet<DefTy<'tcx>>,
+    def_tys: BTreeSet<DefinedType<'tcx>>,
     event_indices: &FxHashMap<Symbol, Vec<Symbol>>,
     fns: &[(Symbol, &FnDecl, &Body)],
 ) -> Result<Interface, Vec<UnsupportedTypeError>> {
@@ -36,7 +36,7 @@ pub fn convert_interface<'tcx>(
         .collect();
 
     let mut type_defs = Vec::with_capacity(def_tys.len());
-    for DefTy {
+    for DefinedType {
         adt_def,
         substs,
         is_event,

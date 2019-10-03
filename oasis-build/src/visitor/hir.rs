@@ -69,7 +69,7 @@ impl<'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx> for AnalyzedRpcCollector<'t
 /// that are not in a standard library crate.
 pub struct DefinedTypeCollector<'tcx> {
     tcx: TyCtxt<'tcx>,
-    def_tys: FxHashMap<DefTy<'tcx>, Vec<Span>>,
+    def_tys: FxHashMap<DefinedType<'tcx>, Vec<Span>>,
 }
 
 impl<'tcx> DefinedTypeCollector<'tcx> {
@@ -80,7 +80,7 @@ impl<'tcx> DefinedTypeCollector<'tcx> {
         }
     }
 
-    pub fn def_tys(self) -> impl Iterator<Item = (DefTy<'tcx>, Vec<Span>)> {
+    pub fn def_tys(self) -> impl Iterator<Item = (DefinedType<'tcx>, Vec<Span>)> {
         self.def_tys.into_iter()
     }
 
@@ -91,7 +91,7 @@ impl<'tcx> DefinedTypeCollector<'tcx> {
                 .types()
                 .for_each(|ty| self.visit_sty(ty, originating_span));
 
-            let def_ty = DefTy {
+            let def_ty = DefinedType {
                 adt_def,
                 substs,
                 is_event: false,
@@ -142,7 +142,7 @@ impl<'tcx> hir::intravisit::Visitor<'tcx> for DefinedTypeCollector<'tcx> {
 /// The only constraint is that any event must be emitted in the current crate.
 pub struct EventCollector<'tcx> {
     tcx: TyCtxt<'tcx>,
-    def_tys: FxHashMap<DefTy<'tcx>, Vec<Span>>,
+    def_tys: FxHashMap<DefinedType<'tcx>, Vec<Span>>,
 }
 
 impl<'tcx> EventCollector<'tcx> {
@@ -153,7 +153,7 @@ impl<'tcx> EventCollector<'tcx> {
         }
     }
 
-    pub fn def_tys(self) -> impl Iterator<Item = (DefTy<'tcx>, Vec<Span>)> {
+    pub fn def_tys(self) -> impl Iterator<Item = (DefinedType<'tcx>, Vec<Span>)> {
         self.def_tys.into_iter()
     }
 }
@@ -184,7 +184,7 @@ impl<'tcx> hir::intravisit::Visitor<'tcx> for EventCollector<'tcx> {
             macro_rules! insert_def_ty {
                 ($adt_def:expr, $substs:expr) => {
                     self.def_tys
-                        .entry(DefTy {
+                        .entry(DefinedType {
                             adt_def: $adt_def,
                             substs: $substs,
                             is_event: true,
@@ -218,33 +218,33 @@ impl<'tcx> hir::intravisit::Visitor<'tcx> for EventCollector<'tcx> {
     }
 }
 
-pub struct DefTy<'a> {
+pub struct DefinedType<'a> {
     pub adt_def: &'a AdtDef,
     pub substs: SubstsRef<'a>,
     pub is_event: bool,
 }
 
-impl<'a> PartialOrd for DefTy<'a> {
+impl<'a> PartialOrd for DefinedType<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<'a> Ord for DefTy<'a> {
+impl<'a> Ord for DefinedType<'a> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.adt_def.cmp(other.adt_def)
     }
 }
 
-impl<'a> PartialEq for DefTy<'a> {
+impl<'a> PartialEq for DefinedType<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.adt_def == other.adt_def
     }
 }
 
-impl<'a> Eq for DefTy<'a> {}
+impl<'a> Eq for DefinedType<'a> {}
 
-impl<'a> Hash for DefTy<'a> {
+impl<'a> Hash for DefinedType<'a> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.adt_def.hash(state);
     }

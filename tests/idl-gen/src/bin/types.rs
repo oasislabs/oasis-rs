@@ -12,7 +12,7 @@ use oasis_std::{Address, Balance, Context, Event, Service};
 pub enum InnerTy {
     Field1,
     Field2(Vec<InnerTy>, String),
-    Field3 { value: DefTy },
+    Field3 { value: DefinedType },
 }
 
 pub type Tuple = (Address, Balance);

@@ -11,7 +11,8 @@ use oasis_std::{Address, Balance, Context, Event, Service};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum InnerTy {
     Field1,
-    Field2,
+    Field2(Vec<InnerTy>, String),
+    Field3 { value: DefTy },
 }
 
 pub type Tuple = (Address, Balance);
@@ -26,7 +27,7 @@ pub struct TestEvent {
 #[derive(Service)]
 pub struct TestService {}
 
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct DefTy {
     f1: Option<i64>,
     f2: Vec<Option<DefTy>>,
@@ -52,7 +53,7 @@ impl TestService {
         unimplemented!()
     }
 
-    pub fn the(&self, ctx: &Context, arg1: Vec<DefTy>, arg2: Vec<u8>) -> Result<HashSet<Address>> {
+    pub fn the(&self, ctx: &Context, arg1: TestEvent, arg2: Vec<u8>) -> Result<HashSet<Address>> {
         unimplemented!()
     }
 

@@ -48,6 +48,7 @@ impl Importer {
     }
 }
 
+#[derive(Clone, Debug)]
 pub enum ImportLocation {
     Path(std::path::PathBuf),
     Url(url::Url),

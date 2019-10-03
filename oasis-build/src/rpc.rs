@@ -1,25 +1,26 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use heck::{CamelCase, SnakeCase};
 use oasis_rpc::{
-    Constructor, Field, Function, Import, IndexedField, Interface, StateMutability, Type, TypeDef,
+    Constructor, EnumFields, EnumVariant, Field, Function, Import, IndexedField, Interface,
+    StateMutability, Type, TypeDef,
 };
 use rustc::{
     hir::{self, def_id::DefId, Body, FnDecl},
-    ty::{self, AdtDef, TyCtxt, TyS},
+    ty::{self, subst::SubstsRef, AdtDef, TyCtxt, TyS},
     util::nodemap::FxHashMap,
 };
 use syntax_pos::symbol::Symbol;
 
-use crate::error::UnsupportedTypeError;
+use crate::{error::UnsupportedTypeError, visitor::hir::DefTy};
 
 // faq: why return a vec of errors? so that the user can see and correct them all at once.
-pub fn convert_interface(
-    tcx: TyCtxt,
+pub fn convert_interface<'tcx>(
+    tcx: TyCtxt<'tcx>,
     name: Symbol,
     // the following use BTreeSets to ensure idl is deterministic
     imports: BTreeSet<(Symbol, String)>, // (name, version)
-    adt_defs: BTreeMap<&AdtDef, bool>,   // adt_def -> is_event
+    def_tys: BTreeSet<DefTy<'tcx>>,
     event_indices: &FxHashMap<Symbol, Vec<Symbol>>,
     fns: &[(Symbol, &FnDecl, &Body)],
 ) -> Result<Interface, Vec<UnsupportedTypeError>> {
@@ -34,9 +35,14 @@ pub fn convert_interface(
         })
         .collect();
 
-    let mut type_defs = Vec::with_capacity(adt_defs.len());
-    for (adt_def, is_event) in adt_defs.iter() {
-        match convert_type_def(tcx, adt_def, *is_event) {
+    let mut type_defs = Vec::with_capacity(def_tys.len());
+    for DefTy {
+        adt_def,
+        substs,
+        is_event,
+    } in def_tys.iter()
+    {
+        match convert_type_def(tcx, adt_def, substs, *is_event) {
             Ok(mut event_def) => {
                 if let TypeDef::Event {
                     name,
@@ -217,10 +223,10 @@ macro_rules! convert_def {
                 Type::Balance
             } else {
                 // this branch includes `sync`, among other things
-                return Err(UnsupportedTypeError::NotReprC(
-                    format!("{}::{}", crate_name, def_path_comps.join("::")),
-                    $tcx.def_span($owner_did).into(),
-                ));
+                return Err(UnsupportedTypeError {
+                    type_name: format!("{}::{}", crate_name, def_path_comps.join("::")),
+                    span: $tcx.def_span($owner_did),
+                });
             }
         } else {
             Type::Defined {
@@ -282,10 +288,10 @@ fn convert_ty(tcx: TyCtxt, ty: &hir::Ty) -> Result<Type, UnsupportedTypeError> {
                         })?
                     }
                     _ => {
-                        return Err(UnsupportedTypeError::NotReprC(
-                            format!("{:?}", path),
-                            path.span.into(),
-                        ))
+                        return Err(UnsupportedTypeError {
+                            type_name: path.to_string(),
+                            span: path.span,
+                        })
                     }
                 },
                 Res::PrimTy(ty) => match ty {
@@ -297,18 +303,18 @@ fn convert_ty(tcx: TyCtxt, ty: &hir::Ty) -> Result<Type, UnsupportedTypeError> {
                     hir::PrimTy::Char => Type::I8,
                 },
                 _ => {
-                    return Err(UnsupportedTypeError::NotReprC(
-                        format!("{:?}", path),
-                        path.span.into(),
-                    ))
+                    return Err(UnsupportedTypeError {
+                        type_name: path.to_string(),
+                        span: path.span,
+                    })
                 }
             }
         }
         _ => {
-            return Err(UnsupportedTypeError::NotReprC(
-                format!("{:?}", ty),
-                ty.span.into(),
-            ))
+            return Err(UnsupportedTypeError {
+                type_name: format!("{:?}", ty),
+                span: ty.span,
+            })
         }
     })
 }
@@ -368,10 +374,10 @@ fn convert_sty_with_arg_at<'tcx>(
                 .collect::<Result<Vec<_>, UnsupportedTypeError>>()?,
         ),
         _ => {
-            return Err(UnsupportedTypeError::NotReprC(
-                ty.to_string(),
-                tcx.def_span(did).into(),
-            ))
+            return Err(UnsupportedTypeError {
+                type_name: ty.to_string(),
+                span: tcx.def_span(did),
+            })
         }
     })
 }
@@ -387,7 +393,10 @@ fn convert_int(
         IntTy::I32 => Type::I32,
         IntTy::I64 => Type::I64,
         IntTy::I128 | IntTy::Isize => {
-            return Err(UnsupportedTypeError::NotReprC(ty.to_string(), span.into()))
+            return Err(UnsupportedTypeError {
+                type_name: ty.to_string(),
+                span,
+            })
         }
     })
 }
@@ -403,7 +412,10 @@ fn convert_uint(
         UintTy::U32 => Type::U32,
         UintTy::U64 => Type::U64,
         UintTy::U128 | UintTy::Usize => {
-            return Err(UnsupportedTypeError::NotReprC(ty.to_string(), span.into()))
+            return Err(UnsupportedTypeError {
+                type_name: ty.to_string(),
+                span,
+            })
         }
     })
 }
@@ -419,9 +431,10 @@ fn convert_float(
     })
 }
 
-fn convert_type_def(
-    tcx: TyCtxt,
+fn convert_type_def<'tcx>(
+    tcx: TyCtxt<'tcx>,
     def: &AdtDef,
+    substs: SubstsRef<'tcx>,
     is_event: bool,
 ) -> Result<TypeDef, UnsupportedTypeError> {
     let ty_name = tcx
@@ -433,15 +446,41 @@ fn convert_type_def(
         .data
         .to_string();
     if def.is_enum() {
-        if !def.is_payloadfree() {
-            // TODO: convert Rust struct enum to tagged union
-            return Err(UnsupportedTypeError::ComplexEnum(
-                tcx.def_span(def.did).into(),
-            ));
-        }
+        let variants = def
+            .variants
+            .iter()
+            .map(|v| {
+                Ok(EnumVariant {
+                    name: v.ident.to_string(),
+                    fields: if v.fields.is_empty() {
+                        None
+                    } else {
+                        let struct_variants = !v
+                            .fields
+                            .iter()
+                            .any(|f| f.ident.name.as_str().chars().all(|ch| ch.is_numeric()));
+                        let fields = v
+                            .fields
+                            .iter()
+                            .map(|field_def| {
+                                Ok(Field {
+                                    name: field_def.ident.to_string(),
+                                    ty: convert_sty(tcx, field_def.did, field_def.ty(tcx, substs))?,
+                                })
+                            })
+                            .collect::<Result<_, _>>()?;
+                        Some(if struct_variants {
+                            EnumFields::Named(fields)
+                        } else {
+                            EnumFields::Tuple(fields.into_iter().map(|f| f.ty).collect())
+                        })
+                    },
+                })
+            })
+            .collect::<Result<_, _>>()?;
         Ok(TypeDef::Enum {
             name: ty_name,
-            variants: def.variants.iter().map(|v| v.ident.to_string()).collect(),
+            variants,
         })
     } else if def.is_struct() {
         let fields = def
@@ -476,10 +515,10 @@ fn convert_type_def(
         })
     } else if def.is_union() {
         // TODO? serde doesn't derive unions. not sure if un-tagged unions are actually useful.
-        Err(UnsupportedTypeError::NotReprC(
-            def.descr().to_string(),
-            tcx.def_span(def.did).into(),
-        ))
+        Err(UnsupportedTypeError {
+            type_name: def.descr().to_string(),
+            span: tcx.def_span(def.did),
+        })
     } else {
         unreachable!("AdtDef is a struct, enum, or union");
     }

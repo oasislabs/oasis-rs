@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet}; // BTree for reproducability
+use std::collections::BTreeSet; // BTree for reproducability
 
 use rustc::{hir::intravisit::Visitor, util::nodemap::FxHashMap};
 use rustc_data_structures::sync::Once;
@@ -197,7 +197,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
             let defined_types = rpc_collector.rpcs().iter().flat_map(|(_, decl, _)| {
                 let mut def_ty_collector = DefinedTypeCollector::new(tcx);
                 def_ty_collector.visit_fn_decl(decl);
-                def_ty_collector.adt_defs()
+                def_ty_collector.def_tys()
             });
 
             let mut event_collector = EventCollector::new(tcx);
@@ -205,19 +205,16 @@ impl rustc_driver::Callbacks for BuildPlugin {
                 .krate()
                 .visit_all_item_likes(&mut event_collector.as_deep_visitor());
 
-            let all_adt_defs = event_collector
-                .adt_defs()
-                .map(|(def, spans)| (def, spans, true /* is_event */))
-                .chain(defined_types.map(|(def, spans)| (def, spans, false)));
+            let all_def_tys = event_collector.def_tys().chain(defined_types);
             // ^ Ensure that events are inserted first so that the structs derive `Event`.
 
-            let mut imports = BTreeSet::default();
-            let mut adt_defs = BTreeMap::default();
-            for (def, spans, is_event) in all_adt_defs {
-                if def.did.is_local() {
-                    adt_defs.insert(def, is_event);
+            let mut imports = BTreeSet::new();
+            let mut local_def_tys = BTreeSet::new();
+            for (def_ty, spans) in all_def_tys {
+                if def_ty.adt_def.did.is_local() {
+                    local_def_tys.insert(def_ty);
                 } else {
-                    let crate_name = tcx.original_crate_name(def.did.krate);
+                    let crate_name = tcx.original_crate_name(def_ty.adt_def.did.krate);
                     match self.imports.get(crate_name.as_str().get()) {
                         Some(version) => {
                             imports.insert((crate_name, version.to_string()));
@@ -226,7 +223,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
                             let err_msg = format!(
                                 "External type `{}` must be defined in \
                                  a service to use in an RPC interface.",
-                                tcx.def_path_str(def.did)
+                                tcx.def_path_str(def_ty.adt_def.did)
                             );
                             sess.span_err(spans, &err_msg);
                         }
@@ -238,14 +235,14 @@ impl rustc_driver::Callbacks for BuildPlugin {
                 tcx,
                 *service_name,
                 imports,
-                adt_defs,
+                local_def_tys,
                 &self.event_indexed_fields,
                 rpc_collector.rpcs(),
             ) {
                 Ok(iface) => iface,
                 Err(errs) => {
                     for err in errs {
-                        sess.span_err(err.span(), &format!("{}", err));
+                        sess.span_err(err.span, &format!("{}", err));
                     }
                     return;
                 }

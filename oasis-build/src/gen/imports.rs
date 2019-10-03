@@ -121,7 +121,7 @@ fn gen_def_tys<'a>(defs: &'a [oasis_rpc::TypeDef]) -> impl Iterator<Item = Token
                 }
             }
             oasis_rpc::TypeDef::Enum { variants, .. } => {
-                let variants = variants.iter().map(|v| format_ident!("{}", v));
+                let variants = variants.iter().map(|v| format_ident!("{}", v.name));
                 quote! {
                     #[derive(#derives)]
                     pub enum #name {

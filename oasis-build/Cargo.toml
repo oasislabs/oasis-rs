@@ -14,13 +14,13 @@ publish = false
 colored = "1.8"
 failure = "0.1"
 heck = "0.3"
-oasis-rpc = { version = "0.1", path = "../oasis-rpc", features = ["resolve"] }
+oasis-rpc = { version = "0.2", path = "../oasis-rpc", features = ["resolve"] }
 proc-macro2 = "1.0"
 quote = "1.0"
 serde_json = "1.0"
 syn = { version = "1.0", default-features = false, features = ["parsing"] }
 toml = "0.5"
-walrus = "0.11"
+walrus = "0.12"
 
 [dev-dependencies]
 compiletest_rs = { version = "=0.3.22", features = ["tmp"] }

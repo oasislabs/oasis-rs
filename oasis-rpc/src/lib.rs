@@ -63,7 +63,7 @@ pub enum TypeDef {
     },
     Enum {
         name: Ident,
-        variants: Vec<Ident>,
+        variants: Vec<EnumVariant>,
     },
     Event {
         name: Ident,
@@ -86,6 +86,20 @@ pub struct Field {
     pub name: Ident,
     #[serde(rename = "type")]
     pub ty: Type,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Hash)]
+pub struct EnumVariant {
+    pub name: Ident,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub fields: Option<EnumFields>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Hash)]
+#[serde(untagged)]
+pub enum EnumFields {
+    Named(Vec<Field>),
+    Tuple(Vec<Type>),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Hash)]

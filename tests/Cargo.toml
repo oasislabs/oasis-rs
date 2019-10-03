@@ -1,8 +1,7 @@
 [workspace]
 members = [
     "idl-gen",
-    "xcc-a",
-    "xcc-b",
+    "xcc",
 ]
 
 [profile.release]

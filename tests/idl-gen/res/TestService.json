@@ -6,7 +6,42 @@
     {
       "type": "enum",
       "name": "InnerTy",
-      "variants": ["Field1", "Field2"]
+      "variants": [
+        {
+          "name": "Field1"
+        },
+        {
+          "name": "Field2",
+          "fields": [
+            {
+              "type": "list",
+              "params": {
+                "type": "defined",
+                "params": {
+                  "type": "InnerTy"
+                }
+              }
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "name": "Field3",
+          "fields": [
+            {
+              "name": "value",
+              "type": {
+                "type": "defined",
+                "params": {
+                  "type": "DefTy"
+                }
+              }
+            }
+          ]
+        }
+      ]
     },
     {
       "type": "event",
@@ -163,12 +198,9 @@
         {
           "name": "arg1",
           "type": {
-            "type": "list",
+            "type": "defined",
             "params": {
-              "type": "defined",
-              "params": {
-                "type": "DefTy"
-              }
+              "type": "TestEvent"
             }
           }
         },

@@ -2,27 +2,14 @@ use syntax_pos::{MultiSpan, Span};
 
 // NB: `failure` won't work on these errors because `Span` isn't `Send`.
 
-pub enum UnsupportedTypeError {
-    NotReprC(String /* type name string */, MultiSpan),
-    ComplexEnum(MultiSpan),
+pub struct UnsupportedTypeError {
+    pub type_name: String,
+    pub span: Span,
 }
 
 impl std::fmt::Display for UnsupportedTypeError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        use UnsupportedTypeError::*;
-        match self {
-            NotReprC(ty_str, ..) => write!(f, "`{}` cannot be converted to an RPC type", ty_str),
-            ComplexEnum(..) => write!(f, "Tagged unions cannot (yet) be converted to an RPC type"),
-        }
-    }
-}
-
-impl UnsupportedTypeError {
-    pub fn span(&self) -> MultiSpan {
-        use UnsupportedTypeError::*;
-        match &self {
-            NotReprC(_, span) | ComplexEnum(span) => span.clone(),
-        }
+        write!(f, "`{}` cannot be converted to an RPC type", self.type_name)
     }
 }
 

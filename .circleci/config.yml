@@ -118,7 +118,7 @@ jobs:
       - run:
           name: Build toplevel
           working_directory: tests
-          command: cargo build --release --target wasm32-wasi --bin a && cargo test --lib
+          command: cargo build --release --target wasm32-wasi --bin a && cargo test xcc --lib
 
 
 workflows:

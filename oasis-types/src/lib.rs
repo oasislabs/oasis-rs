@@ -22,13 +22,13 @@ impl ExtStatusCode {
     pub const NoAccount: ExtStatusCode = ExtStatusCode(3);
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct AccountMeta {
     pub balance: u128,
     pub expiry: Option<std::time::Duration>,
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct Event {
     pub emitter: Address,
     pub topics: Vec<[u8; 32]>,

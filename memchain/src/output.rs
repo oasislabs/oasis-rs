@@ -1,7 +1,7 @@
 use blockchain_traits::TransactionOutcome;
 use oasis_types::{Address, Event};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Receipt {
     pub outcome: TransactionOutcome,
     pub caller: Address,

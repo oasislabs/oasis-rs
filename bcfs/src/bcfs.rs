@@ -88,7 +88,6 @@ impl BCFS {
             }
             if open_flags.intersects(OpenFlags::TRUNC | OpenFlags::DIRECTORY)
                 || (file_kind.is_log() && !fd_flags.contains(FdFlags::APPEND))
-                || (!file_kind.is_log() && fd_flags.contains(FdFlags::APPEND))
             {
                 return Err(ErrNo::Inval);
             }
@@ -130,7 +129,55 @@ impl BCFS {
     }
 
     pub fn flush(&mut self, ptx: &mut dyn PendingTransaction, fd: Fd) -> Result<()> {
-        self.do_flush(ptx, self.file(fd)?);
+        let file = self.file(fd)?;
+        if !file.dirty.get() {
+            return Ok(());
+        }
+        let maybe_cursor = file.buf.borrow();
+        let buf = match &*maybe_cursor {
+            FileCache::Present(cursor) => cursor.get_ref(),
+            FileCache::Absent(_) => return Ok(()),
+        };
+        match &file.kind {
+            FileKind::Stdin
+            | FileKind::Bytecode { .. }
+            | FileKind::Balance { .. }
+            | FileKind::Directory { .. }
+            | FileKind::Temporary => (),
+            FileKind::Stdout => ptx.ret(buf),
+            FileKind::Stderr => ptx.err(buf),
+            FileKind::Log => {
+                if let Some((topics, data)) = Self::parse_log(buf) {
+                    ptx.emit(&topics, data);
+                }
+            }
+            FileKind::Regular { key } => {
+                ptx.state_mut().set(&key, &buf);
+                for f in self.files[(HOME_DIR_FILENO as usize + 1)..].iter() {
+                    if let Some(File {
+                        kind: FileKind::Regular { key: f_key },
+                        ..
+                    }) = f
+                    {
+                        let f = f.as_ref().unwrap();
+                        if key != f_key || f as *const File == file as *const File {
+                            continue;
+                        }
+                        let mut f_buf = f.buf.borrow_mut();
+                        let mut cursor = Cursor::new(buf.clone());
+                        cursor
+                            .seek(match &*f_buf {
+                                FileCache::Absent(seek_from) => *seek_from,
+                                FileCache::Present(cursor) => SeekFrom::Start(cursor.position()),
+                            })
+                            .ok(); // deal with the error when the file is actually read
+                        *f_buf = FileCache::Present(cursor);
+                        f.metadata.replace(None);
+                    }
+                }
+                file.dirty.set(false);
+            }
+        }
         Ok(())
     }
 
@@ -219,7 +266,10 @@ impl BCFS {
     pub fn fdstat(&self, _ptx: &mut dyn PendingTransaction, fd: Fd) -> Result<FdStat> {
         let file = self.file(fd)?;
         Ok(FdStat {
-            file_type: FileType::RegularFile,
+            file_type: match file.kind {
+                FileKind::Directory { .. } => FileType::Directory,
+                _ => FileType::RegularFile,
+            },
             flags: file.flags,
             rights_base: Rights::all(),
             rights_inheriting: Rights::all(),
@@ -297,15 +347,6 @@ impl BCFS {
             Ok(())
         } else {
             Err(ErrNo::BadF)
-        }
-    }
-
-    pub fn sync(&mut self, ptx: &mut dyn PendingTransaction) {
-        // flush stdout and stderr
-        for file in self.files[1..=3].iter() {
-            if let Some(file) = file {
-                self.do_flush(ptx, file);
-            }
         }
     }
 }
@@ -556,68 +597,21 @@ impl BCFS {
         Ok(nbytes)
     }
 
-    fn do_flush(&self, ptx: &mut dyn PendingTransaction, file: &File) {
-        if !file.dirty.get() {
-            return;
-        }
-        let maybe_cursor = file.buf.borrow();
-        let buf = match &*maybe_cursor {
-            FileCache::Present(cursor) => cursor.get_ref(),
-            FileCache::Absent(_) => return,
-        };
-        match &file.kind {
-            FileKind::Stdin
-            | FileKind::Bytecode { .. }
-            | FileKind::Balance { .. }
-            | FileKind::Directory { .. }
-            | FileKind::Temporary => (),
-            FileKind::Stdout => ptx.ret(buf),
-            FileKind::Stderr => ptx.err(buf),
-            FileKind::Log => {
-                if let Some((topics, data)) = Self::parse_log(buf) {
-                    ptx.emit(&topics, data);
-                }
-            }
-            FileKind::Regular { key } => {
-                ptx.state_mut().set(&key, &buf);
-                for f in self.files[(HOME_DIR_FILENO as usize + 1)..].iter() {
-                    if let Some(File {
-                        kind: FileKind::Regular { key: f_key },
-                        ..
-                    }) = f
-                    {
-                        let f = f.as_ref().unwrap();
-                        if key != f_key || f as *const File == file as *const File {
-                            continue;
-                        }
-                        let mut f_buf = f.buf.borrow_mut();
-                        let mut cursor = Cursor::new(buf.clone());
-                        cursor
-                            .seek(match &*f_buf {
-                                FileCache::Absent(seek_from) => *seek_from,
-                                FileCache::Present(cursor) => SeekFrom::Start(cursor.position()),
-                            })
-                            .ok(); // deal with the error when the file is actually read
-                        *f_buf = FileCache::Present(cursor);
-                        f.metadata.replace(None);
-                    }
-                }
-                file.dirty.set(false);
-            }
-        }
-    }
-
     /// Parses a log buffer into (topics, data)
     /// Format:
     /// num_topics [topic_len [topic_data; topic_len]; num_topics] data_len [data; data_len]
     /// num_* are little-endian 32-bit integers.
     fn parse_log(buf: &[u8]) -> Option<(Vec<&[u8]>, &[u8])> {
-        use nom::{length_count, length_data, named, number::complete::le_u32};
-        named!(parser<&[u8], Vec<&[u8]>>, length_count!(le_u32, length_data!(le_u32)));
-        match parser(buf) {
-            Ok((data, topics)) => Some((topics, data)),
-            _ => None,
-        }
+        use nom::{complete, do_parse, length_count, length_data, named, number::complete::le_u32};
+        named! {
+            parser<(Vec<&[u8]>, &[u8])>,
+            complete!(do_parse!(
+                topics: length_count!(le_u32, length_data!(le_u32)) >>
+                data:   length_data!(le_u32)                        >>
+                (topics, data)
+            ))
+        };
+        parser(buf).map(|result| result.1).ok()
     }
 
     fn default_filestat() -> FileStat {
@@ -630,6 +624,29 @@ impl BCFS {
             atime: 0u64.into(),
             mtime: 0u64.into(),
             ctime: 0u64.into(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_log() {
+        let (topics, data, log) = crate::tests::create_log();
+
+        let (parsed_topics, parsed_data) = BCFS::parse_log(&log).unwrap();
+        assert_eq!(
+            parsed_topics,
+            topics.iter().map(|t| t.as_slice()).collect::<Vec<_>>()
+        );
+        assert_eq!(parsed_data, data.as_slice());
+    }
+
+    quickcheck::quickcheck! {
+        fn parse_log_nopanic(inp: Vec<u8>) -> () {
+            BCFS::parse_log(&inp);
         }
     }
 }

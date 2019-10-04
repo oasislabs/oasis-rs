@@ -62,13 +62,21 @@ macro_rules! special_file_ctor {
             chain_dir.push(blockchain_name);
 
             vec![
-                $(Some(Self {
-                    kind: FileKind::$kind,
-                    flags: FdFlags::APPEND | FdFlags::SYNC,
-                    metadata: Cell::new(None),
-                    buf: RefCell::new(FileCache::Absent(SeekFrom::Start(0))),
-                    dirty: Cell::new(false),
-                })),+,
+                // Generate each of stdin, stdout, and stderr.
+                $(
+                    Some(Self {
+                        kind: FileKind::$kind,
+                        flags: FdFlags::APPEND | FdFlags::SYNC,
+                        metadata: Cell::new(None),
+                        buf: RefCell::new(FileCache::Absent(SeekFrom::Start(0))),
+                        dirty: Cell::new(false),
+                    })
+                ),+,
+
+                // This fd is the capability to the chain dir (e.g., `/opt/oasis/`) which
+                // contains the `log` file, among other things.
+                // This capability (and all other directory caps) will be discovered when
+                // the WASI libc calls `fd_prestat_get` during the `_start` function.
                 Some(Self {
                     kind: FileKind::Directory { path: chain_dir },
                     flags: FdFlags::SYNC,
@@ -76,6 +84,8 @@ macro_rules! special_file_ctor {
                     buf: RefCell::new(FileCache::Absent(SeekFrom::Start(0))),
                     dirty: Cell::new(false),
                 }),
+
+                // This fd is the capability to the service's home directory.
                 Some(Self {
                     kind: FileKind::Directory { path: PathBuf::from(".") },
                     flags: FdFlags::SYNC,

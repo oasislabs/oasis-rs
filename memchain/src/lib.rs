@@ -10,7 +10,7 @@ use std::{borrow::Cow, collections::HashMap, convert::TryInto};
 use blockchain_traits::Blockchain;
 use oasis_types::Address;
 
-use block::Block;
+pub use block::Block;
 
 type State<'bc> = HashMap<Address, Cow<'bc, Account>>;
 
@@ -19,9 +19,9 @@ pub type AccountMain = extern "C" fn(PtxPtr) -> u16;
 
 #[derive(Debug)]
 pub struct Memchain<'bc> {
-    name: String,
-    blocks: Vec<Block<'bc>>,
-    base_gas: u64,
+    pub name: String,
+    pub blocks: Vec<Block<'bc>>,
+    pub base_gas: u64,
 }
 
 impl<'bc> Memchain<'bc> {
@@ -69,7 +69,7 @@ impl<'bc> Blockchain for Memchain<'bc> {
     }
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct Account {
     pub balance: u128,
     pub code: Vec<u8>,

@@ -28,7 +28,7 @@ pub struct AccountMeta {
     pub expiry: Option<std::time::Duration>,
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct Event {
     pub emitter: Address,
     pub topics: Vec<[u8; 32]>,

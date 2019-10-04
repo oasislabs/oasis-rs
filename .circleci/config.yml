@@ -137,7 +137,9 @@ workflows:
       - init
       - clippy
       - wasm_build
-      - codecov
+      - codecov:
+          requires:
+            - init # tarpaulin fails if the tests fail
       - test_idl:
           requires:
             - init

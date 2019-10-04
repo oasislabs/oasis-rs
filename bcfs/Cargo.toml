@@ -1,6 +1,6 @@
 [package]
 name = "bcfs"
-version = "0.2.3"
+version = "0.3.0"
 license = "Apache-2.0"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
@@ -21,6 +21,7 @@ wasi-types = "0.1"
 [dev-dependencies]
 hex = "0.4"
 memchain = { version = "0.2", path = "../memchain" }
+quickcheck = "0.9"
 
 [features]
 ffi = []

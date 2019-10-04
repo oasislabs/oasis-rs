@@ -4,27 +4,39 @@ use std::{
     borrow::Cow,
     collections::HashMap,
     io::{IoSlice, IoSliceMut},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use blockchain_traits::{Blockchain, TransactionOutcome};
 use memchain::{Account, Memchain};
 use oasis_types::Address;
-use wasi_types::{ErrNo, Fd, FdFlags, OpenFlags, Whence};
+use wasi_types::{ErrNo, Fd, FdFlags, FileType, OpenFlags, Whence};
 
-use crate::BCFS;
+use crate::{
+    file::{CHAIN_DIR_FILENO, HOME_DIR_FILENO},
+    BCFS,
+};
+
+macro_rules! chain_name {
+    () => {
+        "testchain"
+    };
+    (opt) => {
+        "/opt/testchain"
+    };
+}
 
 const ADDR_1: Address = Address([1u8; 20]);
 const ADDR_2: Address = Address([2u8; 20]);
 const BASE_GAS: u64 = 2100;
 const GAS_PRICE: u64 = 0;
-const CHAIN_NAME: &str = "testchain";
+const CHAIN_NAME: &str = chain_name!();
 
 fn giga(val: u128) -> u128 {
     val * 1_000_000_000
 }
 
-fn create_memchain(mains: Vec<Option<memchain::AccountMain>>) -> impl Blockchain {
+fn create_memchain(mains: Vec<Option<memchain::AccountMain>>) -> Memchain<'static> {
     let genesis_state = mains
         .into_iter()
         .enumerate()
@@ -64,7 +76,7 @@ fn good_home() -> PathBuf {
 }
 
 macro_rules! testcase {
-    (fn $fn_name:ident ( $ptx:ident : &mut dyn PendingTransaction ) -> u16 $body:block) => {
+    (fn $fn_name:ident ( $ptx:ident : &mut dyn PendingTransaction ) $body:block) => {
         #[test]
         fn $fn_name() {
             extern "C" fn test_main(ptxp: memchain::PtxPtr) -> u16 {
@@ -84,7 +96,7 @@ macro_rules! testcase {
 }
 
 testcase!(
-    fn close_fd(ptx: &mut dyn PendingTransaction) -> u16 {
+    fn close_fd(ptx: &mut dyn PendingTransaction) {
         let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
         for fd in 0u32..=3 {
             let fd = Fd::from(fd);
@@ -98,7 +110,7 @@ testcase!(
 );
 
 testcase!(
-    fn open_close(ptx: &mut dyn PendingTransaction) -> u16 {
+    fn open_close(ptx: &mut dyn PendingTransaction) {
         let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
         let mut abspath = good_home();
         abspath.push(".");
@@ -156,7 +168,7 @@ testcase!(
 );
 
 testcase!(
-    fn read_write_basic(ptx: &mut dyn PendingTransaction) -> u16 {
+    fn read_write_basic(ptx: &mut dyn PendingTransaction) {
         let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
 
         let path = PathBuf::from("somefile");
@@ -265,7 +277,7 @@ testcase!(
 );
 
 testcase!(
-    fn write_consecutive(ptx: &mut dyn PendingTransaction) -> u16 {
+    fn write_consecutive(ptx: &mut dyn PendingTransaction) {
         let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
 
         let path = PathBuf::from("somefile");
@@ -324,7 +336,7 @@ testcase!(
     //    NB: This differs from POSIX which would maintain a separate write buffer
     //        In this context, it would incur undue overhead.
     // 7. Seek to beginning using abs fd and read file. Should be "!elloworld".
-    fn read_write_aliased(ptx: &mut dyn PendingTransaction) -> u16 {
+    fn read_write_aliased(ptx: &mut dyn PendingTransaction) {
         let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
 
         let path = PathBuf::from("somefile");
@@ -411,7 +423,7 @@ testcase!(
 );
 
 testcase!(
-    fn badf(ptx: &mut dyn PendingTransaction) -> u16 {
+    fn badf(ptx: &mut dyn PendingTransaction) {
         let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
         let badf = Fd::from(99u32);
 
@@ -447,7 +459,7 @@ testcase!(
 );
 
 testcase!(
-    fn renumber(ptx: &mut dyn PendingTransaction) -> u16 {
+    fn renumber(ptx: &mut dyn PendingTransaction) {
         let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
         let somefile = PathBuf::from("somefile");
         let anotherfile = PathBuf::from("anotherfile");
@@ -507,7 +519,7 @@ testcase!(
 );
 
 testcase!(
-    fn unlink(ptx: &mut dyn PendingTransaction) -> u16 {
+    fn unlink(ptx: &mut dyn PendingTransaction) {
         let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
 
         let path = PathBuf::from("somefile");
@@ -569,7 +581,7 @@ macro_rules! write_twice {
 }
 
 testcase!(
-    fn write_trunc(ptx: &mut dyn PendingTransaction) -> u16 {
+    fn write_trunc(ptx: &mut dyn PendingTransaction) {
         write_twice!(ptx, OpenFlags::TRUNC, FdFlags::empty(), |_first, second| {
             second
         });
@@ -577,7 +589,7 @@ testcase!(
 );
 
 testcase!(
-    fn write_append(ptx: &mut dyn PendingTransaction) -> u16 {
+    fn write_append(ptx: &mut dyn PendingTransaction) {
         write_twice!(
             ptx,
             OpenFlags::empty(),
@@ -588,9 +600,346 @@ testcase!(
 );
 
 testcase!(
-    fn write_trunc_append(ptx: &mut dyn PendingTransaction) -> u16 {
+    fn write_trunc_append(ptx: &mut dyn PendingTransaction) {
         write_twice!(ptx, OpenFlags::TRUNC, FdFlags::APPEND, |_first, second| {
             second
         });
     }
 );
+
+testcase!(
+    fn prestat(ptx: &mut dyn PendingTransaction) {
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
+
+        // The following test is based on what the WASI libc does during initialization.
+        // It starts after fd 3 (stdout) and queries each fd for its path (assuming it's
+        // a directory) and stops after getting a badf.
+        // Here, we expect two directories: the chain dir and the cwd.
+        assert_eq!(
+            bcfs.prestat(ptx, CHAIN_DIR_FILENO.into()).unwrap(),
+            Path::new(chain_name!(opt))
+        );
+        assert_eq!(
+            bcfs.prestat(ptx, HOME_DIR_FILENO.into()).unwrap(),
+            Path::new(".")
+        );
+
+        assert_eq!(bcfs.prestat(ptx, Fd::from(5u32)), Err(ErrNo::BadF));
+        assert_eq!(bcfs.prestat(ptx, Fd::from(6u32)), Err(ErrNo::BadF));
+    }
+);
+
+testcase!(
+    fn open_bad(ptx: &mut dyn PendingTransaction) {
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
+
+        // Opening from a non-directory root fd.
+        assert_eq!(
+            bcfs.open(
+                ptx,
+                Fd::from(0u32 /* stdin */),
+                &Path::new("file.txt"),
+                OpenFlags::empty(),
+                FdFlags::empty()
+            ),
+            Err(ErrNo::BadF)
+        );
+
+        // Opening a file without a capability to its directory.
+        assert_eq!(
+            bcfs.open(
+                ptx,
+                HOME_DIR_FILENO.into(),
+                &Path::new(chain_name!(opt)),
+                OpenFlags::empty(),
+                FdFlags::empty()
+            ),
+            Err(ErrNo::NoEnt)
+        );
+
+        // Opening a file above its directory.
+        assert_eq!(
+            bcfs.open(
+                ptx,
+                HOME_DIR_FILENO.into(),
+                &Path::new("../../../asdf"),
+                OpenFlags::empty(),
+                FdFlags::empty()
+            ),
+            Err(ErrNo::NoEnt)
+        );
+
+        // Opening nothing.
+        assert_eq!(
+            bcfs.open(
+                ptx,
+                HOME_DIR_FILENO.into(),
+                &Path::new(""),
+                OpenFlags::empty(),
+                FdFlags::empty()
+            ),
+            Err(ErrNo::Inval)
+        );
+
+        // Opening a non-existent file in a non-home directory that does exist.
+        assert_eq!(
+            bcfs.open(
+                ptx,
+                CHAIN_DIR_FILENO.into(),
+                &Path::new("not-log"),
+                OpenFlags::empty(),
+                FdFlags::empty()
+            ),
+            Err(ErrNo::NoEnt)
+        );
+
+        // Blockchain special files vs invaid open flags.
+        for (f, dir) in [
+            ("balance", HOME_DIR_FILENO.into()), // 4 is home dir
+            ("log", CHAIN_DIR_FILENO.into()),    // 3 is chain dir
+            ("bytecode", HOME_DIR_FILENO.into()),
+        ]
+        .iter()
+        {
+            // Specials already exist and cannot be created.
+            for oflags in [
+                OpenFlags::CREATE,
+                OpenFlags::EXCL,
+                OpenFlags::CREATE | OpenFlags::EXCL,
+            ]
+            .iter()
+            {
+                assert_eq!(
+                    bcfs.open(ptx, *dir, &Path::new(f), *oflags, FdFlags::empty()),
+                    Err(ErrNo::Exist)
+                );
+            }
+
+            // Special files cannot be truncated.
+            assert_eq!(
+                bcfs.open(ptx, *dir, &Path::new(f), OpenFlags::TRUNC, FdFlags::empty()),
+                Err(ErrNo::Inval)
+            );
+
+            // They can't be unlinked either.
+            assert_eq!(bcfs.unlink(ptx, *dir, &Path::new(f)), Err(ErrNo::Access));
+        }
+
+        // Log is append-only.
+        assert_eq!(
+            bcfs.open(
+                ptx,
+                CHAIN_DIR_FILENO.into(),
+                &Path::new("log"),
+                OpenFlags::empty(),
+                FdFlags::empty()
+            ),
+            Err(ErrNo::Inval)
+        );
+    }
+);
+
+#[test]
+fn tempfile() {
+    extern "C" fn test_main(ptxp: memchain::PtxPtr) -> u16 {
+        let ptx = unsafe { &mut **ptxp };
+
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
+
+        let temp_fd = bcfs.tempfile(ptx).unwrap();
+
+        let write_buf = b"ephemeral";
+        let mut read_buf = vec![0u8; write_buf.len()];
+
+        bcfs.write_vectored(ptx, temp_fd, &[IoSlice::new(write_buf)])
+            .unwrap();
+
+        bcfs.seek(ptx, temp_fd, 0, Whence::Start).unwrap();
+
+        bcfs.read_vectored(ptx, temp_fd, &mut [IoSliceMut::new(&mut read_buf)])
+            .unwrap();
+        assert_eq!(&read_buf, write_buf);
+
+        bcfs.flush(ptx, temp_fd).unwrap();
+
+        0
+    }
+
+    let mut bc = create_memchain(vec![None, Some(test_main)]);
+
+    let state_before = bc
+        .blocks
+        .last()
+        .unwrap()
+        .state
+        .get(&ADDR_2)
+        .unwrap()
+        .storage
+        .clone();
+
+    bc.last_block_mut().transact(
+        ADDR_1, ADDR_2, ADDR_1, /* payer */
+        42,     /* value */
+        b"input", BASE_GAS, GAS_PRICE,
+    );
+
+    assert_eq!(
+        bc.blocks
+            .last()
+            .unwrap()
+            .state
+            .get(&ADDR_2)
+            .unwrap()
+            .storage
+            .clone(),
+        state_before
+    );
+}
+
+testcase!(
+    fn flush_preopens(ptx: &mut dyn PendingTransaction) {
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
+        for i in 0u32..=4 {
+            assert!(bcfs.flush(ptx, Fd::from(i)).is_ok());
+        }
+    }
+);
+
+testcase!(
+    fn flush_specials(ptx: &mut dyn PendingTransaction) {
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
+        for f in ["balance", "bytecode"].iter() {
+            let fd = bcfs
+                .open(
+                    ptx,
+                    HOME_DIR_FILENO.into(),
+                    &Path::new(f),
+                    OpenFlags::empty(),
+                    FdFlags::empty(),
+                )
+                .unwrap();
+            assert!(bcfs.flush(ptx, fd).is_ok());
+        }
+        let fd = bcfs
+            .open(
+                ptx,
+                CHAIN_DIR_FILENO.into(),
+                &Path::new("log"),
+                OpenFlags::empty(),
+                FdFlags::APPEND,
+            )
+            .unwrap();
+        assert!(bcfs.flush(ptx, fd).is_ok());
+    }
+);
+
+testcase!(
+    fn read_specials(ptx: &mut dyn PendingTransaction) {
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
+
+        let mut read_special = |name, dir_fd| {
+            let fd = bcfs
+                .open(
+                    ptx,
+                    dir_fd,
+                    &Path::new(name),
+                    OpenFlags::empty(),
+                    FdFlags::empty(),
+                )
+                .unwrap();
+
+            let mut read_buf = vec![0u8; 20];
+            let nbytes = bcfs
+                .read_vectored(ptx, fd, &mut [IoSliceMut::new(&mut read_buf)])
+                .unwrap();
+            bcfs.close(ptx, fd).unwrap();
+            (read_buf, nbytes)
+        };
+
+        // The following expected values are set up in `create_memchain`.
+        let expected_balance = 2000000042;
+        let expected_bytecode = format!("\0asm not wasm {}", 2).into_bytes();
+
+        let (balance_bytes, nbytes) = read_special("balance", HOME_DIR_FILENO.into());
+        let mut balance_arr = [0u8; 16];
+        balance_arr.copy_from_slice(&balance_bytes[..nbytes]);
+        assert_eq!(u128::from_le_bytes(balance_arr), expected_balance);
+
+        let (bytecode, nbytes) = read_special("bytecode", HOME_DIR_FILENO.into());
+        assert_eq!(&bytecode[..nbytes], expected_bytecode.as_slice());
+
+        for i in 1u32..=2 {
+            // stdout and stderr are unreadable.
+            let mut read_buf = vec![0u8; 0];
+            assert_eq!(
+                bcfs.read_vectored(ptx, i.into(), &mut [IoSliceMut::new(&mut read_buf)]),
+                Err(ErrNo::Inval)
+            );
+        }
+    }
+);
+
+testcase!(
+    fn seek_then_read(ptx: &mut dyn PendingTransaction) {
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
+
+        let path = Path::new("hello");
+
+        let fd = bcfs
+            .open(
+                ptx,
+                crate::file::HOME_DIR_FILENO.into(),
+                &path,
+                OpenFlags::CREATE,
+                FdFlags::empty(),
+            )
+            .unwrap();
+
+        let write_buf = b"seeked";
+        bcfs.write_vectored(ptx, fd, &[IoSlice::new(write_buf)])
+            .unwrap();
+        bcfs.close(ptx, fd).unwrap();
+
+        let mut seek_then_read = |offset, whence| {
+            let fd = bcfs
+                .open(
+                    ptx,
+                    crate::file::HOME_DIR_FILENO.into(),
+                    &path,
+                    OpenFlags::empty(),
+                    FdFlags::empty(),
+                )
+                .unwrap();
+
+            bcfs.seek(ptx, fd, offset as i64, whence).unwrap();
+            assert_eq!(bcfs.tell(ptx, fd).unwrap(), offset as u64);
+
+            let mut read_buf = vec![0u8; write_buf.len() - offset];
+            bcfs.read_vectored(ptx, fd, &mut [IoSliceMut::new(&mut read_buf)])
+                .unwrap();
+            bcfs.close(ptx, fd).unwrap();
+
+            assert_eq!(read_buf.as_slice(), &write_buf[offset..]);
+        };
+
+        seek_then_read(3, Whence::Start);
+        seek_then_read(0, Whence::Current);
+    }
+);
+
+testcase!(
+    fn fdstat(ptx: &mut dyn PendingTransaction) {
+        let bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
+        assert_eq!(
+            bcfs.fdstat(ptx, Fd::from(0u32)).unwrap().file_type,
+            FileType::RegularFile
+        );
+        assert_eq!(
+            bcfs.fdstat(ptx, CHAIN_DIR_FILENO.into()).unwrap().file_type,
+            FileType::Directory
+        );
+        assert_eq!(bcfs.fdstat(ptx, Fd::from(99u32)), Err(ErrNo::BadF));
+    }
+);
+
+// TODO: test that FdFlags::APPEND then seek still appends

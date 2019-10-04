@@ -3,7 +3,7 @@ use oasis_types::{AccountMeta, Address, Event};
 
 use crate::{output::Receipt, pending_transaction::PendingTransaction, State};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Block<'bc> {
     pub base_gas: u64,
     pub height: u64,

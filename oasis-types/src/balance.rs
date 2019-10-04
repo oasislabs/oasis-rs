@@ -156,9 +156,50 @@ mod tests {
     }
 
     #[test]
-    fn serde_balance() {
+    fn test_cmp() {
+        assert!(Balance(1) < 2);
+        assert!(Balance(1) == 1);
+    }
+
+    #[test]
+    fn serde_balance_bytes() {
         let orig_bal = Balance(21267647932558653966460912964485513216u128);
         let bal: Balance = serde_cbor::from_slice(&serde_cbor::to_vec(&orig_bal).unwrap()).unwrap();
         assert_eq!(bal, orig_bal);
+    }
+
+    #[test]
+    fn serde_balance_seq() {
+        let orig_bal = Balance(21267647932558653966460912964485513216u128);
+        let bal: Balance =
+            serde_cbor::from_slice(&serde_cbor::to_vec(&orig_bal.0.to_be_bytes()).unwrap())
+                .unwrap();
+        assert_eq!(bal, orig_bal);
+    }
+
+    #[test]
+    fn serde_balance_bad() {
+        let too_short = [0u8; 15];
+        assert!(
+            serde_cbor::from_slice::<Balance>(&serde_cbor::to_vec(&too_short).unwrap()).is_err()
+        );
+        assert!(serde_cbor::from_slice::<Balance>(
+            &serde_cbor::to_vec(&serde_bytes::Bytes::new(&too_short)).unwrap()
+        )
+        .is_err());
+
+        let too_long = [0u8; 17];
+        assert!(
+            serde_cbor::from_slice::<Balance>(&serde_cbor::to_vec(&too_long).unwrap()).is_err()
+        );
+        assert!(serde_cbor::from_slice::<Balance>(
+            &serde_cbor::to_vec(&serde_bytes::Bytes::new(&too_long)).unwrap()
+        )
+        .is_err());
+
+        let orig_bal = Balance(21267647932558653966460912964485513216u128);
+        let ser_bal = serde_cbor::to_vec(&orig_bal).unwrap();
+        assert!(serde_cbor::from_slice::<Balance>(&ser_bal[1..]).is_err());
+        assert!(serde_cbor::from_slice::<Balance>(&ser_bal[..ser_bal.len() - 1]).is_err());
     }
 }

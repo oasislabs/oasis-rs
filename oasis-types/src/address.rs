@@ -153,6 +153,29 @@ pub mod tests {
     }
 
     #[test]
+    fn deserialize_address_from_bytes() {
+        let orig_addr = Address::default();
+        let addr: Address = serde_cbor::from_slice(
+            &serde_cbor::to_vec(&serde_bytes::Bytes::new(&orig_addr.0)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(addr, orig_addr);
+    }
+
+    #[test]
+    fn deserialize_address_from_bytes_bad() {
+        let addr: Result<Address, _> = serde_cbor::from_slice(
+            &serde_cbor::to_vec(&serde_bytes::Bytes::new(&[0u8; 19])).unwrap(),
+        );
+        assert!(addr.is_err());
+
+        let addr: Result<Address, _> = serde_cbor::from_slice(
+            &serde_cbor::to_vec(&serde_bytes::Bytes::new(&[0u8; 21])).unwrap(),
+        );
+        assert!(addr.is_err());
+    }
+
+    #[test]
     #[should_panic]
     fn fail_deserialize_address_from_short_slice() {
         let bytes = vec![1u8; 19];
@@ -164,5 +187,32 @@ pub mod tests {
     fn fail_deserialize_address_from_long_slice() {
         let bytes = vec![1u8; 21];
         serde_cbor::from_slice::<Address>(&serde_cbor::to_vec(&bytes).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn convert_str() {
+        use std::str::FromStr;
+
+        let addr = Address([
+            96, 255, 103, 244, 45, 95, 214, 205, 158, 83, 176, 57, 114, 69, 94, 82, 182, 223, 75,
+            28,
+        ]);
+        let addr_str = "60ff67f42d5fd6cd9e53b03972455e52b6df4b1c";
+        assert_eq!(&addr.path_repr(), addr_str);
+        assert_eq!(&format!("{:x}", addr), addr_str);
+        assert_eq!(format!("{}", addr), format!("0x{}", addr_str));
+        assert_eq!(Address::from_str(addr_str).unwrap(), addr);
+        assert!(Address::from_str(&addr_str[1..]).is_err());
+        assert!(Address::from_str(&format!("{}ab", addr_str)).is_err());
+        assert!(Address::from_str("zz").is_err());
+    }
+
+    #[test]
+    fn convert_raw() {
+        let addr = Address([
+            96, 255, 103, 244, 45, 95, 214, 205, 158, 83, 176, 57, 114, 69, 94, 82, 182, 223, 75,
+            28,
+        ]);
+        assert_eq!(unsafe { Address::from_raw(addr.as_ptr()) }, addr);
     }
 }

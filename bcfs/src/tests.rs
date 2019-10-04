@@ -9,7 +9,7 @@ use std::{
 
 use blockchain_traits::{Blockchain, TransactionOutcome};
 use memchain::{Account, Memchain};
-use oasis_types::Address;
+use oasis_types::{Address, Event};
 use wasi_types::{ErrNo, Fd, FdFlags, FileType, OpenFlags, Whence};
 
 use crate::{
@@ -779,7 +779,7 @@ fn tempfile() {
 
     bc.last_block_mut().transact(
         ADDR_1, ADDR_2, ADDR_1, /* payer */
-        42,     /* value */
+        0,      /* value */
         b"input", BASE_GAS, GAS_PRICE,
     );
 
@@ -832,6 +832,89 @@ testcase!(
         assert!(bcfs.flush(ptx, fd).is_ok());
     }
 );
+
+#[test]
+fn flush_log_to_ptx() {
+    extern "C" fn test_main(ptxp: memchain::PtxPtr) -> u16 {
+        let ptx = unsafe { &mut **ptxp };
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
+
+        let log_fd = bcfs
+            .open(
+                ptx,
+                CHAIN_DIR_FILENO.into(),
+                &Path::new("log"),
+                OpenFlags::empty(),
+                FdFlags::APPEND,
+            )
+            .unwrap();
+
+        let (_topics, _data, log) = create_log();
+        bcfs.write_vectored(ptx, log_fd, &[IoSlice::new(&log)])
+            .unwrap();
+
+        bcfs.flush(ptx, log_fd).unwrap();
+
+        0
+    }
+
+    let mut bc = create_memchain(vec![None, Some(test_main)]);
+
+    let receipt = bc.last_block_mut().transact(
+        ADDR_1, ADDR_2, ADDR_1, /* payer */
+        0,      /* value */
+        b"input", BASE_GAS, GAS_PRICE,
+    );
+
+    let events = receipt.events();
+    assert_eq!(events.len(), 1);
+    let (topics, data, _log) = create_log();
+    assert_eq!(
+        *events[0],
+        Event {
+            emitter: ADDR_2,
+            topics: topics
+                .iter()
+                .map(|t| {
+                    let mut t_bytes = [0u8; 32];
+                    let t_len = std::cmp::min(t.len(), t_bytes.len());
+                    t_bytes[..t_len].copy_from_slice(&t[..t_len]);
+                    t_bytes
+                })
+                .collect(),
+            data,
+        }
+    )
+}
+
+#[test]
+fn flush_output_to_ptx() {
+    const OUTPUT: &[u8] = b"output";
+
+    extern "C" fn test_main(ptxp: memchain::PtxPtr) -> u16 {
+        let ptx = unsafe { &mut **ptxp };
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
+
+        let stdout_fd = Fd::from(1u32);
+
+        bcfs.write_vectored(ptx, stdout_fd, &[IoSlice::new(&OUTPUT)])
+            .unwrap();
+
+        bcfs.flush(ptx, stdout_fd).unwrap();
+
+        0
+    }
+
+    let mut bc = create_memchain(vec![None, Some(test_main)]);
+
+    let receipt = bc.last_block_mut().transact(
+        ADDR_1, ADDR_2, ADDR_1, /* payer */
+        0,      /* value */
+        b"input", BASE_GAS, GAS_PRICE,
+    );
+
+    assert_eq!(receipt.output(), OUTPUT);
+}
 
 testcase!(
     fn read_specials(ptx: &mut dyn PendingTransaction) {
@@ -942,4 +1025,33 @@ testcase!(
     }
 );
 
-// TODO: test that FdFlags::APPEND then seek still appends
+pub fn create_log() -> (Vec<Vec<u8>>, Vec<u8>, Vec<u8>) {
+    let topics = vec![b"hello".to_vec(), b"world".to_vec()];
+    let num_topics_bytes = (topics.len() as u32).to_le_bytes();
+    let topic_lens: Vec<Vec<u8>> = topics
+        .iter()
+        .map(|t| (t.len() as u32).to_le_bytes().to_vec())
+        .collect();
+    let topics_bytes: Vec<u8> = num_topics_bytes
+        .iter()
+        .chain(
+            topics
+                .iter()
+                .enumerate()
+                .flat_map(|(i, t)| topic_lens[i].iter().chain(t.iter())),
+        )
+        .copied()
+        .collect();
+
+    let data = b"I bid thee hello!".to_vec();
+    let data_len = (data.len() as u32).to_le_bytes();
+
+    let log: Vec<u8> = std::iter::empty()
+        .chain(topics_bytes.iter())
+        .chain(data_len.iter())
+        .chain(data.iter())
+        .copied()
+        .collect();
+
+    (topics, data, log)
+}

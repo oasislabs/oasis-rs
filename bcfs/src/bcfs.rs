@@ -634,36 +634,14 @@ mod tests {
 
     #[test]
     fn test_parse_log() {
-        let topics = vec![b"hello", b"world"];
-        let num_topics_bytes = (topics.len() as u32).to_le_bytes();
-        let topic_lens: Vec<Vec<u8>> = topics
-            .iter()
-            .map(|t| (t.len() as u32).to_le_bytes().to_vec())
-            .collect();
-        let topics_bytes: Vec<u8> = num_topics_bytes
-            .iter()
-            .chain(
-                topics
-                    .iter()
-                    .enumerate()
-                    .flat_map(|(i, t)| topic_lens[i].iter().chain(t.iter())),
-            )
-            .copied()
-            .collect();
-
-        let data = b"I bid thee hello!";
-        let data_len = (data.len() as u32).to_le_bytes();
-
-        let log: Vec<u8> = std::iter::empty()
-            .chain(topics_bytes.iter())
-            .chain(data_len.iter())
-            .chain(data.iter())
-            .copied()
-            .collect();
+        let (topics, data, log) = crate::tests::create_log();
 
         let (parsed_topics, parsed_data) = BCFS::parse_log(&log).unwrap();
-        assert_eq!(parsed_topics, topics);
-        assert_eq!(parsed_data, data);
+        assert_eq!(
+            parsed_topics,
+            topics.iter().map(|t| t.as_slice()).collect::<Vec<_>>()
+        );
+        assert_eq!(parsed_data, data.as_slice());
     }
 
     quickcheck::quickcheck! {

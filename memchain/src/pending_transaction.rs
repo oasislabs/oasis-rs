@@ -134,7 +134,8 @@ impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
                 .iter()
                 .map(|t| {
                     let mut t_arr = [0u8; 32];
-                    t_arr.copy_from_slice(&t[..32]);
+                    let topic_len = std::cmp::min(t.len(), 32);
+                    t_arr[..topic_len].copy_from_slice(&t[..topic_len]);
                     t_arr
                 })
                 .collect(),

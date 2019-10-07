@@ -23,19 +23,15 @@ pub struct BCFS {
 }
 
 impl BCFS {
-    /// Creates a new ptx FS with a backing `ptx` and hex stringified
-    /// owner address.
-    pub fn new<S: AsRef<str>>(
-        home_addr: Address,
-        // ptx: &mut dyn PendingTransaction< AccountMeta = M>,
-        blockchain_name: S,
-    ) -> Self {
+    /// Creates a new fs for the account at `home_addr`.
+    pub fn new<S: AsRef<str>>(home_addr: Address, blockchain_name: S) -> Self {
         Self {
             files: File::defaults(blockchain_name.as_ref()),
             home_addr,
         }
     }
 
+    /// Returns preopened dir fds. @see `crate::file::special_file_ctor`
     pub fn prestat(&mut self, _ptx: &mut dyn PendingTransaction, fd: Fd) -> Result<&Path> {
         match &self.file(fd)?.kind {
             FileKind::Directory { path } => Ok(path),
@@ -43,6 +39,16 @@ impl BCFS {
         }
     }
 
+    /// Returns a capability to the resource at the given (relative!) `path`.
+    ///
+    /// `curdir` is the root capability to which the `path` is relative.
+    ///
+    /// The blockchain environment is exposed through files in `/opt/<chain_name>/`:
+    /// * `<address>/balance` - contains the read-only public balance of the account at `<address>`
+    /// * `<address>/bytecode` - contains the read-only Wasm bytecode of the account at `<address>`
+    /// * `log` - an append-only file to which events can be written. @see `BCFS::parse_log`.
+    ///
+    /// The user's home directory is `/opt/<chain_name>/<address>`.
     pub fn open(
         &mut self,
         ptx: &mut dyn PendingTransaction,
@@ -154,6 +160,7 @@ impl BCFS {
             FileKind::Regular { key } => {
                 ptx.state_mut().set(&key, &buf);
                 for f in self.files[(HOME_DIR_FILENO as usize + 1)..].iter() {
+                    // find any aliased files and populate them with the flushed buffer
                     if let Some(File {
                         kind: FileKind::Regular { key: f_key },
                         ..

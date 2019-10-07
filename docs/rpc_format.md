@@ -36,19 +36,17 @@ So, in other words, it's encoded as an enum with `Ok` and `Err` variants (but we
 ### Defined types
 
 You can define your own types (of course).
-They can be `Struct`s, `Enum`s, and `Event`s (but not unions (yet)).
-All defined types are recorded in the interface's `type_defs` field.
+`struct` and `enum` are fully supported.
+Additonally, structs can be used as `Event`s, which can be picked up by off-chain clients.
+Up to three of the struct's fields can be marked as `indexed`, which allows off-chain listeners to efficiently filter for subscribed events.
 
-* `Struct` is a struct with named fields (if you want a tuple struct, use a tuple)
-* `Enum` is a finite set of strings
-* `Event` is mostly a struct, but one that's expected to be used as a template for recording events on the blockchain.
-  Unlike a struct, `Event` can have up to three `indexed` fields, which tell blockchain indexers (e.g.,  gateways) to make these fields amenable to fast lookup.
+Defined types are recorded in the interface's `type_defs` field; only those used in an RPC method are exported, however.
+Defined types from other RPC interfaces will be linked to in the interface's `imports` section.
 
-An interface definition will link to other interface definitions that it depends on for externally defined types.
-
-A note on defined types: you can only expose types in an RPC interface that were (transitively) also defined in an RPC interface.
+**Note**: you can only expose types in an RPC interface that were (transitively) also defined in an RPC interface.
 This is to say that you can't just return a type from a crate--even if it's serializable.
-This is because non-*your preferred language* clients and services aren't able to pull down libraries written in other languages.
+For instance, I might want to use a big integer crate that contains a `[u8; 32]` type, but I'd have to re-define it in my own crate to export it in an RPC.
+The reason for this is that services written in one language can't directly use the libraries from another language.
 The quick solution is to re-define the type in your own interface, but if you find this annoying, please upvote [oasislabs/oasis-rs#213](https://github.com/oasislabs/oasis-rs/issues/213), so that we know to prioritize automating this step.
 
 ### Functions
@@ -73,4 +71,8 @@ Messages are structured as
 Keyword arguments are not supported since language support is far from ubiquitious; the IDL contains the names only for ease of debugging generated clients.
 
 The wire format for an argument is the canonical CBOR encoding of the argument's type.
-Possibly the only thing worth mentioning is that `Address` is serialized as a byte array and `Balance` is a CBOR bigint.
+Also worth mentioning is that `Address` is serialized as a byte array and `Balance` is a CBOR bigint.
+
+Struct variants are represented as objects containing the field names as keys.
+Tuple variants are represented as arrays containing the positional values.
+Enums with payloads (i.e. tagged unions) look like `"VariantName": <data>`, else they're just strings `"VariantName"`.

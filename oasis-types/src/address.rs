@@ -24,8 +24,8 @@ impl Address {
         std::mem::size_of::<Self>()
     }
 
-    pub fn path_repr(&self) -> String {
-        hex::encode(self)
+    pub fn path_repr(&self) -> std::path::PathBuf {
+        std::path::PathBuf::from(hex::encode(self))
     }
 }
 
@@ -198,7 +198,7 @@ pub mod tests {
             28,
         ]);
         let addr_str = "60ff67f42d5fd6cd9e53b03972455e52b6df4b1c";
-        assert_eq!(&addr.path_repr(), addr_str);
+        assert_eq!(&addr.path_repr(), std::path::Path::new(addr_str));
         assert_eq!(&format!("{:x}", addr), addr_str);
         assert_eq!(format!("{}", addr), format!("0x{}", addr_str));
         assert_eq!(Address::from_str(addr_str).unwrap(), addr);

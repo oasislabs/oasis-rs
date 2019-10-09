@@ -153,6 +153,6 @@ pub fn emit(topics: &[&[u8]], data: &[u8]) {
             .unwrap();
         f_log.write_all(topic).unwrap();
     }
-    f_log.write_all(&(data.len() as u32).to_le_bytes());
+    f_log.write_all(&(data.len() as u32).to_le_bytes()).unwrap();
     f_log.write_all(data).unwrap();
 }

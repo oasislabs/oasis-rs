@@ -97,7 +97,7 @@ pub fn build(
 fn gen_def_tys<'a>(defs: &'a [oasis_rpc::TypeDef]) -> impl Iterator<Item = TokenStream> + 'a {
     defs.iter().map(|def| {
         let name = format_ident!("{}", def.name());
-        let derives = quote!(Serialize, Deserialize, Debug, Clone, PartialEq, Hash);
+        let derives = quote!(Serialize, Deserialize, Debug, Clone, PartialEq);
         match def {
             oasis_rpc::TypeDef::Struct { fields, .. } => {
                 let is_newtype = fields

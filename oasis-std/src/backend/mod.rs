@@ -1,7 +1,7 @@
 cfg_if::cfg_if! {
     if #[cfg(all(target_arch = "wasm32", target_os = "wasi"))] {
         mod wasi;
-        use wasi as imp;
+        use self::wasi as imp;
     } else {
         mod ext;
         use ext as imp;
@@ -33,12 +33,13 @@ pub enum Error {
 impl Error {
     #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
     pub fn exit_code(&self) -> u16 {
+        use ::wasi::wasi_unstable::raw::*;
         match self {
-            Error::Unknown => libc::__WASI_EBADMSG,
-            Error::InsufficientFunds => libc::__WASI_EDQUOT,
-            Error::InvalidCallee => libc::__WASI_ENOENT,
-            Error::InvalidInput => libc::__WASI_EINVAL,
-            Error::Execution { .. } => libc::__WASI_ECONNABORTED,
+            Error::Unknown => __WASI_EBADMSG,
+            Error::InsufficientFunds => __WASI_EDQUOT,
+            Error::InvalidCallee => __WASI_ENOENT,
+            Error::InvalidInput => __WASI_EINVAL,
+            Error::Execution { .. } => __WASI_ECONNABORTED,
         }
     }
 

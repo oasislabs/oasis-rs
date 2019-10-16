@@ -1,6 +1,6 @@
 [package]
 name = "oasis-std"
-version = "0.2.6"
+version = "0.2.7"
 license = "Apache-2.0"
 description = "Types and functions for developing against the Oasis platform"
 edition = "2018"
@@ -25,4 +25,4 @@ oasis-test = { version = "0.2", path = "../oasis-test" }
 [target.'cfg(target_os = "wasi")'.dependencies]
 base64 = "0.10"
 hex = "0.4"
-libc = "0.2"
+wasi = "0.7"

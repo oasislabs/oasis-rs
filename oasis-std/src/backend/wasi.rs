@@ -6,8 +6,8 @@ use std::{
     str::FromStr,
 };
 
-use libc::{__wasi_errno_t, __wasi_fd_t};
 use oasis_types::{Address, Balance};
+use wasi::wasi_unstable::raw::{__wasi_errno_t, __wasi_fd_t};
 
 use super::Error;
 
@@ -99,12 +99,13 @@ pub fn transact(callee: &Address, value: Balance, input: &[u8]) -> Result<Vec<u8
     f_out
         .read_to_end(&mut out)
         .unwrap_or_else(|err| panic!(err));
+    use wasi::wasi_unstable::raw::*;
     match errno {
-        libc::__WASI_ESUCCESS => Ok(out),
-        libc::__WASI_EFAULT | libc::__WASI_EINVAL => Err(Error::InvalidInput),
-        libc::__WASI_ENOENT => Err(Error::InvalidCallee),
-        libc::__WASI_EDQUOT => Err(Error::InsufficientFunds),
-        libc::__WASI_ECONNABORTED => Err(Error::Execution { payload: out }),
+        __WASI_ESUCCESS => Ok(out),
+        __WASI_EFAULT | __WASI_EINVAL => Err(Error::InvalidInput),
+        __WASI_ENOENT => Err(Error::InvalidCallee),
+        __WASI_EDQUOT => Err(Error::InsufficientFunds),
+        __WASI_ECONNABORTED => Err(Error::Execution { payload: out }),
         _ => Err(Error::Unknown),
     }
 }

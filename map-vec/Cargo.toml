@@ -1,0 +1,17 @@
+[package]
+name = "map-vec"
+version = "0.1.0"
+license = "Apache-2.0"
+authors = ["Oasis Labs <feedback@oasislabs.com>"]
+repository = "https://github.com/oasislabs/oasis-rs"
+description = "The Map and Set APIs backed by Vec"
+readme = "README.md"
+categories = ["data-structures", "embedded"]
+edition = "2018"
+keywords = ["vec", "map", "set"]
+
+[dependencies]
+borsh = "0.2"
+
+[dev-dependencies]
+rand = "0.7"

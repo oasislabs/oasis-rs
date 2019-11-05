@@ -21,7 +21,7 @@ pub fn build(
     gen_dir: impl AsRef<Path>,
     out_dir: impl AsRef<Path>,
     mut rustc_args: Vec<String>,
-) -> Result<Vec<Import>, failure::Error> {
+) -> anyhow::Result<Vec<Import>> {
     let out_dir = out_dir.as_ref();
 
     let services = resolve_imports(
@@ -65,8 +65,7 @@ pub fn build(
         let service_toks = quote! {
             #![allow(warnings)]
 
-            #[macro_use]
-            extern crate serde;
+            use borsh::{BorshSerialize, BorshDeserialize};
 
             #(#def_tys)*
 
@@ -86,7 +85,7 @@ pub fn build(
         rustc_args.push(mod_path.display().to_string());
         rustc_args.push(format!("-Cextra-filename=-{:016x}", interface_hash));
         rustc_driver::run_compiler(&rustc_args, &mut rustc_driver::DefaultCallbacks, None, None)
-            .map_err(|_| failure::format_err!("Could not build `{}`", mod_name))?;
+            .map_err(|_| anyhow::format_err!("Could not build `{}`", mod_name))?;
         rustc_args.pop();
         rustc_args.pop();
         rustc_args.pop();
@@ -97,7 +96,15 @@ pub fn build(
 fn gen_def_tys<'a>(defs: &'a [oasis_rpc::TypeDef]) -> impl Iterator<Item = TokenStream> + 'a {
     defs.iter().map(|def| {
         let name = format_ident!("{}", def.name());
-        let derives = quote!(Serialize, Deserialize, Debug, Clone, PartialEq, Hash);
+        let mut hashable_checker = HashableChecker::default();
+        oasis_rpc::visitor::IdlVisitor::visit_type_def(&mut hashable_checker, def);
+        let hash_derive = if hashable_checker.is_hash() {
+            quote!(Hash)
+        } else {
+            quote!()
+        };
+        let derives =
+            quote!(BorshSerialize, BorshDeserialize, Debug, Clone, PartialEq, #hash_derive);
         match def {
             oasis_rpc::TypeDef::Struct { fields, .. } => {
                 let is_newtype = fields
@@ -196,7 +203,7 @@ pub fn gen_client(service: &ImportedService) -> TokenStream {
 }
 
 fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = TokenStream> + 'a {
-    functions.iter().map(|func| {
+    functions.iter().enumerate().map(|(func_idx, func)| {
         let fn_name = format_ident!("{}", func.name);
 
         let self_ref = match func.mutability {
@@ -216,37 +223,16 @@ fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = To
             None => (quote!(()), quote!(())),
         };
 
-        let (payload_ty, payload_def) = if arg_names.is_empty() {
-            (quote!(&[()]), quote!(&[]))
-        } else {
-            (quote!(_), quote!(&(#(#arg_names.borrow()),*,)))
-        };
-
         quote! {
             pub fn #fn_name(
                 #self_ref,
                 ctx: &oasis_std::Context,
                 #(#arg_names: #arg_tys),*
            ) -> Result<#output_ty, oasis_std::RpcError<#err_ty>> {
-                use std::borrow::Borrow as _;
-                use serde::ser::{Serializer as _, SerializeStruct as _};
-
-                let mut serializer = oasis_std::reexports::serde_cbor::Serializer::new(Vec::new());
-                let mut sstruct = serializer.serialize_struct("RpcPayload", 2).unwrap();
-                sstruct.serialize_field("method", stringify!(#fn_name)).unwrap();
-                let payload: #payload_ty = #payload_def;
-                sstruct.serialize_field("payload", payload).unwrap();
-                sstruct.end().unwrap();
-                let payload = serializer.into_inner();
-
                 #[cfg(target_os = "wasi")] {
-                    let output = oasis_std::backend::transact(
-                        &self.address,
-                        ctx.value.unwrap_or_default(),
-                        &payload,
-                    )?;
-                    Ok(oasis_std::reexports::serde_cbor::from_slice(&output)
-                       .map_err(|_| oasis_std::RpcError::InvalidOutput(output))?)
+                    let output = oasis_std::invoke!(self.address, #func_idx, ctx, #(&#arg_names),*);
+                    Ok(BorshDeserialize::try_from_slice(&output)
+                        .map_err(|_| oasis_std::RpcError::InvalidOutput(output))?)
                 }
                 #[cfg(not(target_os = "wasi"))] {
                     unimplemented!("Native client not yet implemented.")
@@ -292,6 +278,25 @@ fn get_rustc_version() -> String {
         .ok()
         .and_then(|out| String::from_utf8(out.stdout).ok())
         .expect("Could not determine rustc version")
+}
+
+#[derive(Default)]
+struct HashableChecker {
+    contains_nonhashable: bool,
+}
+
+impl HashableChecker {
+    pub fn is_hash(&self) -> bool {
+        !self.contains_nonhashable
+    }
+}
+
+impl oasis_rpc::visitor::IdlVisitor for HashableChecker {
+    fn visit_type(&mut self, ty: &oasis_rpc::Type) {
+        use oasis_rpc::Type::{F32, F64};
+        self.contains_nonhashable |= *ty == F32 || *ty == F64;
+        oasis_rpc::visitor::walk_type(self, ty);
+    }
 }
 
 #[cfg(test)]

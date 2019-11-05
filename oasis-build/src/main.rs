@@ -184,7 +184,7 @@ fn collect_import_rustc_args(args: &[String]) -> Vec<String> {
 fn load_deps(
     manifest_path: &Path,
     service_name: &str,
-) -> Result<BTreeMap<String, ImportLocation>, failure::Error> {
+) -> anyhow::Result<BTreeMap<String, ImportLocation>> {
     let cargo_toml: toml::Value = toml::from_slice(&std::fs::read(manifest_path).unwrap()).unwrap();
     Ok(cargo_toml
         .as_table()
@@ -200,7 +200,7 @@ fn load_deps(
         .cloned()
         .map(|d| d.try_into())
         .unwrap_or_else(|| Ok(BTreeMap::new()))
-        .map_err(|err| failure::format_err!("could not parse Oasis dependencies: {}", err))?)
+        .map_err(|err| anyhow::format_err!("could not parse Oasis dependencies: {}", err))?)
 }
 
 fn pack_iface_into_wasm(

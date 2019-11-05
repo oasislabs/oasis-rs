@@ -1,7 +1,5 @@
 #[macro_use]
 extern crate derive_more;
-#[macro_use]
-extern crate serde;
 
 mod address;
 mod balance;

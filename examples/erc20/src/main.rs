@@ -1,29 +1,15 @@
-#[macro_use]
-extern crate serde;
-
+use borsh::{BorshDeserialize, BorshSerialize};
 use map_vec::{map::Entry, Map, Set};
 use oasis_std::{Address, Context, Event};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, failure::Fail)]
+#[derive(Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
 pub enum Error {
-    #[fail(display = "Unknown error occured.")]
     Unknown,
-
-    #[fail(display = "Only existing admins can perform this operation.")]
     AdminPrivilegesRequired,
-
-    #[fail(display = "Insuffient funds for transfer from {:?}.", address)]
     InsufficientFunds { address: Address },
-
-    #[fail(display = "Address {:?} has no allowance from address {:?}.", from, to)]
     NoAllowanceGiven { from: Address, to: Address },
-
-    #[fail(
-        display = "Transfer request {} exceeds allowance {}.",
-        amount, allowance
-    )]
     RequestExceedsAllowance { amount: u64, allowance: u64 },
 }
 
@@ -37,7 +23,7 @@ pub struct ERC20Token {
 }
 
 // A Transfer event struct
-#[derive(Serialize, Deserialize, Clone, Debug, Default, Event)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, Default, Event)]
 pub struct Transfer {
     #[indexed]
     pub from: Address,
@@ -48,7 +34,7 @@ pub struct Transfer {
 }
 
 // An Approval event struct
-#[derive(Serialize, Deserialize, Clone, Debug, Default, Event)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, Default, Event)]
 pub struct Approval {
     #[indexed]
     pub sender: Address,

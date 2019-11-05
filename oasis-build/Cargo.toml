@@ -1,6 +1,6 @@
 [package]
 name = "oasis-build"
-version = "0.2.5"
+version = "0.3.0"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
 license = "Apache-2.0"
@@ -11,18 +11,17 @@ keywords = ["idl", "interface", "rpc", "plugin"]
 publish = false
 
 [dependencies]
+anyhow = "1.0"
 colored = "1.8"
-failure = "0.1"
 heck = "0.3"
-oasis-rpc = { version = "0.2", path = "../oasis-rpc", features = ["resolve"] }
+oasis-rpc = { version = "0.3", path = "../oasis-rpc", features = ["resolve", "visitor"] }
 proc-macro2 = "1.0"
 quote = "1.0"
-serde_json = "1.0"
 syn = { version = "1.0", default-features = false, features = ["parsing"] }
+thiserror = "1.0"
 toml = "0.5"
-walrus = "0.12"
+walrus = "0.13"
 
 [dev-dependencies]
 compiletest_rs = { version = "=0.3.22", features = ["tmp"] }
-oasis-std = { version = "0.2", path = "../oasis-std" }
-serde = { version = "1.0", features = ["derive"] }
+oasis-std = { version = "0.3", path = "../oasis-std" }

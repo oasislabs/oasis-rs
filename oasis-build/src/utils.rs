@@ -2,6 +2,7 @@ use rustc::{
     hir::{self, def_id::DefId},
     ty::TyCtxt,
 };
+use syntax::ast;
 use syntax_pos::symbol::Symbol;
 
 pub fn is_std(crate_name: Symbol) -> bool {
@@ -9,7 +10,7 @@ pub fn is_std(crate_name: Symbol) -> bool {
     crate_name == "std"
         || crate_name == "core"
         || crate_name == "alloc"
-        || crate_name == "map_vec"
+        || crate_name == "map-vec"
         || crate_name.starts_with("oasis")
 }
 
@@ -41,17 +42,17 @@ pub fn get_type_args(path: &hir::Path) -> Vec<&hir::Ty> {
         .unwrap_or_default()
 }
 
-pub fn is_self_ref(ty: &syntax::ast::Ty) -> bool {
+pub fn is_self_ref(ty: &ast::Ty) -> bool {
     match &ty.node {
-        syntax::ast::TyKind::Rptr(_, mut_ty) => mut_ty.ty.node.is_implicit_self(),
+        ast::TyKind::Rptr(_, mut_ty) => mut_ty.ty.node.is_implicit_self(),
         _ => false,
     }
 }
 
-pub fn is_context_ref(ty: &syntax::ast::Ty) -> bool {
+pub fn is_context_ref(ty: &ast::Ty) -> bool {
     match &ty.node {
-        syntax::ast::TyKind::Rptr(_, mut_ty) => match &mut_ty.ty.node {
-            syntax::ast::TyKind::Path(_, path) => path_ends_with(&path, &["oasis_std", "Context"]),
+        ast::TyKind::Rptr(_, mut_ty) => match &mut_ty.ty.node {
+            ast::TyKind::Path(_, path) => path_ends_with(&path, &["oasis_std", "Context"]),
             _ => false,
         },
         _ => false,
@@ -60,11 +61,19 @@ pub fn is_context_ref(ty: &syntax::ast::Ty) -> bool {
 
 /// Returns whether `path` ends with `suffix`.
 /// e.g, `path_is_suffix(crate::oasis_std::service, ["oasis_std", "service"]) == true`
-pub fn path_ends_with(path: &syntax::ast::Path, suffix: &[&'static str]) -> bool {
+pub fn path_ends_with(path: &ast::Path, suffix: &[&'static str]) -> bool {
     for (path_seg, suffix_seg_str) in path.segments.iter().rev().zip(suffix.iter().rev()) {
         if path_seg.ident.name != Symbol::intern(suffix_seg_str) {
             return false;
         }
     }
     true
+}
+
+pub fn make_ty(node: ast::TyKind) -> syntax::ptr::P<ast::Ty> {
+    syntax::ptr::P(ast::Ty {
+        id: ast::DUMMY_NODE_ID,
+        span: syntax_pos::DUMMY_SP,
+        node,
+    })
 }

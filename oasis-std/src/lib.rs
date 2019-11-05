@@ -8,16 +8,13 @@
 )]
 #![cfg_attr(target_os = "wasi", feature(wasi_ext))]
 
-#[macro_use]
-pub extern crate serde;
 extern crate oasis_macros;
 
 pub mod backend;
 pub mod exe;
 
 pub mod reexports {
-    pub use serde;
-    pub use serde_cbor;
+    pub use borsh;
     pub use tiny_keccak;
 }
 
@@ -45,15 +42,16 @@ macro_rules! service {
 /// ## Usage
 ///
 /// ```norun
-/// invoke!(addr: Address, method: impl AsRef<str>, ctx: &Context, args: ..impl Serialize);
+/// invoke!(addr: Address, method_id: u32, ctx: &Context, args: ..impl Serialize);
 /// ```
+/// Where `method_id` is the index of the desired function in the exported IDL.
 ///
 /// ## Example
 ///
 /// ```norun
 /// invoke!(
 ///     some_address,
-///     "method",
+///     0,
 ///     &Context::default(),
 ///     "an arg",
 ///     &["some", "more", "args"],
@@ -62,16 +60,16 @@ macro_rules! service {
 /// ```
 #[macro_export]
 macro_rules! invoke {
-    ($address:expr, $method:expr, $ctx:expr, $( $arg:expr ),* $(,)?) => {{
-        use crate::serde::ser::{Serializer as _, SerializeStruct as _};
-        let mut serializer = $crate::reexports::serde_cbor::Serializer::new(Vec::new());
-        serializer.serialize_struct("Message", 2).and_then(|mut message| {
-            message.serialize_field("method", $method)?;
-            message.serialize_field("payload", &( $( &$arg ),* ))?;
-            message.end()
-        })
-        .map_err(|_| $crate::backend::Error::InvalidInput)
-        .and_then(|_| $address.call($ctx, &serializer.into_inner()))
+    ($address:expr, $method_id:literal, $ctx:expr, $( $arg:expr ),* $(,)?) => {{
+        use std::io::Write as _;
+        let mut buf = Vec::new();
+        buf.write_all(&($method_id as u8).to_le_bytes()).unwrap();
+        Ok(())
+            $(.and_then(|_| {
+                $crate::reexports::borsh::BorshSerialize::serialize(&$arg, &mut buf)
+            }))*
+            .map_err(|_| $crate::backend::Error::InvalidInput)
+            .and_then(|_| $address.call($ctx, &buf))
     }}
 }
 
@@ -113,7 +111,7 @@ mod tests {
     fn test_invoke() {
         invoke!(
             Address::default(),
-            "method",
+            0,
             &Context::default(),
             "an arg",
             &["some", "more", "args"],

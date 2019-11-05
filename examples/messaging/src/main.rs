@@ -1,6 +1,4 @@
-#[macro_use]
-extern crate serde; // Provides `Serialize` and `Deserialize`.
-
+use borsh::{BorshDeserialize, BorshSerialize};
 use map_vec::{Map, Set};
 use oasis_std::{Address, Context, Event};
 
@@ -23,25 +21,23 @@ pub struct MessageBoard {
     accounts: Map<UserId, Account>,
 }
 
-// Types used in the state struct must derive serde `Serialize` and `Deserialize`
-// so that they can be persisted and loaded from storage. They must also derive `Clone`
-// (and optionally `Copy`) so that service RPC methods can accept borrowed data which
-// improves deserialization performance.
+// Types used in the state struct must derive `BorshSerialize` and `BorshDeserialize`
+// so that they can be persisted and loaded from storage.
 //
 // Types do not need to be defined in the same module as the service.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 pub struct Post {
     author: UserId,
     text: String,
     comments: Vec<Message>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, Default)]
 pub struct Account {
     inbox: Vec<Message>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
 pub struct Message {
     from: UserId,
     text: String,
@@ -57,7 +53,7 @@ pub struct Message {
 // A highly confidential application will probably not want to emit events at all since
 // the fact that an event was even emitted can leak information. (It can be done using
 // techniques from oblivious transfer, but it requires extreme care to do properly.)
-#[derive(Serialize, Deserialize, Event)]
+#[derive(BorshSerialize, BorshDeserialize, Event)]
 pub struct MessagePosted {
     #[indexed]
     pub author: UserId,
@@ -67,7 +63,7 @@ pub struct MessagePosted {
 
 type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(BorshSerialize, BorshDeserialize, Debug)]
 pub enum Error {
     InvalidUserId,
     InvalidPostId,

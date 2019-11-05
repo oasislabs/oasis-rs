@@ -10,10 +10,6 @@ readme = "README.md"
 keywords = ["blockchain", "oasis"]
 
 [dependencies]
+borsh = "0.2"
 derive_more = "0.15"
 hex = "0.4"
-serde = { version = "1.0", features = ["derive"] }
-
-[dev-dependencies]
-serde_bytes = "0.11"
-serde_cbor = "0.10"

@@ -5,18 +5,24 @@ pub fn service_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream
     }
     let input = parse_macro_input!(input as syn::DeriveInput);
     let service = &input.ident;
+    let impl_wrapper_ident = format_ident!("_IMPL_SERVICE_FOR_{}", service);
     proc_macro::TokenStream::from(match get_serde(&input) {
         Some((ser, de)) => {
             quote! {
-                impl oasis_std::exe::Service for #service {
-                    fn coalesce() -> Self {
-                        #de
-                    }
+                #[allow(warnings)]
+                const #impl_wrapper_ident: () = {
+                    use oasis_std::reexports::borsh::{BorshSerialize, BorshDeserialize};
 
-                    fn sunder(service: Self) {
-                        #ser
+                    impl oasis_std::exe::Service for #service {
+                        fn coalesce() -> Self {
+                            #de
+                        }
+
+                        fn sunder(service: Self) {
+                            #ser
+                        }
                     }
-                }
+                };
             }
         }
         None => quote! {},
@@ -97,12 +103,13 @@ fn get_type_serde(
             quote! {
                 oasis_std::backend::write(
                     #key.as_bytes(),
-                    &oasis_std::reexports::serde_cbor::to_vec(&service.#struct_idx).unwrap()
+                    &service.#struct_idx.try_to_vec().unwrap()
                 )
             },
             quote! {
-                oasis_std::reexports::serde_cbor::from_slice(
-                    &oasis_std::backend::read(#key.as_bytes())).unwrap()
+                BorshDeserialize::try_from_slice(
+                    &oasis_std::backend::read(#key.as_bytes())
+                ).unwrap()
             },
         ),
         ty => {

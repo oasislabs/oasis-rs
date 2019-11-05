@@ -6,7 +6,7 @@ members = [
     "examples/erc20",
     "examples/hello-world",
     "examples/messaging",
-    "examples/sealed-auctions",
+    "map-vec",
     "memchain",
     "oasis-build",
     "oasis-macros",
@@ -20,3 +20,9 @@ exclude = ["tests"]
 [profile.release]
 lto = true
 opt-level = 3
+
+[patch.crates-io]
+map-vec = { path = "map-vec" }
+oasis-std = { path = "oasis-std" }
+oasis-test = { path = "oasis-test" }
+borsh = { path = "/oasis/borsh/borsh-rs/borsh" }

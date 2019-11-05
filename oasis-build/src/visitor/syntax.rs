@@ -1,12 +1,6 @@
 use rustc::util::nodemap::FxHashMap;
-use syntax::{
-    ast,
-    mut_visit::{self, MutVisitor as _},
-    ptr::P,
-    source_map::Span,
-    visit,
-};
-use syntax_pos::symbol::{Ident, Symbol};
+use syntax::{ast, mut_visit::self, ptr::P, source_map::Span, visit};
+use syntax_pos::symbol::Symbol;
 
 use super::parsed_rpc::ParsedRpc;
 use crate::error::{RpcError, RpcWarning};
@@ -197,76 +191,33 @@ impl<'ast> visit::Visitor<'ast> for PrintlnFinder {
 }
 
 #[derive(Default)]
-pub struct RefChecker {
-    pub has_ref: bool,
-}
+pub struct Deborrower;
 
-impl<'ast> visit::Visitor<'ast> for RefChecker {
-    fn visit_ty(&mut self, ty: &'ast ast::Ty) {
-        if let ast::TyKind::Rptr(..) = &ty.node {
-            self.has_ref = true;
-        }
-        visit::walk_ty(self, ty);
-    }
-}
-
-pub struct ArgLifetimeTransducer {
-    next_lifetimes: Box<dyn Iterator<Item = ast::Lifetime>>,
-}
-
-impl Default for ArgLifetimeTransducer {
-    fn default() -> Self {
-        Self {
-            next_lifetimes: box (b'a'..=b'z').map(|ch| {
-                let ident = Symbol::intern(&format!("'{}", ch as char));
-                ast::Lifetime {
-                    id: ast::DUMMY_NODE_ID,
-                    ident: Ident::with_dummy_span(ident),
-                }
-            }),
-        }
-    }
-}
-
-impl ArgLifetimeTransducer {
-    pub fn transduce(&mut self, ty: &P<ast::Ty>) -> (Vec<Symbol>, P<ast::Ty>) {
-        let mut vis = LifetimeInserter {
-            next_lifetimes: &mut self.next_lifetimes,
-            lifetimes: Vec::new(),
-        };
-        let mut ty = ty.clone();
-        vis.visit_ty(&mut ty);
-        (vis.lifetimes, ty)
-    }
-}
-
-struct LifetimeInserter<'a> {
-    next_lifetimes: &'a mut dyn Iterator<Item = ast::Lifetime>,
-    lifetimes: Vec<Symbol>,
-}
-
-impl<'a> mut_visit::MutVisitor for LifetimeInserter<'a> {
+impl mut_visit::MutVisitor for Deborrower {
     fn visit_ty(&mut self, ty: &mut P<ast::Ty>) {
-        match &mut ty.node {
-            ast::TyKind::Rptr(ref mut maybe_lifetime, _) => {
-                if maybe_lifetime.is_none() {
-                    *maybe_lifetime = Some(self.next_lifetimes.next().unwrap());
-                }
-                self.lifetimes
-                    .push(maybe_lifetime.as_ref().unwrap().ident.name);
-            }
-            ast::TyKind::Path(_, path) => {
-                if let Some(args) = &path.segments.last().unwrap().args {
-                    if let ast::GenericArgs::AngleBracketed(ab_args) = &**args {
-                        self.lifetimes
-                            .extend(ab_args.args.iter().filter_map(|arg| match arg {
-                                ast::GenericArg::Lifetime(lt) => Some(lt.ident.name),
-                                _ => None,
-                            }))
+        if let ast::TyKind::Rptr(_, ast::MutTy { ty: refd_ty, .. }) = &ty.node {
+            match &refd_ty.node {
+                ast::TyKind::Path(None, path) => {
+                    if path.segments.last().unwrap().ident.name == Symbol::intern("str") {
+                        *ty = crate::utils::make_ty(ast::TyKind::Path(
+                            None,
+                            ast::Path::from_ident(ast::Ident::from_str("String")),
+                        ))
                     }
                 }
+                ast::TyKind::Slice(slice_ty) => {
+                    let mut path = ast::Path::from_ident(ast::Ident::from_str("Vec"));
+                    path.segments[0].args = Some(P(ast::GenericArgs::AngleBracketed(
+                        ast::AngleBracketedArgs {
+                            span: syntax_pos::DUMMY_SP,
+                            args: vec![ast::GenericArg::Type(slice_ty.clone())],
+                            constraints: Vec::new(),
+                        },
+                    )));
+                    *ty = crate::utils::make_ty(ast::TyKind::Path(None, path));
+                }
+                _ => (),
             }
-            _ => (),
         }
         mut_visit::noop_visit_ty(ty, self);
     }

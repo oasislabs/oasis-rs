@@ -1,12 +1,10 @@
-#[macro_use]
-extern crate serde;
-
+use borsh::{BorshDeserialize, BorshSerialize};
 use map_vec::{map::Entry, Map};
 use oasis_std::Context;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
+#[derive(BorshSerialize, BorshDeserialize, Debug, Eq, PartialEq)]
 pub enum Error {
     UnsupportedLanguage,
     DuplicateEntry,

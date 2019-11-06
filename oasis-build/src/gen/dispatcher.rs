@@ -112,9 +112,12 @@ fn generate_rpc_dispatcher(
     quote! {
         #[allow(warnings)]
         fn _oasis_dispatcher() {
-            use oasis_std::{reexports::borsh::{BorshSerialize, BorshDeserialize}, Service as _};
+            use oasis_std::{
+                reexports::borsh::{BorshSerialize, BorshDeserialize},
+                Service as _
+            };
 
-            #[derive(BorshDeserialize)]
+            #[derive(oasis_std::reexports::borsh::BorshDeserialize)]
             enum RpcPayload {
                 #(#rpc_payload_variants),*
             }
@@ -240,9 +243,12 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &ParsedRpc) -> TokenStream {
         #[allow(warnings)]
         #[no_mangle]
         extern "C" fn _oasis_deploy() -> u8 {
-            use oasis_std::{reexports::borsh::{BorshSerialize, BorshDeserialize}, Service as _};
+            use oasis_std::{
+                reexports::borsh::{BorshSerialize, BorshDeserialize},
+                Service as _
+            };
 
-            #[derive(BorshDeserialize)]
+            #[derive(oasis_std::reexports::borsh::BorshDeserialize)]
             #[allow(non_camel_case_types)]
             struct CtorPayload(#ctor_struct_args);
 

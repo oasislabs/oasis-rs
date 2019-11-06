@@ -6,7 +6,7 @@ impl Service {
         Self
     }
 
-    pub fn bad_import(&mut self, _ctx: &oasis_std::Context, arg: serde_cbor::Value) {}
+    pub fn bad_import(&mut self, _ctx: &oasis_std::Context, arg: xcc::NonXccType) {}
 }
 
 fn main() {

@@ -82,7 +82,7 @@ pub mod tests {
     #[test]
     fn roundtrip_serialize_address() {
         let bytes = [1u8; 20];
-        let addr = Address::try_from_slice(&bytes.try_to_vec().unwrap()).unwrap();
+        let addr = Address::try_from_slice(&Address(bytes).try_to_vec().unwrap()).unwrap();
         assert_eq!(addr.0, bytes);
     }
 

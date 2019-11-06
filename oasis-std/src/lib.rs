@@ -15,8 +15,6 @@ pub mod exe;
 
 pub mod reexports {
     pub use borsh;
-    pub use borsh_derive;
-    pub use borsh_derive_internal;
     pub use tiny_keccak;
 }
 

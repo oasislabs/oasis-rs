@@ -113,7 +113,7 @@ fn generate_rpc_dispatcher(
         #[allow(warnings)]
         fn _oasis_dispatcher() {
             use oasis_std::{
-                reexports::borsh::{BorshSerialize, BorshDeserialize},
+                reexports::borsh::{self, BorshSerialize, BorshDeserialize},
                 Service as _
             };
 
@@ -244,7 +244,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &ParsedRpc) -> TokenStream {
         #[no_mangle]
         extern "C" fn _oasis_deploy() -> u8 {
             use oasis_std::{
-                reexports::borsh::{BorshSerialize, BorshDeserialize},
+                reexports::borsh::{self, BorshSerialize, BorshDeserialize},
                 Service as _
             };
 

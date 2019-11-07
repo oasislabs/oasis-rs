@@ -14,8 +14,8 @@ pub mod backend;
 pub mod exe;
 
 pub mod reexports {
-    pub use borsh;
-    pub use tiny_keccak;
+    pub extern crate borsh;
+    pub extern crate tiny_keccak;
 }
 
 pub use oasis_macros::{default, Event, Service};

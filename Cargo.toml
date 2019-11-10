@@ -25,6 +25,4 @@ opt-level = 3
 map-vec = { path = "map-vec" }
 oasis-std = { path = "oasis-std" }
 oasis-test = { path = "oasis-test" }
-borsh = { path = "/oasis/borsh/borsh-rs/borsh" }
-borsh-derive = { path = "/oasis/borsh/borsh-rs/borsh-derive" }
-borsh-derive-internal = { path = "/oasis/borsh/borsh-rs/borsh-derive-internal" }
+borsh = { git = "https://github.com/nhynes/borsh" }

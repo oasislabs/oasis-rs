@@ -20,6 +20,7 @@ tiny-keccak = "1.4"
 
 [dev-dependencies]
 oasis-test = { version = "0.2", path = "../oasis-test" }
+rand = "0.7"
 
 [target.'cfg(target_os = "wasi")'.dependencies]
 base64 = "0.11"

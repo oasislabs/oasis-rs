@@ -4,13 +4,19 @@
     non_exhaustive,
     proc_macro_hygiene,
     specialization,
-    trait_alias
+    trait_alias,
+    // the following are used by `collections::*`
+    drain_filter,
+    shrink_to,
+    try_reserve,
 )]
 #![cfg_attr(target_os = "wasi", feature(wasi_ext))]
 
 extern crate oasis_macros;
 
 pub mod backend;
+pub mod client;
+pub mod collections;
 pub mod exe;
 
 pub mod reexports {

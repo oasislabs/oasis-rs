@@ -1,6 +1,8 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use map_vec::{Map, Set};
-use oasis_std::{Address, Context, Event};
+use oasis_std::{
+    collections::{Map, Set},
+    Address, Context, Event,
+};
 
 pub type UserId = Address;
 pub type PostId = u32;

@@ -6,7 +6,6 @@ members = [
     "examples/erc20",
     "examples/hello-world",
     "examples/messaging",
-    "map-vec",
     "memchain",
     "oasis-build",
     "oasis-macros",
@@ -22,7 +21,6 @@ lto = true
 opt-level = 3
 
 [patch.crates-io]
-map-vec = { path = "map-vec" }
 oasis-std = { path = "oasis-std" }
 oasis-test = { path = "oasis-test" }
 borsh = { git = "https://github.com/nhynes/borsh" }

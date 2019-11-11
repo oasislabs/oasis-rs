@@ -6,7 +6,6 @@ edition = "2018"
 publish = false
 
 [dependencies]
-map-vec = { version = "0.1", path = "../../map-vec" }
 oasis-rpc = { version = "0.3", path = "../../oasis-rpc", features = ["saveload"] }
 oasis-std = { version = "0.3", path = "../../oasis-std" }
 serde_json = "1.0"

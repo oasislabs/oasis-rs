@@ -5,8 +5,10 @@ extern crate serde;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use map_vec::{Map, Set};
-use oasis_std::{Address, Balance, Context, Event, Service};
+use oasis_std::{
+    collections::{Map, Set},
+    Address, Balance, Context, Event, Service,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum InnerTy {

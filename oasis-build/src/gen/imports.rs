@@ -256,7 +256,17 @@ fn gen_ctors(ctor: &oasis_rpc::Constructor, _bytecode: &[u8]) -> TokenStream {
     };
 
     quote! {
+        #[cfg(target_os = "wasi")]
         pub fn new(
+            ctx: &oasis_std::Context,
+            #(#arg_names: #arg_tys)*
+        ) -> Result<Self, oasis_std::RpcError<#error_ty>> {
+            unimplemented!()
+        }
+
+        #[cfg(not(target_os = "wasi"))]
+        pub fn new(
+            gateway: &dyn oasis_std::client::Gateway,
             ctx: &oasis_std::Context,
             #(#arg_names: #arg_tys)*
         ) -> Result<Self, oasis_std::RpcError<#error_ty>> {

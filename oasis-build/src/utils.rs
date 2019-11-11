@@ -10,7 +10,6 @@ pub fn is_std(crate_name: Symbol) -> bool {
     crate_name == "std"
         || crate_name == "core"
         || crate_name == "alloc"
-        || crate_name == "map-vec"
         || crate_name.starts_with("oasis")
 }
 

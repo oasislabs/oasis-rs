@@ -1,6 +1,8 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use map_vec::{map::Entry, Map, Set};
-use oasis_std::{Address, Context, Event};
+use oasis_std::{
+    collections::{map::Entry, Map, Set},
+    Address, Context, Event,
+};
 
 pub type Result<T> = std::result::Result<T, Error>;
 

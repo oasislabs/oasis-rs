@@ -5,7 +5,7 @@ use std::{
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
-/// `map_vec::Set` is a data structure with a [`Set`](https://doc.rust-lang.org/std/collections/hash_set/struct.HashSet.html)-like API but based on a `Vec`.
+/// `Set` is a data structure with a [`Set`](https://doc.rust-lang.org/std/collections/hash_set/struct.HashSet.html)-like API but based on a `Vec`.
 /// It's primarily useful when you care about constant factors or prefer determinism to speed.
 /// Please refer to the [docs for `Set`](https://doc.rust-lang.org/std/collections/hash_set/struct.HashSet.html) for details and examples of the Set API.
 ///
@@ -13,15 +13,15 @@ use borsh::{BorshDeserialize, BorshSerialize};
 ///
 /// ```
 /// fn main() {
-///   let mut set1 = map_vec::Set::new();
-///   let mut set2 = map_vec::Set::new();
-///   set1.insert(1);
-///   set1.insert(2);
-///   set2.insert(2);
-///   set2.insert(3);
-///   let mut set3 = map_vec::Set::with_capacity(1);
-///   assert!(set3.insert(3));
-///   assert_eq!(&set2 - &set1, set3);
+///     let mut set1 = Set::new();
+///     let mut set2 = Set::new();
+///     set1.insert(1);
+///     set1.insert(2);
+///     set2.insert(2);
+///     set2.insert(3);
+///     let mut set3 = Set::with_capacity(1);
+///     assert!(set3.insert(3));
+///     assert_eq!(&set2 - &set1, set3);
 /// }
 /// ```
 #[derive(Clone, Default, PartialEq, Eq)]

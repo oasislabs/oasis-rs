@@ -1,5 +1,4 @@
-use map_vec::Map; // Provides a Map-like API but with smaller constant factors.
-use oasis_std::{Address, Context};
+use oasis_std::{collections::Map, Address, Context};
 
 // Each service definition contains a struct that derives `Service`.
 // This struct represents the service's persistent state.

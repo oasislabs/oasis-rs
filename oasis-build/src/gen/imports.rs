@@ -65,7 +65,9 @@ pub fn build(
         let service_toks = quote! {
             #![allow(warnings)]
 
-            use borsh::{BorshSerialize, BorshDeserialize};
+            extern crate oasis_std;
+
+            use oasis_std::{abi::*, AddressExt as _};
 
             #(#def_tys)*
 
@@ -81,11 +83,24 @@ pub fn build(
             version = service.interface.version,
             path = mod_path.display()
         );
+
+        // 3 pushes
         rustc_args.push(mod_name.clone());
         rustc_args.push(mod_path.display().to_string());
         rustc_args.push(format!("-Cextra-filename=-{:016x}", interface_hash));
+
+        if std::env::var("OASIS_BUILD_VERBOSE").is_ok() {
+            eprintln!(
+                "     {} `rustc {}`",
+                "Running".green(),
+                rustc_args.join(" ")
+            );
+        }
+
         rustc_driver::run_compiler(&rustc_args, &mut rustc_driver::DefaultCallbacks, None, None)
             .map_err(|_| anyhow::format_err!("Could not build `{}`", mod_name))?;
+
+        // 3 pops
         rustc_args.pop();
         rustc_args.pop();
         rustc_args.pop();
@@ -103,8 +118,7 @@ fn gen_def_tys<'a>(defs: &'a [oasis_rpc::TypeDef]) -> impl Iterator<Item = Token
         } else {
             quote!()
         };
-        let derives =
-            quote!(BorshSerialize, BorshDeserialize, Debug, Clone, PartialEq, #hash_derive);
+        let derives = quote!(Serialize, Deserialize, Debug, Clone, PartialEq, #hash_derive);
         match def {
             oasis_rpc::TypeDef::Struct { fields, .. } => {
                 let is_newtype = fields
@@ -230,8 +244,13 @@ fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = To
                 #(#arg_names: #arg_tys),*
            ) -> Result<#output_ty, oasis_std::RpcError<#err_ty>> {
                 #[cfg(target_os = "wasi")] {
-                    let output = oasis_std::invoke!(self.address, #func_idx, ctx, #(&#arg_names),*);
-                    Ok(BorshDeserialize::try_from_slice(&output)
+                    let output = oasis_std::invoke!(
+                        self.address,
+                        #func_idx,
+                        ctx,
+                        #(&#arg_names),*
+                    )?;
+                    Ok(<_>::try_from_slice(&output)
                         .map_err(|_| oasis_std::RpcError::InvalidOutput(output))?)
                 }
                 #[cfg(not(target_os = "wasi"))] {

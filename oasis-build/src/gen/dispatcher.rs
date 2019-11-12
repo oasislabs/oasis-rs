@@ -112,12 +112,9 @@ fn generate_rpc_dispatcher(
     quote! {
         #[allow(warnings)]
         fn _oasis_dispatcher() {
-            use oasis_std::{
-                reexports::borsh::{self, BorshSerialize, BorshDeserialize},
-                Service as _
-            };
+            use oasis_std::{abi::*, Service as _};
 
-            #[derive(oasis_std::reexports::borsh::BorshDeserialize)]
+            #[derive(Deserialize)]
             enum RpcPayload {
                 #(#rpc_payload_variants),*
             }
@@ -126,7 +123,7 @@ fn generate_rpc_dispatcher(
             let mut service = <#service_ident>::coalesce();
             let input = oasis_std::backend::input();
             #default_fn_invocation
-            let payload: RpcPayload = BorshDeserialize::try_from_slice(&input).unwrap();
+            let payload: RpcPayload = Deserialize::try_from_slice(&input).unwrap();
             let output: std::result::Result<Vec<u8>, #output_err_ty> = match payload {
                 #(#rpc_match_arms)*
             };
@@ -157,8 +154,8 @@ mod armery {
             let invocation = if rpc.output.is_result() {
                 quote! {
                     match service.#fn_name(&ctx, #(#arg_names),*) {
-                        Ok(output) => Ok(BorshSerialize::try_to_vec(&output).unwrap()),
-                        Err(err) => Err(BorshSerialize::try_to_vec(&err).unwrap()),
+                        Ok(output) => Ok(Serialize::try_to_vec(&output).unwrap()),
+                        Err(err) => Err(Serialize::try_to_vec(&err).unwrap()),
                     }
                 }
             } else {
@@ -216,7 +213,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &ParsedRpc) -> TokenStream {
         let payload_unpack = quote! {
             let input = oasis_std::backend::input();
             let CtorPayload(#(#arg_names),*,) =
-                BorshDeserialize::try_from_slice(&input).unwrap();
+                Deserialize::try_from_slice(&input).unwrap();
         };
         (struct_args, payload_unpack)
     } else {
@@ -243,12 +240,9 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &ParsedRpc) -> TokenStream {
         #[allow(warnings)]
         #[no_mangle]
         extern "C" fn _oasis_deploy() -> u8 {
-            use oasis_std::{
-                reexports::borsh::{self, BorshSerialize, BorshDeserialize},
-                Service as _
-            };
+            use oasis_std::{abi::*, Service as _};
 
-            #[derive(oasis_std::reexports::borsh::BorshDeserialize)]
+            #[derive(Deserialize)]
             #[allow(non_camel_case_types)]
             struct CtorPayload(#ctor_struct_args);
 

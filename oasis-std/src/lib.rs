@@ -19,8 +19,13 @@ pub mod client;
 pub mod collections;
 pub mod exe;
 
-pub mod reexports {
+pub mod abi {
     pub extern crate borsh;
+    pub use borsh::{BorshDeserialize as Deserialize, BorshSerialize as Serialize};
+}
+
+#[doc(hidden)]
+pub mod reexports {
     pub extern crate tiny_keccak;
 }
 
@@ -67,16 +72,15 @@ macro_rules! service {
 #[macro_export]
 macro_rules! invoke {
     ($address:expr, $method_id:literal, $ctx:expr, $( $arg:expr ),* $(,)?) => {{
-        use std::io::Write as _;
+        use $crate::abi::Serialize as _;
         let mut buf = Vec::new();
-        buf.write_all(&($method_id as u8).to_le_bytes()).unwrap();
-        Ok(())
-            $(.and_then(|_| {
-                $crate::reexports::borsh::BorshSerialize::serialize(&$arg, &mut buf)
-            }))*
-            .map_err(|_| $crate::backend::Error::InvalidInput)
-            .and_then(|_| $address.call($ctx, &buf))
-    }}
+        (|| -> Result<(), std::io::Error> {
+            $($arg.serialize(&mut buf)?;)*
+            Ok(())
+        })()
+        .map_err(|_| $crate::backend::Error::InvalidInput)
+        .and_then(|_| $address.call($ctx, &buf))
+    }};
 }
 
 pub trait AddressExt {

@@ -1,10 +1,10 @@
 {
   "name": "ServiceA",
-  "namespace": "xcc_a",
+  "namespace": "a",
   "version": "0.1.0",
   "imports": [
     {
-      "name": "xcc_b",
+      "name": "b",
       "version": "0.1.0"
     }
   ],
@@ -32,7 +32,7 @@
             "params": {
               "type": "defined",
               "params": {
-                "namespace": "xcc_b",
+                "namespace": "b",
                 "type": "Number"
               }
             }
@@ -45,5 +45,5 @@
       }
     }
   ],
-  "oasis_build_version": "0.2.5"
+  "oasis_build_version": "0.3.0"
 }

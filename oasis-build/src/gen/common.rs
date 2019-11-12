@@ -80,29 +80,15 @@ pub fn quote_ty(ty: &oasis_rpc::Type) -> TokenStream {
 
 pub fn quote_borrow(ty: &oasis_rpc::Type) -> TokenStream {
     use oasis_rpc::Type;
-    let tyq = match ty {
-        Type::Bool
-        | Type::U8
-        | Type::I8
-        | Type::U16
-        | Type::I16
-        | Type::U32
-        | Type::I32
-        | Type::U64
-        | Type::I64
-        | Type::F32
-        | Type::F64 => {
-            return quote_ty(ty);
-        }
-        Type::Bytes => quote!([u8]),
-        Type::String => quote!(str),
+    match ty {
+        Type::Bytes => quote!(&[u8]),
+        Type::String => quote!(&str),
         Type::List(ty) => {
             let tyq = quote_ty(ty);
-            quote!([#tyq])
+            quote!(&[#tyq])
         }
         _ => quote_ty(ty),
-    };
-    quote!(impl std::borrow::Borrow<#tyq>)
+    }
 }
 
 pub fn gen_include_item(include_path: impl AsRef<std::path::Path>) -> P<ast::Item> {

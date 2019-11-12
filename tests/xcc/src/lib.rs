@@ -1,4 +1,5 @@
-#[derive(borsh::BorshSerialize, borsh::BorshDeserialize, Clone, Copy, Debug)]
+use oasis_std::abi::*;
+#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 pub struct NonXccType;
 
 #[cfg(test)]

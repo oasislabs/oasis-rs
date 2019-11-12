@@ -1,11 +1,9 @@
 #![allow(unused)]
 
-#[macro_use]
-extern crate serde;
-
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use oasis_std::{
+    abi::*,
     collections::{Map, Set},
     Address, Balance, Context, Event, Service,
 };

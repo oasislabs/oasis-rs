@@ -31,7 +31,7 @@ pub fn event_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     proc_macro::TokenStream::from(quote! {
         #[allow(warnings)]
         const #impl_wrapper_ident: () = {
-            use oasis_std::reexports::{tiny_keccak, borsh::BorshSerialize as _};
+            use oasis_std::{abi::Serialize as _, reexports::tiny_keccak};
 
             impl#generics oasis_std::exe::Event for #event_name#generics  {
                 fn emit(&self) {

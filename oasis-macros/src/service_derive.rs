@@ -11,7 +11,7 @@ pub fn service_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream
             quote! {
                 #[allow(warnings)]
                 const #impl_wrapper_ident: () = {
-                    use oasis_std::reexports::borsh::{BorshSerialize, BorshDeserialize};
+                    use oasis_std::abi::*;
 
                     impl oasis_std::exe::Service for #service {
                         fn coalesce() -> Self {
@@ -107,7 +107,7 @@ fn get_type_serde(
                 )
             },
             quote! {
-                BorshDeserialize::try_from_slice(
+                <_>::try_from_slice(
                     &oasis_std::backend::read(#key.as_bytes())
                 ).unwrap()
             },

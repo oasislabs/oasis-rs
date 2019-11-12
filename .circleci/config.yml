@@ -89,8 +89,7 @@ jobs:
               -p ballot \
               -p erc20 \
               -p hello-world \
-              -p messaging \
-              -p sealed-auctions
+              -p messaging
 
   test_idl:
     executor: rust

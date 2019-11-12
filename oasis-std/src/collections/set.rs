@@ -12,17 +12,16 @@ use borsh::{BorshDeserialize, BorshSerialize};
 /// ## Example
 ///
 /// ```
-/// fn main() {
-///     let mut set1 = Set::new();
-///     let mut set2 = Set::new();
-///     set1.insert(1);
-///     set1.insert(2);
-///     set2.insert(2);
-///     set2.insert(3);
-///     let mut set3 = Set::with_capacity(1);
-///     assert!(set3.insert(3));
-///     assert_eq!(&set2 - &set1, set3);
-/// }
+/// use oasis_std::collections::Set;
+/// let mut set1 = Set::new();
+/// let mut set2 = Set::new();
+/// set1.insert(1);
+/// set1.insert(2);
+/// set2.insert(2);
+/// set2.insert(3);
+/// let mut set3 = Set::with_capacity(1);
+/// assert!(set3.insert(3));
+/// assert_eq!(&set2 - &set1, set3);
 /// ```
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct Set<T> {

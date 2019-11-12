@@ -12,13 +12,12 @@ use borsh::{BorshDeserialize, BorshSerialize};
 /// ## Example
 ///
 /// ```
-/// fn main() {
-///     let mut map = Map::new();
-///     map.insert("hello".to_string(), "world".to_string());
-///     map.entry("hello".to_string())
-///         .and_modify(|mut v| v.push_str("!"));
-///     assert_eq!(map.get("hello").map(String::as_str), Some("world!"))
-/// }
+/// use oasis_std::collections::Map;
+/// let mut map = Map::new();
+/// map.insert("hello".to_string(), "world".to_string());
+/// map.entry("hello".to_string())
+///     .and_modify(|mut v| v.push_str("!"));
+/// assert_eq!(map.get("hello").map(String::as_str), Some("world!"))
 /// ```
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct Map<K, V> {

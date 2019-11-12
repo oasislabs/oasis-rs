@@ -1,12 +1,12 @@
-use borsh::{BorshDeserialize, BorshSerialize};
 use oasis_std::{
+    abi::*,
     collections::{map::Entry, Map, Set},
     Address, Context, Event,
 };
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug, Eq, PartialEq, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Error {
     Unknown,
     AdminPrivilegesRequired,
@@ -25,7 +25,7 @@ pub struct ERC20Token {
 }
 
 // A Transfer event struct
-#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, Default, Event)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default, Event)]
 pub struct Transfer {
     #[indexed]
     pub from: Address,
@@ -36,7 +36,7 @@ pub struct Transfer {
 }
 
 // An Approval event struct
-#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, Default, Event)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default, Event)]
 pub struct Approval {
     #[indexed]
     pub sender: Address,

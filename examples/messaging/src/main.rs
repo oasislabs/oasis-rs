@@ -1,5 +1,5 @@
-use borsh::{BorshDeserialize, BorshSerialize};
 use oasis_std::{
+    abi::*,
     collections::{Map, Set},
     Address, Context, Event,
 };
@@ -23,23 +23,23 @@ pub struct MessageBoard {
     accounts: Map<UserId, Account>,
 }
 
-// Types used in the state struct must derive `BorshSerialize` and `BorshDeserialize`
+// Types used in the state struct must derive `Serialize` and `Deserialize`
 // so that they can be persisted and loaded from storage.
 //
 // Types do not need to be defined in the same module as the service.
-#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Post {
     author: UserId,
     text: String,
     comments: Vec<Message>,
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Clone, Default)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 pub struct Account {
     inbox: Vec<Message>,
 }
 
-#[derive(BorshSerialize, BorshDeserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Message {
     from: UserId,
     text: String,
@@ -55,7 +55,7 @@ pub struct Message {
 // A highly confidential application will probably not want to emit events at all since
 // the fact that an event was even emitted can leak information. (It can be done using
 // techniques from oblivious transfer, but it requires extreme care to do properly.)
-#[derive(BorshSerialize, BorshDeserialize, Event)]
+#[derive(Serialize, Deserialize, Event)]
 pub struct MessagePosted {
     #[indexed]
     pub author: UserId,
@@ -65,7 +65,7 @@ pub struct MessagePosted {
 
 type Result<T> = std::result::Result<T, Error>;
 
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Error {
     InvalidUserId,
     InvalidPostId,

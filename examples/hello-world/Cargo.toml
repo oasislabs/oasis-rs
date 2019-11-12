@@ -6,7 +6,6 @@ edition = "2018"
 publish = false
 
 [dependencies]
-borsh = "0.2"
 oasis-std = "0.3"
 
 [dev-dependencies]

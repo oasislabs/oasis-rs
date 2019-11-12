@@ -1,12 +1,12 @@
-use borsh::{BorshDeserialize, BorshSerialize};
 use oasis_std::{
+    abi::*,
     collections::map::{Entry, Map},
     Context,
 };
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(BorshSerialize, BorshDeserialize, Debug, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub enum Error {
     UnsupportedLanguage,
     DuplicateEntry,

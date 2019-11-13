@@ -1,7 +1,7 @@
-use syntax::{ast, ptr::P, source_map::Span};
+use syntax::{ast, mut_visit::MutVisitor as _, ptr::P, source_map::Span};
 use syntax_pos::symbol::Symbol;
 
-use crate::{error::RpcError, visitor::syntax::ArgLifetimeTransducer};
+use crate::{error::RpcError, visitor::syntax::Deborrower};
 
 pub struct ParsedRpc {
     pub name: Symbol,
@@ -120,7 +120,7 @@ impl ParsedRpc {
             if let Some(ast::Ty {
                 node: ast::TyKind::Path(_, path),
                 ..
-            }) = &ret_ty.ty
+            }) = &ret_ty.ty.as_ref().map(|p| &**p)
             {
                 ret_ty_is_self = path.segments.len() == 1
                     && path.segments[0].ident.name == Symbol::intern("Self");
@@ -174,9 +174,12 @@ impl ParsedRpc {
         })
     }
 
-    pub fn arg_lifetimes<'a>(&'a self) -> impl Iterator<Item = (Vec<Symbol>, P<ast::Ty>)> + 'a {
-        let mut lc = ArgLifetimeTransducer::default();
-        self.inputs().map(move |inp| lc.transduce(&inp.ty))
+    pub fn arg_types<'a>(&'a self) -> impl Iterator<Item = P<ast::Ty>> + 'a {
+        self.inputs().map(move |inp| {
+            let mut ty = inp.ty.clone();
+            Deborrower::default().visit_ty(&mut ty);
+            ty
+        })
     }
 
     fn inputs(&self) -> impl Iterator<Item = &ast::Arg> {
@@ -196,7 +199,7 @@ pub enum ParsedRpcKind {
 
 pub struct ReturnType {
     is_result: bool,
-    ty: Option<ast::Ty>,
+    ty: Option<P<ast::Ty>>,
 }
 
 impl ReturnType {
@@ -213,7 +216,7 @@ impl ReturnType {
                     ret_ty.is_result = maybe_result.ident.name == Symbol::intern("Result");
                     if !ret_ty.is_result {
                         if !ty.node.is_unit() {
-                            ret_ty.ty = Some(ty.clone().into_inner());
+                            ret_ty.ty = Some(ty.clone());
                         }
                         return ret_ty;
                     }
@@ -222,7 +225,7 @@ impl ReturnType {
                         // Weird. It's a user-defined type named Result.
                         return Self {
                             is_result: false,
-                            ty: Some(ty.clone().into_inner()),
+                            ty: Some(ty.clone()),
                         };
                     }
                     if let ast::GenericArgs::AngleBracketed(ast::AngleBracketedArgs {
@@ -230,14 +233,22 @@ impl ReturnType {
                     }) = &**result.args.as_ref().unwrap()
                     {
                         if let ast::GenericArg::Type(p_ty) = &args[0] {
-                            ret_ty.ty = Some(p_ty.clone().into_inner())
+                            ret_ty.ty = Some(p_ty.clone())
                         }
                     }
                 }
-                _ => ret_ty.ty = Some(ty.clone().into_inner()),
+                _ => ret_ty.ty = Some(ty.clone()),
             }
         };
         ret_ty
+    }
+
+    pub fn owned_ty(&self) -> Option<P<ast::Ty>> {
+        self.ty.as_ref().map(|ty| {
+            let mut ty = ty.clone();
+            Deborrower::default().visit_ty(&mut ty);
+            ty
+        })
     }
 
     pub fn is_result(&self) -> bool {

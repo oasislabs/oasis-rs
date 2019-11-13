@@ -1,5 +1,4 @@
-use oasis_std::{Context, Service};
-use serde::{Deserialize, Serialize};
+use oasis_std::{abi::*, Context, Service};
 
 #[derive(Service)]
 pub struct ServiceB {
@@ -9,9 +8,9 @@ pub struct ServiceB {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Number(pub u8);
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Clone)]
 pub struct RefWrapper<'a> {
-    pub field: &'a str,
+    pub field: &'a Number,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -32,8 +31,9 @@ impl ServiceB {
         }
     }
 
-    pub fn return_ref_struct<'a>(&self, _ctx: &Context, value: &'a str) -> RefWrapper<'a> {
-        RefWrapper { field: value }
+    pub fn return_ref_struct<'a>(&'a self, _ctx: &Context, value: String) -> RefWrapper<'a> {
+        eprintln!("{}", value);
+        RefWrapper { field: &self.seed }
     }
 
     pub fn random(&self, _ctx: &Context, count: Number) -> Vec<Number> {

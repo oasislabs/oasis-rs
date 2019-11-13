@@ -1,8 +1,8 @@
-error: External type `serde_cbor::value::Value` must be defined in a service to use in an RPC interface.
+error: External type `xcc::NonXccType` must be defined in a service to use in an RPC interface.
  --> $DIR/bad_import.rs:9:66
   |
-9 |     pub fn bad_import(&mut self, _ctx: &oasis_std::Context, arg: serde_cbor::Value) {}
-  |                                                                  ^^^^^^^^^^^^^^^^^
+9 |     pub fn bad_import(&mut self, _ctx: &oasis_std::Context, arg: xcc::NonXccType) {}
+  |                                                                  ^^^^^^^^^^^^^^^
 
 error: aborting due to previous error
 

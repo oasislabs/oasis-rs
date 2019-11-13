@@ -1,8 +1,8 @@
-#[macro_use]
-extern crate serde; // Provides `Serialize` and `Deserialize`.
-
-use map_vec::{Map, Set};
-use oasis_std::{Address, Context, Event};
+use oasis_std::{
+    abi::*,
+    collections::{Map, Set},
+    Address, Context, Event,
+};
 
 pub type UserId = Address;
 pub type PostId = u32;
@@ -23,10 +23,8 @@ pub struct MessageBoard {
     accounts: Map<UserId, Account>,
 }
 
-// Types used in the state struct must derive serde `Serialize` and `Deserialize`
-// so that they can be persisted and loaded from storage. They must also derive `Clone`
-// (and optionally `Copy`) so that service RPC methods can accept borrowed data which
-// improves deserialization performance.
+// Types used in the state struct must derive `Serialize` and `Deserialize`
+// so that they can be persisted and loaded from storage.
 //
 // Types do not need to be defined in the same module as the service.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

@@ -13,9 +13,9 @@ pub fn resolve_imports(
         .collect()
 }
 
-#[derive(Debug, failure::Fail)]
+#[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
-    Import(#[fail(cause)] ImportError),
+    Import(ImportError),
     DependencyMismatch { name: String, versions: Vec<String> },
 }
 

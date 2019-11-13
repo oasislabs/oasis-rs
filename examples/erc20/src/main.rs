@@ -1,29 +1,17 @@
-#[macro_use]
-extern crate serde;
-
-use map_vec::{map::Entry, Map, Set};
-use oasis_std::{Address, Context, Event};
+use oasis_std::{
+    abi::*,
+    collections::{map::Entry, Map, Set},
+    Address, Context, Event,
+};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, failure::Fail)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Error {
-    #[fail(display = "Unknown error occured.")]
     Unknown,
-
-    #[fail(display = "Only existing admins can perform this operation.")]
     AdminPrivilegesRequired,
-
-    #[fail(display = "Insuffient funds for transfer from {:?}.", address)]
     InsufficientFunds { address: Address },
-
-    #[fail(display = "Address {:?} has no allowance from address {:?}.", from, to)]
     NoAllowanceGiven { from: Address, to: Address },
-
-    #[fail(
-        display = "Transfer request {} exceeds allowance {}.",
-        amount, allowance
-    )]
     RequestExceedsAllowance { amount: u64, allowance: u64 },
 }
 

@@ -31,17 +31,17 @@ pub fn event_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     proc_macro::TokenStream::from(quote! {
         #[allow(warnings)]
         const #impl_wrapper_ident: () = {
-            use oasis_std::reexports::*;
+            use oasis_std::{abi::Serialize as _, reexports::tiny_keccak};
 
             impl#generics oasis_std::exe::Event for #event_name#generics  {
                 fn emit(&self) {
                     let hashes: Vec<[u8; 32]> = vec![
-                        #(tiny_keccak::keccak256(&serde_cbor::to_vec(&self.#indexed_field_idents).unwrap())),*
+                        #(tiny_keccak::keccak256(&self.#indexed_field_idents.try_to_vec().unwrap())),*
                     ];
                     let mut topics: Vec<&[u8]> = Vec::with_capacity(#num_topics);
                     topics.push(&#event_name_topic);
                     topics.append(&mut hashes.iter().map(<_>::as_ref).collect());
-                    oasis_std::backend::emit(&topics, &serde_cbor::to_vec(self).unwrap());
+                    oasis_std::backend::emit(&topics, &self.try_to_vec().unwrap());
                 }
             }
         };

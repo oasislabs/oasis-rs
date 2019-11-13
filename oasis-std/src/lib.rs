@@ -4,21 +4,29 @@
     non_exhaustive,
     proc_macro_hygiene,
     specialization,
-    trait_alias
+    trait_alias,
+    // the following are used by `collections::*`
+    drain_filter,
+    shrink_to,
+    try_reserve,
 )]
 #![cfg_attr(target_os = "wasi", feature(wasi_ext))]
 
-#[macro_use]
-pub extern crate serde;
 extern crate oasis_macros;
 
 pub mod backend;
+pub mod client;
+pub mod collections;
 pub mod exe;
 
+pub mod abi {
+    pub extern crate borsh;
+    pub use borsh::{BorshDeserialize as Deserialize, BorshSerialize as Serialize};
+}
+
+#[doc(hidden)]
 pub mod reexports {
-    pub use serde;
-    pub use serde_cbor;
-    pub use tiny_keccak;
+    pub extern crate tiny_keccak;
 }
 
 pub use oasis_macros::{default, Event, Service};
@@ -45,15 +53,16 @@ macro_rules! service {
 /// ## Usage
 ///
 /// ```norun
-/// invoke!(addr: Address, method: impl AsRef<str>, ctx: &Context, args: ..impl Serialize);
+/// invoke!(addr: Address, method_id: u32, ctx: &Context, args: ..impl Serialize);
 /// ```
+/// Where `method_id` is the index of the desired function in the exported IDL.
 ///
 /// ## Example
 ///
 /// ```norun
 /// invoke!(
 ///     some_address,
-///     "method",
+///     0,
 ///     &Context::default(),
 ///     "an arg",
 ///     &["some", "more", "args"],
@@ -62,17 +71,16 @@ macro_rules! service {
 /// ```
 #[macro_export]
 macro_rules! invoke {
-    ($address:expr, $method:expr, $ctx:expr, $( $arg:expr ),* $(,)?) => {{
-        use crate::serde::ser::{Serializer as _, SerializeStruct as _};
-        let mut serializer = $crate::reexports::serde_cbor::Serializer::new(Vec::new());
-        serializer.serialize_struct("Message", 2).and_then(|mut message| {
-            message.serialize_field("method", $method)?;
-            message.serialize_field("payload", &( $( &$arg ),* ))?;
-            message.end()
-        })
+    ($address:expr, $method_id:literal, $ctx:expr, $( $arg:expr ),* $(,)?) => {{
+        use $crate::abi::Serialize as _;
+        let mut buf = Vec::new();
+        (|| -> Result<(), std::io::Error> {
+            $($arg.serialize(&mut buf)?;)*
+            Ok(())
+        })()
         .map_err(|_| $crate::backend::Error::InvalidInput)
-        .and_then(|_| $address.call($ctx, &serializer.into_inner()))
-    }}
+        .and_then(|_| $address.call($ctx, &buf))
+    }};
 }
 
 pub trait AddressExt {
@@ -113,7 +121,7 @@ mod tests {
     fn test_invoke() {
         invoke!(
             Address::default(),
-            "method",
+            0,
             &Context::default(),
             "an arg",
             &["some", "more", "args"],

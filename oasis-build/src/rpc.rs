@@ -90,7 +90,7 @@ pub fn convert_interface<'tcx>(
             type_defs,
             constructor: ctor.unwrap(),
             functions,
-            oasis_build_version: env!("CARGO_PKG_VERSION").to_string(),
+            oasis_build_version: Some(env!("CARGO_PKG_VERSION").to_string()),
         })
     }
 }

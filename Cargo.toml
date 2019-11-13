@@ -6,7 +6,6 @@ members = [
     "examples/erc20",
     "examples/hello-world",
     "examples/messaging",
-    "examples/sealed-auctions",
     "memchain",
     "oasis-build",
     "oasis-macros",
@@ -20,3 +19,8 @@ exclude = ["tests"]
 [profile.release]
 lto = true
 opt-level = 3
+
+[patch.crates-io]
+oasis-std = { path = "oasis-std" }
+oasis-test = { path = "oasis-test" }
+borsh = { git = "https://github.com/oasislabs/borsh" }

@@ -1,9 +1,8 @@
 use std::fmt;
 
+use borsh::{BorshDeserialize, BorshSerialize};
 use oasis_types::{Address, Balance};
-
-/// A type that can be stored in blockchain storage.
-pub trait Storage = serde::Serialize + serde::de::DeserializeOwned;
+use thiserror::Error;
 
 pub trait Service {
     /// Builds a service struct from items in Storage.
@@ -110,8 +109,8 @@ impl Context {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, failure::Fail)]
-pub enum RpcError<E: Send + Sync + 'static> {
+#[derive(Clone, BorshSerialize, BorshDeserialize, Error)]
+pub enum RpcError<E> {
     /// There was no service at the requested address.
     InvalidCallee,
 
@@ -129,10 +128,7 @@ pub enum RpcError<E: Send + Sync + 'static> {
     Exec(E),
 }
 
-impl<E> From<crate::backend::Error> for RpcError<E>
-where
-    E: serde::de::DeserializeOwned + Send + Sync,
-{
+impl<E: BorshDeserialize> From<crate::backend::Error> for RpcError<E> {
     fn from(err: crate::backend::Error) -> Self {
         use crate::backend::Error as BackendError;
         match err {
@@ -140,17 +136,15 @@ where
             BackendError::InsufficientFunds => RpcError::InsufficientFunds,
             BackendError::InvalidInput => RpcError::InvalidInput,
             BackendError::InvalidCallee => RpcError::InvalidCallee,
-            BackendError::Execution { payload, .. } => {
-                match serde_cbor::from_slice::<E>(&payload) {
-                    Ok(e) => RpcError::Exec(e),
-                    Err(_) => RpcError::InvalidOutput(payload),
-                }
-            }
+            BackendError::Execution { payload, .. } => match E::try_from_slice(&payload) {
+                Ok(e) => RpcError::Exec(e),
+                Err(_) => RpcError::InvalidOutput(payload),
+            },
         }
     }
 }
 
-impl<E: Send + Sync> fmt::Debug for RpcError<E> {
+impl<E> fmt::Debug for RpcError<E> {
     default fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             RpcError::InvalidCallee => write!(f, "invalid callee"),
@@ -163,13 +157,13 @@ impl<E: Send + Sync> fmt::Debug for RpcError<E> {
     }
 }
 
-impl<E: Send + Sync> fmt::Display for RpcError<E> {
+impl<E> fmt::Display for RpcError<E> {
     default fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(self, f)
     }
 }
 
-impl<E: Send + Sync + fmt::Debug> fmt::Debug for RpcError<E> {
+impl<E: fmt::Debug> fmt::Debug for RpcError<E> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             RpcError::Exec(e) => write!(f, "execution error {:?}", e),
@@ -178,7 +172,7 @@ impl<E: Send + Sync + fmt::Debug> fmt::Debug for RpcError<E> {
     }
 }
 
-impl<E: Send + Sync + fmt::Display> fmt::Display for RpcError<E> {
+impl<E: fmt::Display> fmt::Display for RpcError<E> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             RpcError::Exec(e) => write!(f, "execution error: {}", e),

@@ -1,8 +1,5 @@
 #![allow(unused)]
 
-#[macro_use]
-extern crate serde;
-
 use oasis_std::{Context, Service};
 
 #[derive(Service)]

@@ -96,20 +96,20 @@ trait ImporterBackend {
     fn import_all(&self) -> Result<Vec<ImportedService>, ImportError>;
 }
 
-#[derive(Debug, failure::Fail)]
+#[derive(Debug, thiserror::Error)]
 pub enum ImportError {
-    #[fail(display = "could not import from `{}`: {}", _0, _1)]
-    Io(String /* resource */, #[fail(cause)] std::io::Error),
+    #[error("io error while accessing `{0}`: `{1}`")]
+    Io(String /* resource */, std::io::Error),
 
-    #[fail(display = "no importer for {} URL scheme", _0)]
+    #[error("no importer for: `{0}`")]
     NoImporter(String),
 
-    #[fail(display = "wasm module missing oasis-interface section")]
+    #[error("bytecode is missing oasis-interface section")]
     MissingInterfaceSection,
 
-    #[fail(display = "could not locate `{}`", _0)]
+    #[error("no import: {0}")]
     NoImport(String),
 
-    #[fail(display = "{}", _0)]
-    Importer(#[fail(cause)] failure::Error),
+    #[error("importer error: {0}")]
+    Importer(anyhow::Error),
 }

@@ -1,8 +1,8 @@
-#[macro_use]
-extern crate serde;
-
-use map_vec::{map::Entry, Map};
-use oasis_std::Context;
+use oasis_std::{
+    abi::*,
+    collections::map::{Entry, Map},
+    Context,
+};
 
 pub type Result<T> = std::result::Result<T, Error>;
 

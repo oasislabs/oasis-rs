@@ -23,4 +23,4 @@ opt-level = 3
 [patch.crates-io]
 oasis-std = { path = "oasis-std" }
 oasis-test = { path = "oasis-test" }
-borsh = { git = "https://github.com/nhynes/borsh" }
+borsh = { git = "https://github.com/oasislabs/borsh" }

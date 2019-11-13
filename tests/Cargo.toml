@@ -10,4 +10,4 @@ lto = true
 opt-level = 3
 
 [patch.crates-io]
-borsh = { git = "https://github.com/nhynes/borsh" }
+borsh = { git = "https://github.com/oasislabs/borsh" }

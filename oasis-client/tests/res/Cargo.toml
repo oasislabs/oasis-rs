@@ -1,0 +1,10 @@
+[package]
+name = "oasis-client-tests"
+version = "0.0.0"
+authors = ["Oasis Labs <feedback@oasislabs.com>"]
+edition = "2018"
+publish = false
+
+[dependencies]
+hex = "0.4"
+oasis-std = "0.3"

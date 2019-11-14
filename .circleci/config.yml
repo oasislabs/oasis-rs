@@ -54,7 +54,7 @@ jobs:
       - cache_oasis_build
       - run:
           name: Unit test
-          command: cargo test
+          command: cargo test --lib
 
   clippy:
     executor: rust

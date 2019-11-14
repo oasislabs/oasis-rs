@@ -8,6 +8,8 @@ members = [
     "examples/messaging",
     "memchain",
     "oasis-build",
+    "oasis-client",
+    "oasis-client/tests/res",
     "oasis-macros",
     "oasis-rpc",
     "oasis-std",
@@ -21,6 +23,7 @@ lto = true
 opt-level = 3
 
 [patch.crates-io]
+borsh = { git = "https://github.com/oasislabs/borsh" }
+oasis-client = { path = "oasis-client" }
 oasis-std = { path = "oasis-std" }
 oasis-test = { path = "oasis-test" }
-borsh = { git = "https://github.com/oasislabs/borsh" }

@@ -1,0 +1,22 @@
+[package]
+name = "oasis-client"
+version = "0.1.0"
+authors = ["Oasis Labs <feedback@oasislabs.com>"]
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0"
+hex = "0.4"
+http = "0.1"
+log = "0.4"
+oasis-types = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = "0.7"
+
+[target.'cfg(not(target_env = "sgx"))'.dependencies]
+env_logger = "0.7"
+reqwest = "0.9"
+
+[dev-dependencies]
+mockito = "0.21"

@@ -107,7 +107,7 @@ pub enum ImportError {
     #[error("bytecode is missing oasis-interface section")]
     MissingInterfaceSection,
 
-    #[error("no import: {0}")]
+    #[error("no import: \"{0}\"")]
     NoImport(String),
 
     #[error("importer error: {0}")]

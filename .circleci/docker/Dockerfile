@@ -1,13 +1,16 @@
 FROM ubuntu:18.04
 
+ENV PATH "/opt/wasi-sdk/bin:/root/.local/bin:/root/.cargo/bin:$PATH"
+ENV LD_LIBRARY_PATH "/root/.rustup/toolchains/nightly-2019-08-26-x86_64-unknown-linux-gnu/lib:$LD_LIBRARY_PATH"
+
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq install \
     curl \
     git \
     build-essential \
     libssl-dev \
     pkg-config \
-    python3 \
-    python3-pip
+    # convenience
+    python3 python3-pip
 
 RUN pip3 install boto3 pylint yapf pytest pytest-xdist
 
@@ -16,5 +19,5 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly-201
     rustup component add rustfmt clippy && \
     rustup target add wasm32-wasi wasm32-unknown-unknown
 
-RUN curl -sSLf https://github.com/CraneStation/wasi-sdk/releases/download/wasi-sdk-6/wasi-sdk_6.0_amd64.deb -o wasi-sdk_6.0_amd64.deb && \
-    dpkg -i wasi-sdk_6.0_amd64.deb
+RUN curl -sSLf https://github.com/CraneStation/wasi-sdk/releases/download/wasi-sdk-8/wasi-sdk_8.0_amd64.deb -o wasi-sdk_8.0_amd64.deb && \
+    dpkg -i wasi-sdk_8.0_amd64.deb

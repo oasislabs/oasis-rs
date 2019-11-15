@@ -6,10 +6,8 @@ use std::{
     str::FromStr,
 };
 
-use oasis_types::{Address, Balance};
+use oasis_types::{Address, Balance, RpcError};
 use wasi::wasi_unstable::raw::{__wasi_errno_t, __wasi_fd_t};
-
-use super::Error;
 
 macro_rules! chain_dir {
     ($($ext:literal),*) => {
@@ -83,7 +81,7 @@ extern "C" {
     ) -> __wasi_errno_t;
 }
 
-pub fn transact(callee: &Address, value: Balance, input: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn transact(callee: &Address, value: Balance, input: &[u8]) -> Result<Vec<u8>, RpcError> {
     let mut fd: __wasi_fd_t = 0;
     let errno = unsafe {
         __wasi_blockchain_transact(
@@ -100,14 +98,14 @@ pub fn transact(callee: &Address, value: Balance, input: &[u8]) -> Result<Vec<u8
         .read_to_end(&mut out)
         .unwrap_or_else(|err| panic!(err));
     use wasi::wasi_unstable::raw::*;
-    match errno {
-        __WASI_ESUCCESS => Ok(out),
-        __WASI_EFAULT | __WASI_EINVAL => Err(Error::InvalidInput),
-        __WASI_ENOENT => Err(Error::InvalidCallee),
-        __WASI_EDQUOT => Err(Error::InsufficientFunds),
-        __WASI_ECONNABORTED => Err(Error::Execution { payload: out }),
-        _ => Err(Error::Unknown),
-    }
+    Err(match errno {
+        __WASI_ESUCCESS => return Ok(out),
+        __WASI_EFAULT | __WASI_EINVAL => RpcError::InvalidInput,
+        __WASI_ENOENT => RpcError::InvalidCallee,
+        __WASI_EDQUOT => RpcError::InsufficientFunds,
+        __WASI_ECONNABORTED => RpcError::Execution(out),
+        _ => unreachable!(),
+    })
 }
 
 pub fn input() -> Vec<u8> {

@@ -9,7 +9,7 @@ impl ServiceA {
     }
 
     pub fn call_b(&self, _ctx: &Context, b_addr: Address) -> Result<Vec<b::Number>, ()> {
-        let b = b::ServiceBClient::at(b_addr);
+        let b = b::ServiceBClient::new(b_addr);
         b.say_hello(
             &Context::default(),
             b::Greeting::Informal("dawg".to_string()),

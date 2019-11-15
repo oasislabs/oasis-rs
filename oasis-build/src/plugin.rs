@@ -1,4 +1,4 @@
-use std::collections::BTreeSet; // BTree for reproducability
+use std::collections::BTreeSet; // BTree for reproducibility
 
 use rustc::{hir::intravisit::Visitor, util::nodemap::FxHashMap};
 use rustc_data_structures::sync::Once;

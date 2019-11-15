@@ -51,7 +51,7 @@ pub struct Message {
 // events with a particular value of the indexed field. Up to three events may be indexed.
 //
 // A confidential application will want to encrypt the contents of the event to a
-// particular recipent.
+// particular recipient.
 // A highly confidential application will probably not want to emit events at all since
 // the fact that an event was even emitted can leak information. (It can be done using
 // techniques from oblivious transfer, but it requires extreme care to do properly.)

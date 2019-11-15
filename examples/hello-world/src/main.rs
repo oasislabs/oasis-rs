@@ -92,14 +92,16 @@ mod tests {
         );
 
         // let's fix it
-        match helloworld.add_hello(
-            &ctx,
-            "ws".to_string(),
-            "alofa fiafia i le lalolagi!".to_string(),
-        ) {
-            Err(_) => eprintln!("Attempt to insert a duplicate entry."),
-            Ok(_) => (),
-        };
+        if helloworld
+            .add_hello(
+                &ctx,
+                "ws".to_string(),
+                "alofa fiafia i le lalolagi!".to_string(),
+            )
+            .is_err()
+        {
+            eprintln!("Attempt to insert a duplicate entry.");
+        }
 
         // and test it
         let in_samoan = helloworld.say_hello(&ctx, "ws".to_string()).unwrap();

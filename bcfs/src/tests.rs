@@ -693,7 +693,7 @@ testcase!(
             Err(ErrNo::NoEnt)
         );
 
-        // Blockchain special files vs invaid open flags.
+        // Blockchain special files vs invalid open flags.
         for (f, dir) in [
             ("balance", HOME_DIR_FILENO.into()), // 4 is home dir
             ("log", CHAIN_DIR_FILENO.into()),    // 3 is chain dir
@@ -940,7 +940,7 @@ testcase!(
         };
 
         // The following expected values are set up in `create_memchain`.
-        let expected_balance = 2000000042;
+        let expected_balance = 2_000_000_042;
         let expected_bytecode = format!("\0asm not wasm {}", 2).into_bytes();
 
         let (balance_bytes, nbytes) = read_special("balance", HOME_DIR_FILENO.into());

@@ -26,3 +26,6 @@ rand = "0.7"
 base64 = "0.11"
 hex = "0.4"
 wasi = "0.7"
+
+[target.'cfg(not(target_os = "wasi"))'.dependencies]
+oasis-client = { version = "0.1", path = "../oasis-client" }

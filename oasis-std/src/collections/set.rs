@@ -319,6 +319,7 @@ where
 
 // taken from libstd/collections/hash/set.rs @ 7454b2
 #[cfg(test)]
+#[allow(clippy::all)]
 mod test_set {
     use super::*;
 

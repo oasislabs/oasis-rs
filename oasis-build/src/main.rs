@@ -60,7 +60,15 @@ fn main() {
 
             let mut manifest_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
             manifest_path.push("Cargo.toml");
-            match load_deps(&manifest_path, crate_name.as_ref().unwrap()).and_then(|imports| {
+            match load_deps(
+                &manifest_path,
+                if is_test {
+                    None
+                } else {
+                    Some(crate_name.as_ref().unwrap())
+                },
+            )
+            .and_then(|imports| {
                 oasis_build::build_imports(
                     imports,
                     gen_dir,
@@ -77,7 +85,7 @@ fn main() {
                     imports
                 }
                 Err(err) => {
-                    eprintln!("    {} {}", "error:".red(), err);
+                    eprintln!("{} {}\n", "error:".red(), err);
                     return Err(ErrorReported);
                 }
             }
@@ -89,11 +97,8 @@ fn main() {
             BuildTarget::Test
         } else if is_wasi || is_compiletest {
             BuildTarget::Wasi
-        } else if !is_service {
-            BuildTarget::Dep
         } else {
-            println!("\n{}: Compiling an Oasis service to a native target is unlikely to work as expected. Did you mean to use `cargo build --target wasm32-wasi`?\n", "error".red());
-            return Err(ErrorReported);
+            BuildTarget::Dep
         };
 
         let mut idl8r = oasis_build::BuildPlugin::new(
@@ -108,7 +113,7 @@ fn main() {
         };
         rustc_driver::run_compiler(&args, callbacks, None, None)?;
 
-        if !is_service {
+        if !(is_service && is_wasi) {
             return Ok(());
         }
 
@@ -122,7 +127,7 @@ fn main() {
                     "warning:".yellow(),
                     service_name
                 );
-                return Err(ErrorReported);
+                return Ok(());
             }
         };
 
@@ -183,24 +188,52 @@ fn collect_import_rustc_args(args: &[String]) -> Vec<String> {
 
 fn load_deps(
     manifest_path: &Path,
-    service_name: &str,
+    service_name: Option<&str>, // `None` when running an integration test
 ) -> anyhow::Result<BTreeMap<String, ImportLocation>> {
     let cargo_toml: toml::Value = toml::from_slice(&std::fs::read(manifest_path).unwrap()).unwrap();
-    Ok(cargo_toml
+
+    let oasis_tab = match cargo_toml
         .as_table()
         .and_then(|c_t| c_t.get("package").and_then(toml::Value::as_table))
         .and_then(|p| p.get("metadata").and_then(toml::Value::as_table))
         .and_then(|m| m.get("oasis").and_then(toml::Value::as_table))
-        .and_then(|m| {
-            m.get(service_name).or_else(
-                || m.get(&service_name.replace("_", "-")), /* cargo doesn't expose this */
-            )
-        })
-        .and_then(|s| s.get("dependencies"))
-        .cloned()
-        .map(|d| d.try_into())
-        .unwrap_or_else(|| Ok(BTreeMap::new()))
-        .map_err(|err| anyhow::format_err!("could not parse Oasis dependencies: {}", err))?)
+    {
+        Some(t) => t,
+        None => return Ok(BTreeMap::new()), // no (dev-)dependencies`
+    };
+
+    let parse_err = |err| anyhow::format_err!("could not parse Oasis dependencies: {}", err);
+
+    if let Some(service_name) = service_name {
+        oasis_tab
+            .get(service_name)
+            .or_else(|| oasis_tab.get(&service_name.replace("_", "-")))
+            // ^ `service_name` comes from rustc args and is always underscored
+            .and_then(|s| s.get("dependencies"))
+            .cloned()
+            .map(|d| d.try_into())
+            .unwrap_or_else(|| Ok(BTreeMap::new()))
+            .map_err(parse_err)
+    } else {
+        let mut deps: BTreeMap<String, ImportLocation> = BTreeMap::new();
+        for (name, service_config) in oasis_tab.iter() {
+            if name == "dev-dependencies" {
+                // oasis.dev-dependencies` looks like the dependencies of a single service.
+                deps.append(&mut service_config.clone().try_into().map_err(parse_err)?);
+                continue;
+            }
+            if let Some(service_deps) = service_config
+                .get("dependencies")
+                .and_then(|d| d.as_table())
+                .cloned()
+            {
+                for (dep_name, dep_loc) in service_deps.into_iter() {
+                    deps.insert(dep_name, dep_loc.try_into().map_err(parse_err)?);
+                }
+            }
+        }
+        Ok(deps)
+    }
 }
 
 fn pack_iface_into_wasm(

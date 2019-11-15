@@ -26,6 +26,11 @@ impl Address {
     pub fn path_repr(&self) -> std::path::PathBuf {
         std::path::PathBuf::from(hex::encode(self))
     }
+
+    /// Alias for `Address::default()`.
+    pub fn zero() -> Self {
+        Self::default()
+    }
 }
 
 impl AsRef<[u8]> for Address {

@@ -15,22 +15,48 @@
 extern crate oasis_macros;
 
 pub mod backend;
-pub mod client;
 pub mod collections;
 pub mod exe;
 
 pub mod abi {
     pub extern crate borsh;
     pub use borsh::{BorshDeserialize as Deserialize, BorshSerialize as Serialize};
+
+    /// Encodes arguments into the format expected by Oasis services.
+    ///
+    /// ## Example
+    ///
+    /// ```no_run
+    /// use oasis_std::{abi::*, Address, AddressExt as _, Context};
+    /// let method_id = 4;
+    /// let payload =
+    ///     oasis_std::abi_encode!(method_id, "some data", &["some", "more", "args"], 42,).unwrap();
+    /// let callee = Address::default();
+    /// let output = callee.call(&Context::default(), &payload).unwrap();
+    /// ```
+    #[macro_export]
+    macro_rules! abi_encode {
+        ($( $arg:expr ),* $(,)?) => { #[allow(unused)] {
+            use $crate::abi::Serialize as _;
+            Ok(Vec::new())
+                $(
+                    .and_then(|mut buf| {
+                        $arg.serialize(&mut buf)?;
+                        Ok(buf)
+                    })
+                )*
+                .map_err(|_: std::io::Error| $crate::RpcError::InvalidInput)
+        }};
+    }
 }
 
-#[doc(hidden)]
+#[cfg(not(target_os = "wasi"))]
 pub mod reexports {
-    pub extern crate tiny_keccak;
+    pub extern crate oasis_client;
 }
 
 pub use oasis_macros::{default, Event, Service};
-pub use oasis_types::{Address, Balance};
+pub use oasis_types::{Address, Balance, RpcError};
 
 pub use crate::exe::*;
 
@@ -48,45 +74,10 @@ macro_rules! service {
     ($svc:path) => {};
 }
 
-/// Makes a transaction to an address using Oasis RPC semantics.
-///
-/// ## Usage
-///
-/// ```norun
-/// invoke!(addr: Address, method_id: u32, ctx: &Context, args: ..impl Serialize);
-/// ```
-/// Where `method_id` is the index of the desired function in the exported IDL.
-///
-/// ## Example
-///
-/// ```norun
-/// invoke!(
-///     some_address,
-///     0,
-///     &Context::default(),
-///     "an arg",
-///     &["some", "more", "args"],
-///     42,
-/// )
-/// ```
-#[macro_export]
-macro_rules! invoke {
-    ($address:expr, $method_id:literal, $ctx:expr, $( $arg:expr ),* $(,)?) => {{
-        use $crate::abi::Serialize as _;
-        let mut buf = Vec::new();
-        (|| -> Result<(), std::io::Error> {
-            $($arg.serialize(&mut buf)?;)*
-            Ok(())
-        })()
-        .map_err(|_| $crate::backend::Error::InvalidInput)
-        .and_then(|_| $address.call($ctx, &buf))
-    }};
-}
-
 pub trait AddressExt {
-    fn call(&self, ctx: &Context, payload: &[u8]) -> Result<Vec<u8>, crate::backend::Error>;
+    fn call(&self, ctx: &Context, payload: &[u8]) -> Result<Vec<u8>, RpcError>;
 
-    fn transfer<B: Into<Balance>>(&self, value: B) -> Result<(), crate::backend::Error>;
+    fn transfer<B: Into<Balance>>(&self, value: B) -> Result<(), RpcError>;
 
     fn balance(&self) -> Balance;
 
@@ -94,11 +85,11 @@ pub trait AddressExt {
 }
 
 impl AddressExt for Address {
-    fn call(&self, ctx: &Context, payload: &[u8]) -> Result<Vec<u8>, crate::backend::Error> {
+    fn call(&self, ctx: &Context, payload: &[u8]) -> Result<Vec<u8>, RpcError> {
         crate::backend::transact(self, ctx.value(), payload)
     }
 
-    fn transfer<B: Into<Balance>>(&self, value: B) -> Result<(), crate::backend::Error> {
+    fn transfer<B: Into<Balance>>(&self, value: B) -> Result<(), RpcError> {
         crate::backend::transact(self, value.into(), &[]).map(|_| ())
     }
 
@@ -115,18 +106,18 @@ impl AddressExt for Address {
 mod tests {
     use super::*;
 
+    use abi::*;
+
     extern crate oasis_test;
 
     #[test]
     fn test_invoke() {
-        invoke!(
-            Address::default(),
-            0,
-            &Context::default(),
-            "an arg",
-            &["some", "more", "args"],
-            42,
-        )
-        .unwrap();
+        type T = (Address, String, Vec<u8>);
+        let things = (Address::default(), "an arg", (1..100).collect::<Vec<_>>());
+        let encoded = abi_encode!(&things).unwrap();
+        let decoded = T::try_from_slice(&encoded).unwrap();
+        assert_eq!(decoded.0, things.0);
+        assert_eq!(decoded.1, things.1);
+        assert_eq!(decoded.2, things.2);
     }
 }

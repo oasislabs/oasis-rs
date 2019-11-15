@@ -13,3 +13,4 @@ keywords = ["blockchain", "oasis"]
 borsh = "0.2"
 derive_more = "0.15"
 hex = "0.4"
+thiserror = "1.0"

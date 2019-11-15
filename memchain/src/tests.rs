@@ -105,7 +105,7 @@ fn transfer() {
         .transact(ADDR_1, ADDR_2, ADDR_1, value, &Vec::new(), BASE_GAS, 1);
     assert_eq!(
         bc.last_block().account_meta_at(&ADDR_1).unwrap().balance,
-        giga(1) - BASE_GAS as u128 - value,
+        giga(1) - u128::from(BASE_GAS) - value,
     );
     assert_eq!(
         bc.last_block().account_meta_at(&ADDR_2).unwrap().balance,
@@ -176,7 +176,7 @@ fn revert_tx() {
         .transact(ADDR_1, ADDR_2, ADDR_2, 10_000, &Vec::new(), BASE_GAS, 1);
     assert_eq!(
         bc.last_block().account_meta_at(&ADDR_2).unwrap().balance,
-        giga(2) - BASE_GAS as u128,
+        giga(2) - u128::from(BASE_GAS),
     );
     assert_eq!(
         bc.last_block().account_meta_at(&ADDR_1).unwrap().balance,

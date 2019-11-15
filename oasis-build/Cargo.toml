@@ -12,7 +12,7 @@ publish = false
 
 [dependencies]
 anyhow = "1.0"
-colored = "1.8"
+colored = "=1.8" # 1.9 doesn't work, for some reason
 heck = "0.3"
 oasis-rpc = { version = "0.3", path = "../oasis-rpc", features = ["resolve", "visitor"] }
 proc-macro2 = "1.0"

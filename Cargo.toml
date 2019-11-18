@@ -9,7 +9,6 @@ members = [
     "memchain",
     "oasis-build",
     "oasis-client",
-    "oasis-client/tests/res",
     "oasis-macros",
     "oasis-rpc",
     "oasis-std",

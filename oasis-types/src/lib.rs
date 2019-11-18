@@ -1,3 +1,5 @@
+#![feature(non_exhaustive)]
+
 #[macro_use]
 extern crate derive_more;
 
@@ -7,17 +9,15 @@ mod balance;
 pub use address::Address;
 pub use balance::Balance;
 
-#[repr(C)]
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
+#[repr(u32)]
+#[non_exhaustive]
 #[doc(hidden)]
-pub struct ExtStatusCode(pub u32);
-
-#[allow(non_upper_case_globals)] // it's supposed to be a non-exhaustive enum
-impl ExtStatusCode {
-    pub const Success: ExtStatusCode = ExtStatusCode(0);
-    pub const InsufficientFunds: ExtStatusCode = ExtStatusCode(1);
-    pub const InvalidInput: ExtStatusCode = ExtStatusCode(2);
-    pub const NoAccount: ExtStatusCode = ExtStatusCode(3);
+pub enum ExtStatusCode {
+    Success,
+    InsufficientFunds,
+    InvalidInput,
+    NoAccount,
 }
 
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
@@ -31,4 +31,38 @@ pub struct Event {
     pub emitter: Address,
     pub topics: Vec<[u8; 32]>,
     pub data: Vec<u8>,
+}
+
+#[derive(Clone, Debug, borsh::BorshSerialize, borsh::BorshDeserialize, thiserror::Error)]
+pub enum RpcError {
+    /// There was no service at the requested address.
+    #[error("invalid callee")]
+    InvalidCallee,
+
+    /// The caller does not have enough balance to cover the sent value.
+    #[error("caller does not have enough balance to cover transaction")]
+    InsufficientFunds,
+
+    /// The caller did not provide enough gas to complete the transaction.
+    #[error("not enough gas provided to transaction")]
+    InsufficientGas,
+
+    #[error("transaction received invalid input")]
+    InvalidInput,
+
+    #[error("transaction returned invalid output")]
+    InvalidOutput(Vec<u8>),
+
+    /// The application returned an error.
+    #[error("an application error occured")]
+    Execution(Vec<u8>),
+}
+
+impl RpcError {
+    pub fn execution(&self) -> Option<&[u8]> {
+        match self {
+            RpcError::Execution(output) => Some(&output),
+            _ => None,
+        }
+    }
 }

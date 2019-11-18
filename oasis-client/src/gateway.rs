@@ -2,13 +2,23 @@ use std::str::FromStr as _;
 
 use anyhow::{anyhow, Result};
 use http::header::{HeaderMap, HeaderName, HeaderValue};
-use oasis_types::Address;
+use oasis_types::{Address, RpcError};
 use uuid::Uuid;
 
 #[cfg(not(target_env = "sgx"))]
 use reqwest::Client;
 
 use crate::api::*;
+
+pub trait Gateway {
+    /// Deploys a new service with the provided initcode.
+    /// `initcode` is expected to be the Wasm bytecode concatenated with the the constructor stdin.
+    /// Upon success, returns the address of the new service.
+    fn deploy(&self, initcode: &[u8]) -> Result<Address, RpcError>;
+
+    /// Returns the output of calling the service at `address` with `data` as stdin.
+    fn rpc(&self, address: Address, data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>>;
+}
 
 /// Holds necessary information to make http requests to the gateway.
 ///

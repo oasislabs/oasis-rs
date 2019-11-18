@@ -1,8 +1,4 @@
-use std::fmt;
-
-use borsh::{BorshDeserialize, BorshSerialize};
 use oasis_types::{Address, Balance};
-use thiserror::Error;
 
 pub trait Service {
     /// Builds a service struct from items in Storage.
@@ -18,10 +14,9 @@ pub trait Event {
 }
 
 /// The context of the current RPC.
-/// To create a `Context`, use `Context::default()` or `Context::delegated()`.
+/// To create a `Context`, use `Context::default()`.
 /// The default `Context` will have its `sender` be the address of the current service
-/// or, when testing, the sender set by `Context::with_sender`. A delegated `Context`
-/// sets the sender to the address of the caller; this is similar to Ethereum's DELEGATECALL.
+/// or, when testing, the sender set by `Context::with_sender`.
 ///
 /// You can use `Context::with_value` to transfer native tokens along with the call.
 // *Note*: `Option` values are set by the user during testing.
@@ -43,7 +38,6 @@ pub struct Context {
 #[derive(Copy, Clone, Debug)]
 pub enum CallType {
     Default,
-    Delegated,
     Constant,
 }
 
@@ -54,16 +48,6 @@ impl Default for CallType {
 }
 
 impl Context {
-    /// Creates a context with the sender set to the address of
-    /// the current service (i.e. `ctx.sender()`).
-    #[cfg(any(test, target_os = "wasi"))]
-    pub fn delegated() -> Self {
-        Self {
-            call_type: CallType::Delegated,
-            ..Default::default()
-        }
-    }
-
     /// Sets the amount of computation resources available to the callee.
     /// Has no effect when called inside of a service.
     pub fn with_gas(mut self, gas: u64) -> Self {
@@ -106,77 +90,5 @@ impl Context {
     pub fn with_value<B: Into<Balance>>(mut self, value: B) -> Self {
         self.value = Some(value.into());
         self
-    }
-}
-
-#[derive(Clone, BorshSerialize, BorshDeserialize, Error)]
-pub enum RpcError<E> {
-    /// There was no service at the requested address.
-    InvalidCallee,
-
-    /// The caller does not have enough balance to cover the sent value.
-    InsufficientFunds,
-
-    /// The caller did not provide enough gas to complete the transaction.
-    InsufficientGas,
-
-    InvalidInput,
-
-    InvalidOutput(Vec<u8>),
-
-    /// The application returned an error.
-    Exec(E),
-}
-
-impl<E: BorshDeserialize> From<crate::backend::Error> for RpcError<E> {
-    fn from(err: crate::backend::Error) -> Self {
-        use crate::backend::Error as BackendError;
-        match err {
-            BackendError::Unknown => panic!("Unknown error occured."),
-            BackendError::InsufficientFunds => RpcError::InsufficientFunds,
-            BackendError::InvalidInput => RpcError::InvalidInput,
-            BackendError::InvalidCallee => RpcError::InvalidCallee,
-            BackendError::Execution { payload, .. } => match E::try_from_slice(&payload) {
-                Ok(e) => RpcError::Exec(e),
-                Err(_) => RpcError::InvalidOutput(payload),
-            },
-        }
-    }
-}
-
-impl<E> fmt::Debug for RpcError<E> {
-    default fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            RpcError::InvalidCallee => write!(f, "invalid callee"),
-            RpcError::InsufficientFunds => write!(f, "caller has insufficient funds"),
-            RpcError::InsufficientGas => write!(f, "not enough gas to complete transaction"),
-            RpcError::InvalidInput => write!(f, "invalid input provided to RPC"),
-            RpcError::InvalidOutput(_) => write!(f, "invalid output returned by RPC"),
-            RpcError::Exec(_) => write!(f, "execution error"),
-        }
-    }
-}
-
-impl<E> fmt::Display for RpcError<E> {
-    default fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(self, f)
-    }
-}
-
-impl<E: fmt::Debug> fmt::Debug for RpcError<E> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            RpcError::Exec(e) => write!(f, "execution error {:?}", e),
-            _ => fmt::Debug::fmt(self, f),
-        }
-    }
-}
-
-impl<E: fmt::Display> fmt::Display for RpcError<E> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            RpcError::Exec(e) => write!(f, "execution error: {}", e),
-            _ => fmt::Display::fmt(self, f),
-        }
     }
 }

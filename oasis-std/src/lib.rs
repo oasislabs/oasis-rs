@@ -30,7 +30,7 @@ pub mod reexports {
 }
 
 pub use oasis_macros::{default, Event, Service};
-pub use oasis_types::{Address, Balance};
+pub use oasis_types::{Address, Balance, RpcError};
 
 pub use crate::exe::*;
 
@@ -78,15 +78,15 @@ macro_rules! invoke {
             $($arg.serialize(&mut buf)?;)*
             Ok(())
         })()
-        .map_err(|_| $crate::backend::Error::InvalidInput)
+        .map_err(|_| $crate::RpcError::InvalidInput)
         .and_then(|_| $address.call($ctx, &buf))
     }};
 }
 
 pub trait AddressExt {
-    fn call(&self, ctx: &Context, payload: &[u8]) -> Result<Vec<u8>, crate::backend::Error>;
+    fn call(&self, ctx: &Context, payload: &[u8]) -> Result<Vec<u8>, RpcError>;
 
-    fn transfer<B: Into<Balance>>(&self, value: B) -> Result<(), crate::backend::Error>;
+    fn transfer<B: Into<Balance>>(&self, value: B) -> Result<(), RpcError>;
 
     fn balance(&self) -> Balance;
 
@@ -94,11 +94,11 @@ pub trait AddressExt {
 }
 
 impl AddressExt for Address {
-    fn call(&self, ctx: &Context, payload: &[u8]) -> Result<Vec<u8>, crate::backend::Error> {
+    fn call(&self, ctx: &Context, payload: &[u8]) -> Result<Vec<u8>, RpcError> {
         crate::backend::transact(self, ctx.value(), payload)
     }
 
-    fn transfer<B: Into<Balance>>(&self, value: B) -> Result<(), crate::backend::Error> {
+    fn transfer<B: Into<Balance>>(&self, value: B) -> Result<(), RpcError> {
         crate::backend::transact(self, value.into(), &[]).map(|_| ())
     }
 

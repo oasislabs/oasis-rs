@@ -1,6 +1,4 @@
-use oasis_types::{Address, Balance, ExtStatusCode};
-
-use super::Error;
+use oasis_types::{Address, Balance, ExtStatusCode, RpcError};
 
 /// @see the `blockchain-traits` crate for descriptions of these methods.
 extern "C" {
@@ -57,17 +55,13 @@ extern "C" {
     ) -> ExtStatusCode;
 }
 
-impl From<ExtStatusCode> for Error {
-    fn from(code: ExtStatusCode) -> Self {
-        match code {
-            ExtStatusCode::Success => unreachable!(),
-            ExtStatusCode::InsufficientFunds => Error::InsufficientFunds,
-            ExtStatusCode::InvalidInput => Error::InvalidInput,
-            ExtStatusCode::NoAccount => Error::InvalidCallee,
-            _ => Error::Execution {
-                payload: fetch_err(),
-            },
-        }
+fn unpack_rpc_error(status: ExtStatusCode) -> RpcError {
+    match status {
+        ExtStatusCode::Success => unreachable!(),
+        ExtStatusCode::InsufficientFunds => RpcError::InsufficientFunds,
+        ExtStatusCode::InvalidInput => RpcError::InvalidInput,
+        ExtStatusCode::NoAccount => RpcError::InvalidCallee,
+        _ => RpcError::Execution(fetch_err()),
     }
 }
 
@@ -75,7 +69,7 @@ macro_rules! ext {
     ($fn:ident $args:tt ) => {{
         let code = unsafe { $fn$args };
         if code != ExtStatusCode::Success {
-            Err(Error::from(code))
+            Err(code)
         } else {
             Ok(())
         }
@@ -140,25 +134,28 @@ pub fn code(addr: &Address) -> Option<Vec<u8>> {
         .map(|_| code)
 }
 
-pub fn transact(callee: &Address, value: Balance, input: &[u8]) -> Result<Vec<u8>, Error> {
+pub fn transact(callee: &Address, value: Balance, input: &[u8]) -> Result<Vec<u8>, RpcError> {
     ext!(oasis_transact(
         callee as *const _,
         &value.0 as *const u128,
         input.as_ptr(),
         if input.len() > u32::max_value() as usize {
-            return Err(Error::InvalidInput);
+            return Err(RpcError::InvalidInput);
         } else {
             input.len() as u32
         },
-    ))?;
+    ))
+    .map_err(unpack_rpc_error)?;
 
     let mut ret_len = 0u32;
-    ext!(oasis_ret_len(&mut ret_len as *mut _))?;
+    ext!(oasis_ret_len(&mut ret_len as *mut _)).map_err(unpack_rpc_error)?;
 
     let mut ret = Vec::with_capacity(ret_len as usize);
     unsafe { ret.set_len(ret_len as usize) };
 
-    ext!(oasis_fetch_ret(ret.as_mut_ptr())).map(|_| ret)
+    ext!(oasis_fetch_ret(ret.as_mut_ptr()))
+        .map(|_| ret)
+        .map_err(unpack_rpc_error)
 }
 
 pub fn input() -> Vec<u8> {

@@ -3,11 +3,8 @@ version: 2.1
 
 executors:
   rust:
-    environment:
-      PATH: /opt/wasi-sdk/bin:/root/.cargo/bin:/usr/bin:/bin
-      LD_LIBRARY_PATH: /root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib
     docker:
-      - image: oasislabs/rust:latest
+      - image: oasislabs/rust:0.3.0
     resource_class: xlarge
 
 

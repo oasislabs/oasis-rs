@@ -67,7 +67,7 @@ pub fn build(
 
             extern crate oasis_std;
 
-            use oasis_std::{abi::*, AddressExt as _};
+            use oasis_std::{abi::*, Address, AddressExt as _, RpcError};
 
             #(#def_tys)*
 
@@ -193,26 +193,61 @@ fn gen_def_tys<'a>(defs: &'a [oasis_rpc::TypeDef]) -> impl Iterator<Item = Token
 }
 
 pub fn gen_client(service: &ImportedService) -> TokenStream {
-    let ImportedService {
-        bytecode,
-        interface,
-    } = service;
+    let ImportedService { interface, .. } = service;
 
     let client_ident = format_ident!("{}Client", sanitize_ident(&interface.name).to_camel_case());
 
-    let rpcs = gen_rpcs(&interface.functions);
-    let ctor_fns = gen_ctors(&interface.constructor, &bytecode);
+    let rpcs = gen_rpcs(&interface.functions).collect::<Vec<_>>();
 
     quote! {
-        pub struct #client_ident {
-            pub address: oasis_std::Address,
+        #[cfg(target_os = "wasi")]
+        mod client {
+            pub struct #client_ident {
+                address: Address,
+            }
+
+            impl #client_ident {
+                pub fn new(address: Address) -> Self {
+                    Self {
+                        address,
+                    }
+                }
+
+                fn rpc(&self, payload: &[u8]) -> Result<Vec<u8>, RpcError> {
+                    self.ad
+                    oasis_std::invoke!(self.a)
+                }
+
+                #(#rpcs)*
+            }
         }
 
-        impl #client_ident {
-            #ctor_fns
+        #[cfg(not(target_os = "wasi"))]
+        mod client {
+            use oasis_client::gateway::Gateway;
 
-            #(#rpcs)*
+            pub struct #client_ident<'a> {
+                address: Address,
+                gateway: &'a dyn Gateway,
+            }
+
+            impl #client_ident<'a> {
+                pub fn new(gateway: &'a dyn Gateway, address: Address) -> Self {
+                    Self {
+                        address,
+                        gateway
+                    }
+                }
+
+                fn rpc(&self, payload: &[u8]) -> Result<Vec<u8>, RpcError> {
+                    self.gateway.rpc(self.address, payload)
+                }
+
+                #(#rpcs)*
+            }
         }
+
+        pub use client::*;
     }
 }
 
@@ -243,61 +278,25 @@ fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = To
                 ctx: &oasis_std::Context,
                 #(#arg_names: #arg_tys),*
            ) -> Result<#output_ty, oasis_std::RpcError<#err_ty>> {
-                #[cfg(target_os = "wasi")] {
-                    let output = oasis_std::invoke!(
-                        self.address,
-                        #func_idx,
-                        ctx,
-                        #(&#arg_names),*
-                    )?;
-                    Ok(<_>::try_from_slice(&output)
-                        .map_err(|_| oasis_std::RpcError::InvalidOutput(output))?)
+                use oasis_client::ClientError;
+                let payload = oasis_std::abi_encode!(#func_idx as u32, #(#arg_names),*);
+                match self.rpc(&payload)  {
+                    Ok(output) => {
+                        <_>::try_from_slice(&output)
+                            .map_err(|_| oasis_std::RpcError::InvalidOutput(output))
+                    }
+                    Err(err) => match err {
+                        ClientError::Execution
+                    }
                 }
-                #[cfg(not(target_os = "wasi"))] {
-                    unimplemented!("Native client not yet implemented.")
-                }
+                    .and_then(|output| {
+                        <_>::try_from_slice(&output)
+                    })
+                .map_err(|e)
+
             }
         }
     })
-}
-
-fn gen_ctors(ctor: &oasis_rpc::Constructor, _bytecode: &[u8]) -> TokenStream {
-    let (arg_names, arg_tys): (Vec<Ident>, Vec<TokenStream>) = ctor
-        .inputs
-        .iter()
-        .map(|inp| (format_ident!("{}", inp.name), quote_ty(&inp.ty)))
-        .unzip();
-
-    let error_ty = if let Some(error) = &ctor.error {
-        quote_ty(&error)
-    } else {
-        quote!(())
-    };
-
-    quote! {
-        #[cfg(target_os = "wasi")]
-        pub fn new(
-            ctx: &oasis_std::Context,
-            #(#arg_names: #arg_tys)*
-        ) -> Result<Self, oasis_std::RpcError<#error_ty>> {
-            unimplemented!()
-        }
-
-        #[cfg(not(target_os = "wasi"))]
-        pub fn new(
-            gateway: &dyn oasis_std::client::Gateway,
-            ctx: &oasis_std::Context,
-            #(#arg_names: #arg_tys)*
-        ) -> Result<Self, oasis_std::RpcError<#error_ty>> {
-            unimplemented!()
-        }
-
-        pub fn at(address: oasis_std::Address) -> Self {
-            Self {
-                address
-            }
-        }
-    }
 }
 
 fn get_rustc_version() -> String {

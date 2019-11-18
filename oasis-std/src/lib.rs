@@ -15,13 +15,27 @@
 extern crate oasis_macros;
 
 pub mod backend;
-pub mod client;
 pub mod collections;
 pub mod exe;
 
 pub mod abi {
     pub extern crate borsh;
     pub use borsh::{BorshDeserialize as Deserialize, BorshSerialize as Serialize};
+
+    #[macro_export]
+    macro_rules! abi_encode {
+        ($( $arg:expr ),* $(,)?) => {{
+            use $crate::abi::Serialize as _;
+            Ok(Vec::new())
+                $(
+                    .and_then(|mut buf| {
+                        $arg.serialize(&mut buf)?;
+                        Ok(buf)
+                    })
+                )*
+                .map_err(|_: std::io::Error| oasis_types::RpcError::InvalidInput)
+        }};
+    }
 }
 
 #[doc(hidden)]
@@ -71,16 +85,10 @@ macro_rules! service {
 /// ```
 #[macro_export]
 macro_rules! invoke {
-    ($address:expr, $method_id:literal, $ctx:expr, $( $arg:expr ),* $(,)?) => {{
-        use $crate::abi::Serialize as _;
-        let mut buf = Vec::new();
-        (|| -> Result<(), std::io::Error> {
-            $($arg.serialize(&mut buf)?;)*
-            Ok(())
-        })()
-        .map_err(|_| $crate::RpcError::InvalidInput)
-        .and_then(|_| $address.call($ctx, &buf))
-    }};
+    ($address:expr, $method_id:literal, $ctx:expr, $( $arg:expr ),* $(,)?) => {
+        $crate::abi_encode!($method_id as u32, $($arg),*)
+            .and_then(|payload| $crate::AddressExt::call(&$address, $ctx, &payload))
+    };
 }
 
 pub trait AddressExt {

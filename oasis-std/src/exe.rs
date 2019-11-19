@@ -6,6 +6,11 @@ pub trait Service {
 
     /// Stores a service struct to Storage.
     fn sunder(c: Self);
+
+    /// Returns the address of this service.
+    fn address(&self) -> Address {
+        crate::backend::address()
+    }
 }
 
 pub trait Event {
@@ -30,21 +35,6 @@ pub struct Context {
 
     #[doc(hidden)]
     pub gas: Option<u64>,
-
-    #[doc(hidden)]
-    pub call_type: CallType,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum CallType {
-    Default,
-    Constant,
-}
-
-impl Default for CallType {
-    fn default() -> Self {
-        CallType::Default
-    }
 }
 
 impl Context {
@@ -58,12 +48,6 @@ impl Context {
     /// Returns the `Address` of the sender of the current RPC.
     pub fn sender(&self) -> Address {
         self.sender.unwrap_or_else(crate::backend::sender)
-    }
-
-    /// Returns the `Address` of the currently executing service.
-    /// Panics if not called from within a service RPC.
-    pub fn address(&self) -> Address {
-        crate::backend::address()
     }
 
     /// Returns the AAD of the confidential execution.

@@ -98,16 +98,9 @@ fn main() {
             BuildTarget::Test
         } else if is_wasi || is_compiletest {
             BuildTarget::Wasi
-        } else if !is_service {
-            BuildTarget::Dep
         } else {
             BuildTarget::Dep
-            // println!("{:?}", args);
-            // println!("\n{}: Compiling an Oasis service to a native target is unlikely to work as expected. Did you mean to use `cargo build --target wasm32-wasi`?\n", "error".red());
-            // return Err(ErrorReported);
         };
-
-        // println!("{}", args.join(" "));
 
         let mut idl8r = oasis_build::BuildPlugin::new(
             build_target,

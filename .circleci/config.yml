@@ -4,7 +4,7 @@ version: 2.1
 executors:
   rust:
     docker:
-      - image: oasislabs/rust:0.3.0
+      - image: oasislabs/rust:latest
     resource_class: xlarge
 
 

@@ -67,7 +67,7 @@ pub fn build(
 
             extern crate oasis_std;
 
-            use oasis_std::{abi::*, Address, AddressExt as _, RpcError};
+            use oasis_std::{abi::*, Address, AddressExt as _, Context, RpcError};
 
             #(#def_tys)*
 
@@ -202,6 +202,8 @@ pub fn gen_client(service: &ImportedService) -> TokenStream {
     quote! {
         #[cfg(target_os = "wasi")]
         mod client {
+            use super::*;
+
             pub struct #client_ident {
                 address: Address,
             }
@@ -213,9 +215,8 @@ pub fn gen_client(service: &ImportedService) -> TokenStream {
                     }
                 }
 
-                fn rpc(&self, payload: &[u8]) -> Result<Vec<u8>, RpcError> {
-                    self.ad
-                    oasis_std::invoke!(self.a)
+                fn rpc(&self, ctx: &Context, payload: &[u8]) -> Result<Vec<u8>, RpcError> {
+                    self.address.call(ctx, payload)
                 }
 
                 #(#rpcs)*
@@ -224,6 +225,8 @@ pub fn gen_client(service: &ImportedService) -> TokenStream {
 
         #[cfg(not(target_os = "wasi"))]
         mod client {
+            use super::*;
+
             use oasis_client::gateway::Gateway;
 
             pub struct #client_ident<'a> {
@@ -239,7 +242,7 @@ pub fn gen_client(service: &ImportedService) -> TokenStream {
                     }
                 }
 
-                fn rpc(&self, payload: &[u8]) -> Result<Vec<u8>, RpcError> {
+                fn rpc(&self, ctx: &Context, payload: &[u8]) -> Result<Vec<u8>, RpcError> {
                     self.gateway.rpc(self.address, payload)
                 }
 
@@ -266,34 +269,20 @@ fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = To
             .map(|field| (format_ident!("{}", field.name), quote_borrow(&field.ty)))
             .unzip();
 
-        let (output_ty, err_ty) = match &func.output {
-            Some(oasis_rpc::Type::Result(ok_ty, err_ty)) => (quote_ty(ok_ty), quote_ty(err_ty)),
-            Some(ty) => (quote_ty(ty), quote!(())),
-            None => (quote!(()), quote!(())),
-        };
+        let output_ty = func.output.as_ref().map(quote_ty).unwrap_or_default();
 
         quote! {
             pub fn #fn_name(
                 #self_ref,
                 ctx: &oasis_std::Context,
                 #(#arg_names: #arg_tys),*
-           ) -> Result<#output_ty, oasis_std::RpcError<#err_ty>> {
-                use oasis_client::ClientError;
-                let payload = oasis_std::abi_encode!(#func_idx as u32, #(#arg_names),*);
-                match self.rpc(&payload)  {
-                    Ok(output) => {
+           ) -> Result<#output_ty, oasis_std::RpcError> {
+                let payload = oasis_std::abi_encode!(#func_idx as u32, #(#arg_names),*).unwrap();
+                self.rpc(ctx, &payload)
+                    .and_then(|output: Vec<u8>| {
                         <_>::try_from_slice(&output)
                             .map_err(|_| oasis_std::RpcError::InvalidOutput(output))
-                    }
-                    Err(err) => match err {
-                        ClientError::Execution
-                    }
-                }
-                    .and_then(|output| {
-                        <_>::try_from_slice(&output)
                     })
-                .map_err(|e)
-
             }
         }
     })

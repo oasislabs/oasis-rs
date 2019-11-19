@@ -22,6 +22,18 @@ pub mod abi {
     pub extern crate borsh;
     pub use borsh::{BorshDeserialize as Deserialize, BorshSerialize as Serialize};
 
+    /// Encodes arguments into the format expected by Oasis services.
+    ///
+    /// ## Example
+    ///
+    /// ```no_run
+    /// use oasis_std::{abi::*, Address, AddressExt as _, Context};
+    /// let method_id = 4;
+    /// let payload =
+    ///     oasis_std::abi_encode!(method_id, "some data", &["some", "more", "args"], 42,).unwrap();
+    /// let callee = Address::default();
+    /// let output = callee.call(&Context::default(), &payload).unwrap();
+    /// ```
     #[macro_export]
     macro_rules! abi_encode {
         ($( $arg:expr ),* $(,)?) => {{
@@ -33,7 +45,7 @@ pub mod abi {
                         Ok(buf)
                     })
                 )*
-                .map_err(|_: std::io::Error| oasis_types::RpcError::InvalidInput)
+                .map_err(|_: std::io::Error| $crate::RpcError::InvalidInput)
         }};
     }
 }
@@ -60,35 +72,6 @@ pub use crate::exe::*;
 #[macro_export]
 macro_rules! service {
     ($svc:path) => {};
-}
-
-/// Makes a transaction to an address using Oasis RPC semantics.
-///
-/// ## Usage
-///
-/// ```norun
-/// invoke!(addr: Address, method_id: u32, ctx: &Context, args: ..impl Serialize);
-/// ```
-/// Where `method_id` is the index of the desired function in the exported IDL.
-///
-/// ## Example
-///
-/// ```norun
-/// invoke!(
-///     some_address,
-///     0,
-///     &Context::default(),
-///     "an arg",
-///     &["some", "more", "args"],
-///     42,
-/// )
-/// ```
-#[macro_export]
-macro_rules! invoke {
-    ($address:expr, $method_id:literal, $ctx:expr, $( $arg:expr ),* $(,)?) => {
-        $crate::abi_encode!($method_id as u32, $($arg),*)
-            .and_then(|payload| $crate::AddressExt::call(&$address, $ctx, &payload))
-    };
 }
 
 pub trait AddressExt {
@@ -123,18 +106,18 @@ impl AddressExt for Address {
 mod tests {
     use super::*;
 
+    use abi::*;
+
     extern crate oasis_test;
 
     #[test]
     fn test_invoke() {
-        invoke!(
-            Address::default(),
-            0,
-            &Context::default(),
-            "an arg",
-            &["some", "more", "args"],
-            42,
-        )
-        .unwrap();
+        type T = (Address, String, Vec<u8>);
+        let things = (Address::default(), "an arg", (1..100).collect::<Vec<_>>());
+        let encoded = abi_encode!(&things).unwrap();
+        let decoded = T::try_from_slice(&encoded).unwrap();
+        assert_eq!(decoded.0, things.0);
+        assert_eq!(decoded.1, things.1);
+        assert_eq!(decoded.2, things.2);
     }
 }

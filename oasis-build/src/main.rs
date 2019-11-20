@@ -216,7 +216,6 @@ fn load_deps(
             .map_err(parse_err)
     } else {
         let mut deps: BTreeMap<String, ImportLocation> = BTreeMap::new();
-        println!("{:?}", oasis_tab);
         for (name, service_config) in oasis_tab.iter() {
             if name == "dev-dependencies" {
                 // oasis.dev-dependencies` looks like the dependencies of a single service.

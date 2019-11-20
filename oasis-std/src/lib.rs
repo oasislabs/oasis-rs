@@ -50,6 +50,11 @@ pub mod abi {
     }
 }
 
+#[cfg(not(target_os = "wasi"))]
+pub mod reexports {
+    pub extern crate oasis_client;
+}
+
 pub use oasis_macros::{default, Event, Service};
 pub use oasis_types::{Address, Balance, RpcError};
 

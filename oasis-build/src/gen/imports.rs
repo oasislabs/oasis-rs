@@ -227,14 +227,14 @@ pub fn gen_client(service: &ImportedService) -> TokenStream {
         mod client {
             use super::*;
 
-            use oasis_client::gateway::Gateway;
+            use oasis_std::reexports::oasis_client::gateway::Gateway;
 
             pub struct #client_ident<'a> {
                 address: Address,
                 gateway: &'a dyn Gateway,
             }
 
-            impl #client_ident<'a> {
+            impl<'a> #client_ident<'a> {
                 pub fn new(gateway: &'a dyn Gateway, address: Address) -> Self {
                     Self {
                         address,

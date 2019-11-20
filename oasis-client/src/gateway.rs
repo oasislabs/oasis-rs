@@ -17,7 +17,7 @@ pub trait Gateway {
     fn deploy(&self, initcode: &[u8]) -> Result<Address, RpcError>;
 
     /// Returns the output of calling the service at `address` with `data` as stdin.
-    fn rpc(&self, address: Address, data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>>;
+    fn rpc(&self, address: Address, data: &[u8]) -> Result<Vec<u8>, RpcError>;
 }
 
 /// Holds necessary information to make http requests to the gateway.

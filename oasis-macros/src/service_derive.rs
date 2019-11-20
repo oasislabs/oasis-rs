@@ -9,7 +9,7 @@ pub fn service_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream
     proc_macro::TokenStream::from(match get_serde(&input) {
         Some((ser, de)) => {
             quote! {
-                #[allow(warnings)]
+                #[allow(non_upper_case_globals)]
                 const #impl_wrapper_ident: () = {
                     use oasis_std::abi::*;
 

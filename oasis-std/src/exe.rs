@@ -13,28 +13,22 @@ pub trait Service {
     }
 }
 
-pub trait Event {
+pub trait Event: crate::abi::Serialize {
     /// Emits an event tagged with the (keccak) hashed function name and topics.
     fn emit(&self);
 }
 
-#[doc(hidden)]
-pub trait IntoEventTopic {
-    fn into_topic(&self) -> [u8; 32];
-}
+const TOPIC_LEN: usize = 32;
 
 #[doc(hidden)]
-impl<T: Copy + crate::abi::Serialize> IntoEventTopic for T {
-    fn into_topic(&self) -> [u8; 32] {
-        [0u8; 32]
-    }
-}
-
-#[doc(hidden)]
-default impl<T: crate::abi::Serialize> IntoEventTopic for T {
-    fn into_topic(&self) -> [u8; 32] {
-        [0u8; 32]
-        // #(tiny_keccak::keccak256(&self.#indexed_field_idents.try_to_vec().unwrap())),*
+pub fn encode_event_topic<T: crate::abi::Serialize>(field: &T) -> [u8; TOPIC_LEN] {
+    let repr = crate::abi_encode!(field).unwrap();
+    if repr.len() <= TOPIC_LEN {
+        let mut topic = [0u8; TOPIC_LEN];
+        topic[..repr.len()].copy_from_slice(&repr);
+        topic
+    } else {
+        tiny_keccak::keccak256(&repr)
     }
 }
 

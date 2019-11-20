@@ -47,15 +47,15 @@ pub fn event_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let impl_wrapper_ident = format_ident!("_IMPL_EVENT_FOR_{}", event_name);
 
     proc_macro::TokenStream::from(quote! {
-        #[allow(warnings)]
+        #[allow(non_upper_case_globals)]
         const #impl_wrapper_ident: () = {
-            use oasis_std::exe::IntoEventTopic;
+            use oasis_std::{abi::*, exe::{encode_event_topic, Event}};
 
-            impl#generics oasis_std::exe::Event for #event_name#generics  {
+            impl#generics Event for #event_name#generics  {
                 fn emit(&self) {
                     let topics: &[[u8; 32]] = &[
-                        IntoEventTopic::into_topic(&stringify!(#event_name)),
-                        #(IntoEventTopic::into_topic(&self.#indexed_field_idents)),*
+                        encode_event_topic(&stringify!(#event_name)),
+                        #(encode_event_topic(&self.#indexed_field_idents)),*
                     ];
                     let topic_refs: Vec<&[u8]> = topics.iter().map(|t| t.as_ref()).collect();
                     oasis_std::backend::emit(&topic_refs, &self.try_to_vec().unwrap());

@@ -36,7 +36,7 @@ pub mod abi {
     /// ```
     #[macro_export]
     macro_rules! abi_encode {
-        ($( $arg:expr ),* $(,)?) => {{
+        ($( $arg:expr ),* $(,)?) => { #[allow(unused)] {
             use $crate::abi::Serialize as _;
             Ok(Vec::new())
                 $(
@@ -48,11 +48,6 @@ pub mod abi {
                 .map_err(|_: std::io::Error| $crate::RpcError::InvalidInput)
         }};
     }
-}
-
-#[doc(hidden)]
-pub mod reexports {
-    pub extern crate tiny_keccak;
 }
 
 pub use oasis_macros::{default, Event, Service};

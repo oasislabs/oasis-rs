@@ -49,7 +49,7 @@ pub fn build(
         });
 
         if lib_path.is_file() {
-            println!(
+            eprintln!(
                 "       {} {name} v{version} ({path})",
                 "Fresh".green(),
                 name = mod_name,

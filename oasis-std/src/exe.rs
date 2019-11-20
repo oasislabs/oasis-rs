@@ -14,15 +14,19 @@ pub trait Service {
 }
 
 pub trait Event: crate::abi::Serialize {
-    /// Emits an event tagged with the (keccak) hashed function name and topics.
+    /// Emits the ABI-encoded event with the event name and indexed fields as topics.
+    /// Topics are ABI-encoded and then keccak256 hashed if longer than `TOPIC_LEN`.
+    /// Currently the maximum topic length is 32.
     fn emit(&self);
 }
 
+/// The maximum length of a topic. Topics longer than this will be keccak256 hashed.
 const TOPIC_LEN: usize = 32;
 
+/// ABI-encodes a topic and hashes it if its representation is longer than `TOPIC_LEN`.
 #[doc(hidden)]
-pub fn encode_event_topic<T: crate::abi::Serialize>(field: &T) -> [u8; TOPIC_LEN] {
-    let repr = crate::abi_encode!(field).unwrap();
+pub fn encode_event_topic<T: crate::abi::Serialize>(topic: &T) -> [u8; TOPIC_LEN] {
+    let repr = crate::abi_encode!(topic).unwrap();
     if repr.len() <= TOPIC_LEN {
         let mut topic = [0u8; TOPIC_LEN];
         topic[..repr.len()].copy_from_slice(&repr);

@@ -27,7 +27,7 @@ impl Address {
         std::path::PathBuf::from(hex::encode(self))
     }
 
-    /// Alaias for `Address::default()`.
+    /// Alias for `Address::default()`.
     pub fn zero() -> Self {
         Self::default()
     }

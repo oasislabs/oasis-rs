@@ -346,7 +346,7 @@ fn convert_sty_with_arg_at<'tcx>(
         Str => Type::String,
         Array(ty, len) => Type::Array(
             box convert_sty(tcx, did, ty)?,
-            // The following is a mightly workaround for rustc not evaluating
+            // The following is a mightily workaround for rustc not evaluating
             // literal array lengths in structs, for whatever reason.
             len.val
                 .try_to_scalar()

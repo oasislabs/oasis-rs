@@ -63,12 +63,13 @@ impl HttpGatewayBuilder {
         }
     }
 
+    /// Set the api key expected by the Oasis Developer gateway.
     pub fn api_key(mut self, api_key: impl AsRef<str>) -> Self {
         self.api_key = Some(api_key.as_ref().to_string());
         self
     }
 
-    /// Assign the value of the named header.
+    /// Append the value of the named header.
     pub fn header(mut self, name: impl AsRef<[u8]>, value: impl AsRef<[u8]>) -> Result<Self> {
         self.headers.insert(
             HeaderName::from_bytes(name.as_ref())?,
@@ -77,12 +78,13 @@ impl HttpGatewayBuilder {
         Ok(self)
     }
 
-    /// Assigns the provided headers as the defaults for all requests made by the `HttpGateway`.
+    /// Assign the provided headers as the defaults for all requests made by the `HttpGateway`.
     pub fn headers(mut self, headers: HeaderMap) -> Self {
         self.headers = headers;
         self
     }
 
+    /// Set the polling parameters for the `HttpGateway`.
     pub fn polling_params(mut self, params: PollingParams) -> Self {
         self.polling_params = params;
         self
@@ -180,16 +182,16 @@ impl HttpGateway {
         }
     }
 
+    /// Submit given request asynchronously and poll for results.
     fn post_and_poll(&self, api: DeveloperGatewayApi, body: GatewayRequest) -> Result<Event> {
         let response: AsyncResponse = self.request(api.method, api.url, body)?;
 
-        let event = self.poll_for_response(response.id)?;
-        if let Event::Error { description, .. } = event {
-            Err(anyhow!("{}", description))
-        } else {
-            Ok(event)
+        match self.poll_for_response(response.id)? {
+            Event::Error { description, .. } => Err(anyhow!("{}", description)),
+            e => Ok(e),
         }
     }
+
     /// Synchronous polling. Repeatedly attempts to retrieve the event of the given
     /// request id. If polling fails `max_attempts` times an error is returned.
     fn poll_for_response(&self, request_id: u64) -> Result<Event> {
@@ -238,7 +240,9 @@ impl HttpGateway {
         Err(anyhow!("Exceeded max polling attempts"))
     }
 
-    pub(crate) fn request<P: serde::Serialize, Q: serde::de::DeserializeOwned>(
+    /// Submits a request to the gateway. The body of the request is json-serialized and the
+    /// response is expected to be json-serialized as well.
+    fn request<P: serde::Serialize, Q: serde::de::DeserializeOwned>(
         &self,
         method: RequestMethod,
         url: &str,

@@ -44,7 +44,7 @@ pub trait Block {
     /// `None` if the account does not exist.
     fn account_meta_at(&self, addr: &Address) -> Option<AccountMeta>;
 
-    /// Returns the state of the acount at `addr`, if it exists.
+    /// Returns the state of the account at `addr`, if it exists.
     fn state_at(&self, addr: &Address) -> Option<&dyn KVStore>;
 
     /// Returns the events emitted during the course of this block.
@@ -79,7 +79,7 @@ pub trait PendingTransaction {
     /// Returns error data to the calling context.
     fn err(&mut self, data: &[u8]);
 
-    /// Publishes a broascast message in this block.
+    /// Publishes a broadcast message in this block.
     fn emit(&mut self, topics: &[&[u8]], data: &[u8]);
 
     /// Returns the state of the current account.

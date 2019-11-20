@@ -693,7 +693,7 @@ testcase!(
             Err(ErrNo::NoEnt)
         );
 
-        // Blockchain special files vs invaid open flags.
+        // Blockchain special files vs invalid open flags.
         for (f, dir) in [
             ("balance", HOME_DIR_FILENO.into()), // 4 is home dir
             ("log", CHAIN_DIR_FILENO.into()),    // 3 is chain dir

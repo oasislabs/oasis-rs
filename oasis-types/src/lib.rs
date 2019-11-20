@@ -54,7 +54,7 @@ pub enum RpcError {
     InvalidOutput(Vec<u8>),
 
     /// The application returned an error.
-    #[error("an application error occured")]
+    #[error("an application error occurred")]
     Execution(Vec<u8>),
 }
 

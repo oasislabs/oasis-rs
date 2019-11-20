@@ -31,7 +31,7 @@ impl BCFS {
         }
     }
 
-    /// Returns preopened dir fds. @see `crate::file::special_file_ctor`
+    /// Returns pre-opened dir fds. @see `crate::file::special_file_ctor`
     pub fn prestat(&mut self, _ptx: &mut dyn PendingTransaction, fd: Fd) -> Result<&Path> {
         match &self.file(fd)?.kind {
             FileKind::Directory { path } => Ok(path),
@@ -58,7 +58,7 @@ impl BCFS {
         fd_flags: FdFlags,
     ) -> Result<Fd> {
         if open_flags.contains(OpenFlags::DIRECTORY) {
-            // The virutal filesystem does not yet allow opening directories.
+            // The virtual filesystem does not yet allow opening directories.
             return Err(ErrNo::NotSup);
         }
 
@@ -379,7 +379,7 @@ impl BCFS {
         use std::path::Component;
 
         if path.has_root() {
-            return Err(ErrNo::NoEnt); // WASI paths must be releative to a preopened dir.
+            return Err(ErrNo::NoEnt); // WASI paths must be relative to a pre-opened dir.
         }
 
         let curdir_fileno = u32::from(curdir);

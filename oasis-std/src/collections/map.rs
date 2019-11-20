@@ -394,6 +394,7 @@ where
 
 // taken from libstd/collections/hash/map.rs @ 7454b2
 #[cfg(test)]
+#[allow(clippy::all)]
 mod test_map {
     use super::*;
     use Entry::{Occupied, Vacant};

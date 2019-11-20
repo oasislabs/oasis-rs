@@ -940,7 +940,7 @@ testcase!(
         };
 
         // The following expected values are set up in `create_memchain`.
-        let expected_balance = 2000000042;
+        let expected_balance = 2_000_000_042;
         let expected_bytecode = format!("\0asm not wasm {}", 2).into_bytes();
 
         let (balance_bytes, nbytes) = read_special("balance", HOME_DIR_FILENO.into());

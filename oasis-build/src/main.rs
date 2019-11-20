@@ -81,7 +81,6 @@ fn main() {
                     for import in imports.iter() {
                         args.push("--extern".to_string());
                         args.push(format!("{}={}", import.name, import.lib_path.display()));
-                        eprintln!("importing {}", import.name);
                     }
                     imports
                 }
@@ -216,19 +215,25 @@ fn load_deps(
             .unwrap_or_else(|| Ok(BTreeMap::new()))
             .map_err(parse_err)
     } else {
-        let mut service_deps: BTreeMap<String, ImportLocation> = BTreeMap::new();
-        for (name, deps) in oasis_tab.iter() {
+        let mut deps: BTreeMap<String, ImportLocation> = BTreeMap::new();
+        println!("{:?}", oasis_tab);
+        for (name, service_config) in oasis_tab.iter() {
             if name == "dev-dependencies" {
-                service_deps.append(&mut deps.clone().try_into().map_err(parse_err)?);
+                // oasis.dev-dependencies` looks like the dependencies of a single service.
+                deps.append(&mut service_config.clone().try_into().map_err(parse_err)?);
                 continue;
             }
-            if let Some(deps) = deps.as_table() {
-                for (dep_name, loc_value) in deps.clone().into_iter() {
-                    service_deps.insert(dep_name, loc_value.try_into().map_err(parse_err)?);
+            if let Some(service_deps) = service_config
+                .get("dependencies")
+                .and_then(|d| d.as_table())
+                .cloned()
+            {
+                for (dep_name, dep_loc) in service_deps.into_iter() {
+                    deps.insert(dep_name, dep_loc.try_into().map_err(parse_err)?);
                 }
             }
         }
-        Ok(service_deps)
+        Ok(deps)
     }
 }
 

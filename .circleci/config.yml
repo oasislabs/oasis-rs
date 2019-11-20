@@ -62,7 +62,7 @@ jobs:
           name: Clippy
           command: |
             rustup component add clippy || exit 0
-            cargo clippy --all-features -- -D clippy::all
+            cargo clippy --all-targets --all-features -- -D clippy::all
 
   wasm_build:
     executor: rust

@@ -17,7 +17,7 @@ pub struct Import {
 }
 
 pub fn build(
-    top_level_deps: impl IntoIterator<Item = (String, ImportLocation)>, // name -
+    top_level_deps: impl IntoIterator<Item = (String, ImportLocation)>,
     gen_dir: impl AsRef<Path>,
     out_dir: impl AsRef<Path>,
     mut rustc_args: Vec<String>,
@@ -49,7 +49,7 @@ pub fn build(
         });
 
         if lib_path.is_file() {
-            eprintln!(
+            println!(
                 "       {} {name} v{version} ({path})",
                 "Fresh".green(),
                 name = mod_name,

@@ -18,6 +18,26 @@ pub trait Event {
     fn emit(&self);
 }
 
+#[doc(hidden)]
+pub trait IntoEventTopic {
+    fn into_topic(&self) -> [u8; 32];
+}
+
+#[doc(hidden)]
+impl<T: Copy + crate::abi::Serialize> IntoEventTopic for T {
+    fn into_topic(&self) -> [u8; 32] {
+        [0u8; 32]
+    }
+}
+
+#[doc(hidden)]
+default impl<T: crate::abi::Serialize> IntoEventTopic for T {
+    fn into_topic(&self) -> [u8; 32] {
+        [0u8; 32]
+        // #(tiny_keccak::keccak256(&self.#indexed_field_idents.try_to_vec().unwrap())),*
+    }
+}
+
 /// The context of the current RPC.
 /// To create a `Context`, use `Context::default()`.
 /// The default `Context` will have its `sender` be the address of the current service

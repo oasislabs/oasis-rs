@@ -1,4 +1,4 @@
-#![feature(proc_macro_diagnostic, type_ascription)]
+#![feature(proc_macro_diagnostic, proc_macro_raw_ident, type_ascription)]
 #![recursion_limit = "128"]
 
 extern crate proc_macro;

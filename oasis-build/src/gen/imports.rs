@@ -191,8 +191,7 @@ fn gen_client(service: &ImportedService) -> TokenStream {
 
     let rpcs = gen_rpcs(&interface.functions).collect::<Vec<_>>();
 
-    // let service_bytes = bytecode.iter().map(|byte| quote!(byte));
-    let service_bytecode = quote!(&[#(#bytecode),*]);
+    let service_bytecode = quote!(&[#(#bytecode),*]); // TODO(#247)
 
     let (ctor_arg_names, ctor_arg_tys): (Vec<Ident>, Vec<TokenStream>) = interface
         .constructor

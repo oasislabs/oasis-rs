@@ -1,13 +1,23 @@
-[workspace]
-members = [
-    "idl-gen",
-    "xcc",
-]
+[package]
+name = "tests"
+version = "0.1.0"
+authors = ["Oasis Labs <feedback@oasislabs.com>"]
+edition = "2018"
+publish = false
 
-[profile.release]
-incremental = false
-lto = true
-opt-level = 3
+[dependencies]
+oasis-std = { version = "0.3", path = "../oasis-std" }
 
-[patch.crates-io]
-borsh = { git = "https://github.com/oasislabs/borsh" }
+[dev-dependencies]
+oasis-rpc = { version = "0.3", path = "../oasis-rpc", features = ["saveload"] }
+serde_json = "1.0"
+walrus = "0.13"
+
+[target.'cfg(not(target_os = "wasi"))'.dependencies]
+oasis-client = { version = "0.1", path = "../oasis-client" }
+
+[package.metadata.oasis.a.dependencies]
+b = { path = "../target/wasm32-wasi/release/b.wasm" }
+
+[package.metadata.oasis.dev-dependencies]
+a = { path = "../target/wasm32-wasi/release/a.wasm" }

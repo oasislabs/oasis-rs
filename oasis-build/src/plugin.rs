@@ -34,7 +34,10 @@ pub struct BuildPlugin {
 }
 
 impl BuildPlugin {
-    pub fn new(target: BuildTarget, imports: impl IntoIterator<Item = (String, String)>) -> Self {
+    pub fn new(
+        target: BuildTarget,
+        imports: impl IntoIterator<Item = (String /* name */, String /* semver */)>,
+    ) -> Self {
         Self {
             target,
             imports: imports.into_iter().collect(),

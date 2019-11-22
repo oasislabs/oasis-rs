@@ -17,6 +17,7 @@ heck = "0.3"
 oasis-rpc = { version = "0.3", path = "../oasis-rpc", features = ["resolve", "visitor"] }
 proc-macro2 = "1.0"
 quote = "1.0"
+serde = { version = "1.0", features = ["derive"] }
 syn = { version = "1.0", default-features = false, features = ["parsing"] }
 thiserror = "1.0"
 toml = "0.5"
@@ -25,4 +26,4 @@ walrus = "0.13"
 [dev-dependencies]
 compiletest_rs = { version = "=0.3.22", features = ["tmp"] }
 oasis-std = { version = "0.3", path = "../oasis-std" }
-xcc = { path = "../tests/xcc" }
+tests = { path = "../tests" }

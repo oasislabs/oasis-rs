@@ -48,7 +48,7 @@ impl Importer {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ImportLocation {
     Path(std::path::PathBuf),
     Url(url::Url),
@@ -85,6 +85,7 @@ impl<'de> serde::Deserialize<'de> for ImportLocation {
     }
 }
 
+#[derive(Clone, PartialEq, Eq)]
 pub struct ImportedService {
     pub bytecode: Vec<u8>,
     pub interface: crate::Interface,

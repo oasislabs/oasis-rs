@@ -4,7 +4,8 @@ use oasis_std::{Address, Context, Service};
 pub struct ServiceA;
 
 impl ServiceA {
-    pub fn new(_ctx: &Context) -> Self {
+    pub fn new(_ctx: &Context, message: String) -> Self {
+        eprintln!("{}", message);
         Self
     }
 

@@ -52,46 +52,73 @@ fn main() {
             path
         });
 
-        let imports = if is_service || is_test {
+        let mut import_semvers = Vec::new(); // for recording dependencies in the IDL
+        if is_service || is_test {
+            let crate_name = crate_name.as_ref().unwrap();
             let out_dir = out_dir.as_ref().unwrap();
-
             let gen_dir = out_dir.parent().unwrap().join("build/oasis_imports");
             std::fs::create_dir_all(&gen_dir).unwrap();
 
+            let report_err = |err| {
+                eprintln!("{}: {}\n", "error".red(), err);
+                ErrorReported
+            };
+
             let mut manifest_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
             manifest_path.push("Cargo.toml");
-            match load_deps(
-                &manifest_path,
-                if is_test {
-                    None
-                } else {
-                    Some(crate_name.as_ref().unwrap())
-                },
-            )
-            .and_then(|imports| {
-                oasis_build::build_imports(
-                    imports,
-                    gen_dir,
-                    out_dir,
-                    collect_import_rustc_args(&args),
-                )
-                .map_err(Into::into)
-            }) {
-                Ok(imports) => {
-                    for import in imports.iter() {
-                        args.push("--extern".to_string());
-                        args.push(format!("{}={}", import.name, import.lib_path.display()));
-                    }
-                    imports
+            let oasis_deps = OasisDependencies::load(&manifest_path).map_err(report_err)?;
+
+            let get_oasis_deps = |crate_name: &str| -> Vec<(String, ImportLocation)> {
+                oasis_deps
+                    .service_configs
+                    .get(crate_name)
+                    .map(|cfg| cfg.dependencies.clone().into_iter().collect())
+                    .unwrap_or_default()
+            };
+
+            let mut dep_stack: Vec<(String, ImportLocation)> = if is_test {
+                oasis_deps.dev_dependencies.clone().into_iter().collect()
+            } else {
+                get_oasis_deps(&crate_name)
+            };
+
+            let mut preorder_deps = Vec::new();
+            while let Some(dep) = dep_stack.pop() {
+                let (dep_name, _dep_loc) = &dep;
+                if preorder_deps.iter().any(|(name, _)| name == dep_name) {
+                    continue;
                 }
-                Err(err) => {
-                    eprintln!("{} {}\n", "error:".red(), err);
-                    return Err(ErrorReported);
-                }
+
+                dep_stack.append(
+                    &mut oasis_deps
+                        .service_configs
+                        .get(dep_name)
+                        .map(|cfg| cfg.dependencies.clone().into_iter().collect())
+                        .unwrap_or_default(),
+                );
+
+                preorder_deps.push(dep);
             }
-        } else {
-            Vec::new()
-        };
+
+            let rustc_args = collect_import_rustc_args(&args);
+            let mut externs = Vec::with_capacity(preorder_deps.len() * 2);
+            for dep in preorder_deps.into_iter().rev() {
+                let import = oasis_build::imports::build(
+                    dep,
+                    &gen_dir,
+                    &out_dir,
+                    rustc_args.iter().chain(externs.iter()).cloned().collect(),
+                )
+                .map_err(report_err)?;
+
+                externs.push("--extern".to_string());
+                externs.push(format!("{}={}", import.name, import.lib_path.display()));
+
+                import_semvers.push((import.name, import.version));
+            }
+
+            args.append(&mut externs);
+        }
 
         let build_target = if is_test {
             BuildTarget::Test
@@ -101,10 +128,7 @@ fn main() {
             BuildTarget::Dep
         };
 
-        let mut idl8r = oasis_build::BuildPlugin::new(
-            build_target,
-            imports.into_iter().map(|imp| (imp.name, imp.version)),
-        );
+        let mut idl8r = oasis_build::BuildPlugin::new(build_target, import_semvers);
         let mut default_cbs = rustc_driver::DefaultCallbacks;
         let callbacks: &mut (dyn rustc_driver::Callbacks + Send) = if is_service || is_compiletest {
             &mut idl8r
@@ -186,55 +210,37 @@ fn collect_import_rustc_args(args: &[String]) -> Vec<String> {
     import_args
 }
 
-fn load_deps(
-    manifest_path: &Path,
-    service_name: Option<&str>, // `None` when running an integration test
-) -> anyhow::Result<BTreeMap<String, ImportLocation>> {
-    let cargo_toml: toml::Value = toml::from_slice(&std::fs::read(manifest_path).unwrap()).unwrap();
+#[derive(Debug, Default, serde::Deserialize)]
+struct OasisDependencies {
+    #[serde(default, rename = "dev-dependencies")]
+    dev_dependencies: Dependencies,
+    #[serde(default, flatten)]
+    service_configs: BTreeMap<String, ServiceConfig>,
+}
 
-    let oasis_tab = match cargo_toml
-        .as_table()
-        .and_then(|c_t| c_t.get("package").and_then(toml::Value::as_table))
-        .and_then(|p| p.get("metadata").and_then(toml::Value::as_table))
-        .and_then(|m| m.get("oasis").and_then(toml::Value::as_table))
-    {
-        Some(t) => t,
-        None => return Ok(BTreeMap::new()), // no (dev-)dependencies`
-    };
+#[derive(Debug, Default, serde::Deserialize)]
+struct ServiceConfig {
+    #[serde(default)]
+    dependencies: Dependencies,
+}
 
-    let parse_err = |err| anyhow::format_err!("could not parse Oasis dependencies: {}", err);
+impl OasisDependencies {
+    fn load(manifest_path: &Path) -> anyhow::Result<Self> {
+        let cargo_toml: toml::Value = toml::from_slice(&std::fs::read(manifest_path)?)?;
 
-    if let Some(service_name) = service_name {
-        oasis_tab
-            .get(service_name)
-            .or_else(|| oasis_tab.get(&service_name.replace("_", "-")))
-            // ^ `service_name` comes from rustc args and is always underscored
-            .and_then(|s| s.get("dependencies"))
-            .cloned()
-            .map(|d| d.try_into())
-            .unwrap_or_else(|| Ok(BTreeMap::new()))
-            .map_err(parse_err)
-    } else {
-        let mut deps: BTreeMap<String, ImportLocation> = BTreeMap::new();
-        for (name, service_config) in oasis_tab.iter() {
-            if name == "dev-dependencies" {
-                // oasis.dev-dependencies` looks like the dependencies of a single service.
-                deps.append(&mut service_config.clone().try_into().map_err(parse_err)?);
-                continue;
-            }
-            if let Some(service_deps) = service_config
-                .get("dependencies")
-                .and_then(|d| d.as_table())
-                .cloned()
-            {
-                for (dep_name, dep_loc) in service_deps.into_iter() {
-                    deps.insert(dep_name, dep_loc.try_into().map_err(parse_err)?);
-                }
-            }
+        match cargo_toml
+            .as_table()
+            .and_then(|c_t| c_t.get("package").and_then(toml::Value::as_table))
+            .and_then(|p| p.get("metadata").and_then(toml::Value::as_table))
+            .and_then(|m| m.get("oasis"))
+        {
+            Some(oasis_tab) => Ok(oasis_tab.clone().try_into()?),
+            None => Ok(Self::default()),
         }
-        Ok(deps)
     }
 }
+
+type Dependencies = BTreeMap<String, ImportLocation>;
 
 fn pack_iface_into_wasm(
     iface: &oasis_rpc::Interface,

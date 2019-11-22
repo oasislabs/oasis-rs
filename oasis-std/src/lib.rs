@@ -36,23 +36,30 @@ pub mod abi {
     /// ```
     #[macro_export]
     macro_rules! abi_encode {
-        ($( $arg:expr ),* $(,)?) => { #[allow(unused)] {
-            use $crate::abi::Serialize as _;
-            Ok(Vec::new())
+        ($( $arg:expr ),* $(,)?) => {
+            $crate::abi_encode!($($arg),* => Vec::new())
+        };
+        ($( $arg:expr ),* $(,)? => $buf:expr) => {
+            Ok($buf)
                 $(
                     .and_then(|mut buf| {
-                        $arg.serialize(&mut buf)?;
+                        #[allow(unused)] {
+                            use $crate::abi::Serialize as _;
+                            $arg.serialize(&mut buf)?;
+                        }
                         Ok(buf)
                     })
                 )*
                 .map_err(|_: std::io::Error| $crate::RpcError::InvalidInput)
-        }};
+        };
     }
 }
 
 #[cfg(not(target_os = "wasi"))]
+#[doc(hidden)]
 pub mod reexports {
-    pub extern crate oasis_client;
+    pub extern crate oasis_client; // used by generated clients
+    pub extern crate oasis_test; // links the dylib containing the `backend::ext` externs
 }
 
 pub use oasis_macros::{default, Event, Service};

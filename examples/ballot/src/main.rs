@@ -89,10 +89,6 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    // This is required even in Rust 2018. If omitted, rustc will not link in the testing
-    // library and will produce a giant error message.
-    extern crate oasis_test;
-
     use super::*;
 
     /// Creates a new account and a `Context` with the new account as the sender.

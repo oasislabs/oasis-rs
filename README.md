@@ -12,8 +12,9 @@ You can find more information in the [developer documentation](https://docs.oasi
 
 ## Crates for Blockchain Service Developers
 
-* **oasis** - A framework for conveniently developing blockchain services.
+* **oasis-std** - A framework for conveniently developing blockchain services.
 * **oasis-test** - A testing framework for testing services built using Oasis.
+* **oasis-client** - A Rust client for interacting with services through a [developer gateway](https://github.com/oasislabs/developer-gateway)
 * **oasis-build** - A compiler plugin that adds boilerplate code and generates RPC schemas from Rust types.
 
 ## Crates for Oasis Developers

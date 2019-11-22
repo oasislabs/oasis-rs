@@ -2,8 +2,9 @@ use rustc::util::nodemap::FxHashMap;
 use syntax::{ast, mut_visit, ptr::P, source_map::Span, visit};
 use syntax_pos::symbol::Symbol;
 
-use super::parsed_rpc::ParsedRpc;
 use crate::error::{RpcError, RpcWarning};
+
+use super::parsed_rpc::ParsedRpc;
 
 #[derive(Default)]
 pub struct ServiceDefFinder {

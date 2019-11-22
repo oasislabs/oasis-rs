@@ -1,7 +1,7 @@
-use std::{path::Path, str::FromStr};
+use std::{path::Path, str::FromStr as _};
 
 use colored::*;
-use heck::{CamelCase, SnakeCase};
+use heck::{CamelCase as _, SnakeCase as _};
 use oasis_rpc::import::{resolve_imports, ImportLocation, ImportedService};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;

@@ -51,7 +51,6 @@ fn test_native_client() {
             callee, payload, ..
         } = &rpcs[0];
         assert_eq!(*callee, a_addr);
-        // assert!(payload.iter().eq(&expected_rpc_payload));
         assert_eq!(payload, &expected_rpc_payload);
     }
 }

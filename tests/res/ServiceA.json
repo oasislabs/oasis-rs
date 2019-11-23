@@ -9,7 +9,14 @@
     }
   ],
   "constructor": {
-    "inputs": [],
+    "inputs": [
+      {
+        "name": "message",
+        "type": {
+          "type": "string"
+        }
+      }
+    ],
     "error": null
   },
   "functions": [

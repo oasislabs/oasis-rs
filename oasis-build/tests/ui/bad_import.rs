@@ -1,3 +1,5 @@
+use tests::NonXccType;
+
 #[derive(oasis_std::Service)]
 pub struct Service;
 
@@ -6,7 +8,7 @@ impl Service {
         Self
     }
 
-    pub fn bad_import(&mut self, _ctx: &oasis_std::Context, arg: xcc::NonXccType) {}
+    pub fn bad_import(&mut self, _ctx: &oasis_std::Context, arg: NonXccType) {}
 }
 
 fn main() {

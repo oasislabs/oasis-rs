@@ -29,3 +29,4 @@ wasi = "0.7"
 
 [target.'cfg(not(target_os = "wasi"))'.dependencies]
 oasis-client = { version = "0.1", path = "../oasis-client" }
+oasis-test = { version = "0.2", path = "../oasis-test" }

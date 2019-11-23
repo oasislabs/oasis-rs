@@ -1,7 +1,7 @@
-use std::{path::Path, str::FromStr};
+use std::{path::Path, str::FromStr as _};
 
 use colored::*;
-use heck::{CamelCase, SnakeCase};
+use heck::{CamelCase as _, SnakeCase as _};
 use oasis_rpc::import::{resolve_imports, ImportLocation, ImportedService};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
@@ -17,95 +17,84 @@ pub struct Import {
 }
 
 pub fn build(
-    top_level_deps: impl IntoIterator<Item = (String, ImportLocation)>,
-    gen_dir: impl AsRef<Path>,
-    out_dir: impl AsRef<Path>,
+    import_name_loc: (String, ImportLocation),
+    gen_dir: &Path,
+    out_dir: &Path,
     mut rustc_args: Vec<String>,
-) -> anyhow::Result<Vec<Import>> {
-    let out_dir = out_dir.as_ref();
-
-    let services = resolve_imports(
-        top_level_deps,
+) -> anyhow::Result<Import> {
+    let service = resolve_imports(
+        std::iter::once(import_name_loc),
         Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()),
-    )?;
-
-    let mut imports = Vec::with_capacity(services.len());
+    )?
+    .pop()
+    .unwrap();
 
     rustc_args.push("--crate-name".to_string());
 
-    for service in services {
-        let interface_hash = hash!(service.interface, get_rustc_version());
+    let interface_hash = hash!(service.interface, get_rustc_version());
 
-        let mod_name = sanitize_ident(&service.interface.namespace).to_snake_case();
-        let mod_path = gen_dir
-            .as_ref()
-            .join(format!("{}-{:016x}.rs", mod_name, interface_hash));
-        let lib_path = out_dir.join(format!("lib{}-{:016x}.rlib", mod_name, interface_hash));
+    let mod_name = sanitize_ident(&service.interface.namespace).to_snake_case();
+    let mod_path = gen_dir.join(format!("{}-{:016x}.rs", mod_name, interface_hash));
+    let lib_path = out_dir.join(format!("lib{}-{:016x}.rlib", mod_name, interface_hash));
 
-        imports.push(Import {
-            name: mod_name.clone(),
-            version: service.interface.version.clone(),
-            lib_path: lib_path.clone(),
-        });
+    let import = Import {
+        name: mod_name.clone(),
+        version: service.interface.version.clone(),
+        lib_path: lib_path.clone(),
+    };
 
-        if lib_path.is_file() {
-            eprintln!(
-                "       {} {name} v{version} ({path})",
-                "Fresh".green(),
-                name = mod_name,
-                version = service.interface.version,
-                path = mod_path.display()
-            );
-            continue;
-        }
-
-        let def_tys = gen_def_tys(&service.interface.type_defs);
-        let client = gen_client(&service);
-
-        let service_toks = quote! {
-            #![allow(warnings)]
-
-            extern crate oasis_std;
-
-            use oasis_std::{abi::*, Address, AddressExt as _, Context, RpcError};
-
-            #(#def_tys)*
-
-            #client
-        };
-
-        write_generated(&mod_path, &service_toks.to_string());
-
+    if lib_path.is_file() && std::env::var_os("OASIS_BUILD_NO_CACHE").is_none() {
         eprintln!(
-            "   {} {name} v{version} ({path})",
-            "Compiling".green(),
+            "       {} {name} v{version} ({path})",
+            "Fresh".green(),
             name = mod_name,
             version = service.interface.version,
             path = mod_path.display()
         );
-
-        // 3 pushes
-        rustc_args.push(mod_name.clone());
-        rustc_args.push(mod_path.display().to_string());
-        rustc_args.push(format!("-Cextra-filename=-{:016x}", interface_hash));
-
-        if std::env::var("OASIS_BUILD_VERBOSE").is_ok() {
-            eprintln!(
-                "     {} `rustc {}`",
-                "Running".green(),
-                rustc_args.join(" ")
-            );
-        }
-
-        rustc_driver::run_compiler(&rustc_args, &mut rustc_driver::DefaultCallbacks, None, None)
-            .map_err(|_| anyhow::format_err!("Could not build `{}`", mod_name))?;
-
-        // 3 pops
-        rustc_args.pop();
-        rustc_args.pop();
-        rustc_args.pop();
+        return Ok(import);
     }
-    Ok(imports)
+
+    let def_tys = gen_def_tys(&service.interface.type_defs);
+    let client = gen_client(&service);
+
+    let service_toks = quote! {
+        #![allow(warnings)]
+
+        extern crate oasis_std;
+
+        use oasis_std::{abi::*, abi_encode, Address, AddressExt as _, Context, RpcError};
+
+        #(#def_tys)*
+
+        #client
+    };
+
+    write_generated(&mod_path, &service_toks.to_string());
+
+    eprintln!(
+        "   {} {name} v{version} ({path})",
+        "Compiling".green(),
+        name = mod_name,
+        version = service.interface.version,
+        path = mod_path.display()
+    );
+
+    rustc_args.push(mod_name.clone());
+    rustc_args.push(mod_path.display().to_string());
+    rustc_args.push(format!("-Cextra-filename=-{:016x}", interface_hash));
+
+    if std::env::var("OASIS_BUILD_VERBOSE").is_ok() {
+        eprintln!(
+            "     {} `rustc {}`",
+            "Running".green(),
+            rustc_args.join(" ")
+        );
+    }
+
+    rustc_driver::run_compiler(&rustc_args, &mut rustc_driver::DefaultCallbacks, None, None)
+        .map_err(|_| anyhow::format_err!("Could not build `{}`", mod_name))?;
+
+    Ok(import)
 }
 
 fn gen_def_tys<'a>(defs: &'a [oasis_rpc::TypeDef]) -> impl Iterator<Item = TokenStream> + 'a {
@@ -192,12 +181,24 @@ fn gen_def_tys<'a>(defs: &'a [oasis_rpc::TypeDef]) -> impl Iterator<Item = Token
     })
 }
 
-pub fn gen_client(service: &ImportedService) -> TokenStream {
-    let ImportedService { interface, .. } = service;
+fn gen_client(service: &ImportedService) -> TokenStream {
+    let ImportedService {
+        interface,
+        bytecode,
+    } = service;
 
     let client_ident = format_ident!("{}Client", sanitize_ident(&interface.name).to_camel_case());
 
     let rpcs = gen_rpcs(&interface.functions).collect::<Vec<_>>();
+
+    let service_bytecode = quote!(&[#(#bytecode),*]); // TODO(#247)
+
+    let (ctor_arg_names, ctor_arg_tys): (Vec<Ident>, Vec<TokenStream>) = interface
+        .constructor
+        .inputs
+        .iter()
+        .map(|field| (format_ident!("{}", field.name), quote_borrow(&field.ty)))
+        .unzip();
 
     quote! {
         #[cfg(target_os = "wasi")]
@@ -234,12 +235,27 @@ pub fn gen_client(service: &ImportedService) -> TokenStream {
                 gateway: &'a dyn Gateway,
             }
 
+            static SERVICE_BYTECODE: &[u8] = #service_bytecode;
+
             impl<'a> #client_ident<'a> {
                 pub fn new(gateway: &'a dyn Gateway, address: Address) -> Self {
                     Self {
                         address,
                         gateway
                     }
+                }
+
+                pub fn deploy(
+                    gateway: &'a dyn Gateway,
+                    ctx: &Context,
+                    #(#ctor_arg_names: #ctor_arg_tys),*
+                ) -> Result<Self, RpcError> {
+                    let mut initcode = SERVICE_BYTECODE.to_vec();
+                    abi_encode!(#(#ctor_arg_names),* => &mut initcode)?;
+                    Ok(Self {
+                        address: gateway.deploy(&initcode)?,
+                        gateway,
+                    })
                 }
 
                 fn rpc(&self, ctx: &Context, payload: &[u8]) -> Result<Vec<u8>, RpcError> {
@@ -277,7 +293,7 @@ fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = To
                 ctx: &oasis_std::Context,
                 #(#arg_names: #arg_tys),*
            ) -> Result<#output_ty, oasis_std::RpcError> {
-                let payload = oasis_std::abi_encode!(#func_idx as u32, #(#arg_names),*).unwrap();
+                let payload = abi_encode!(#func_idx as u32, #(#arg_names),*).unwrap();
                 self.rpc(ctx, &payload)
                     .and_then(|output: Vec<u8>| {
                         <_>::try_from_slice(&output)
@@ -303,7 +319,7 @@ struct HashableChecker {
 }
 
 impl HashableChecker {
-    pub fn is_hash(&self) -> bool {
+    fn is_hash(&self) -> bool {
         !self.contains_nonhashable
     }
 }

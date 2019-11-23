@@ -1,4 +1,4 @@
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Hash)]
 pub struct Interface {
     pub name: Ident,
     pub namespace: Ident, // the current crate name
@@ -16,7 +16,7 @@ pub struct Interface {
 
 pub type Ident = String;
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Hash)]
 pub struct Function {
     pub name: Ident,
     pub mutability: StateMutability,
@@ -26,7 +26,7 @@ pub struct Function {
     pub output: Option<Type>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Hash)]
 #[serde(rename_all = "lowercase", tag = "type")]
 pub enum TypeDef {
     Struct {
@@ -53,28 +53,28 @@ impl TypeDef {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Hash)]
 pub struct Field {
     pub name: Ident,
     #[serde(rename = "type")]
     pub ty: Type,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Hash)]
 pub struct EnumVariant {
     pub name: Ident,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub fields: Option<EnumFields>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Hash)]
 #[serde(untagged)]
 pub enum EnumFields {
     Named(Vec<Field>),
     Tuple(Vec<Type>),
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Hash)]
 pub struct IndexedField {
     pub name: Ident,
     #[serde(rename = "type")]
@@ -83,14 +83,14 @@ pub struct IndexedField {
     pub indexed: bool,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum StateMutability {
     Immutable,
     Mutable,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Hash)]
 pub struct Import {
     pub name: Ident,
     pub version: String,
@@ -98,13 +98,13 @@ pub struct Import {
     pub registry: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Hash)]
 pub struct Constructor {
     pub inputs: Vec<Field>,
     pub error: Option<Type>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, PartialOrd, Hash)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Hash)]
 #[serde(rename_all = "lowercase", tag = "type", content = "params")]
 pub enum Type {
     Bool,

@@ -1,8 +1,6 @@
 mod common;
 mod dispatcher;
-mod imports;
-
-pub use imports::build as build_imports;
+pub mod imports;
 
 pub struct ServiceDefinition {
     pub name: syntax_pos::symbol::Symbol,

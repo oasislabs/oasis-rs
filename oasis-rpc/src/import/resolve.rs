@@ -1,5 +1,7 @@
 use crate::import::{ImportError, ImportLocation, ImportedService, Importer};
 
+/// Returns an `ImportedService` for each depenendecy in `deps`.
+/// This is a batch API to allow coalescing reads to the same (network) location.
 pub fn resolve_imports(
     deps: impl IntoIterator<Item = (String, ImportLocation)>,
     base_dir: &std::path::Path,

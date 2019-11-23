@@ -53,7 +53,7 @@ jobs:
       - cache_oasis_build
       - run:
           name: Unit test
-          command: cargo test --lib
+          command: cargo test --all --exclude tests
 
   clippy:
     executor: rust
@@ -64,7 +64,8 @@ jobs:
           name: Clippy
           command: |
             rustup component add clippy || exit 0
-            cargo clippy --all-targets --all-features -- -D clippy::all
+            cargo clippy --all-targets --all-features --all --exclude tests -- -D clippy::all
+            cargo clippy -p tests --lib -- -D clippy::all
 
   wasm_build:
     executor: rust
@@ -99,14 +100,12 @@ jobs:
       - restore_oasis_build
       - run:
           name: Build services
-          working_directory: tests
           command: |
-            cargo build --release --target wasm32-wasi --bin b
-            cargo build --release --target wasm32-wasi --bins
+            cargo build -p tests --release --target wasm32-wasi --bin b
+            cargo build -p tests --release --target wasm32-wasi --bins
       - run:
-          name: Test
-          working_directory: tests
-          command: cargo test --lib
+          name: Integration tests
+          command: cargo test -p tests --lib
 
   codecov:
     machine: true

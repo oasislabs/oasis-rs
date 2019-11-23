@@ -14,8 +14,8 @@ members = [
     "oasis-std",
     "oasis-test",
     "oasis-types",
+    "tests",
 ]
-exclude = ["tests"]
 
 [profile.release]
 lto = true

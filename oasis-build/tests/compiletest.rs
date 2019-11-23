@@ -1,7 +1,13 @@
 use std::path::PathBuf;
 
+macro_rules! deps_dir {
+    () => {
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../target/debug/deps")
+    };
+}
+
 fn find_deps(names: &[&str]) -> Vec<PathBuf> {
-    let libs = std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/../target/debug/deps"))
+    let libs = std::fs::read_dir(deps_dir!())
         .unwrap()
         .filter_map(|de| {
             let de = de.unwrap();
@@ -26,7 +32,7 @@ fn find_deps(names: &[&str]) -> Vec<PathBuf> {
 }
 
 fn run_mode(mode: &'static str) {
-    let deps = &["borsh", "oasis_std", "xcc"];
+    let deps = &["borsh", "oasis_std", "oasis_macros", "oasis_types", "tests"];
     let externs = deps
         .iter()
         .zip(find_deps(deps).iter())
@@ -34,22 +40,21 @@ fn run_mode(mode: &'static str) {
         .collect::<Vec<_>>()
         .join(" ");
 
-    let mut config = compiletest_rs::Config {
+    let rustflags = format!(
+        concat!(
+            "--edition=2018 --cfg feature=\"oasis-build-compiletest\" --crate-type dylib {} -L",
+            deps_dir!()
+        ),
+        externs
+    );
+    let config = compiletest_rs::Config {
         mode: mode.parse().expect("Invalid mode."),
         src_base: PathBuf::from(format!("tests/{}", mode.replace("-", "_"))),
-        target_rustcflags: Some(format!(
-            "--edition=2018 \
-             --cfg feature=\"oasis-build-compiletest\" \
-             --crate-type dylib \
-             {}",
-            externs
-        )),
+        target_rustcflags: Some(rustflags),
         rustc_path: PathBuf::from("oasis-build"),
         ..Default::default()
     }
     .tempdir();
-
-    config.link_deps();
 
     compiletest_rs::run_tests(&config);
 }

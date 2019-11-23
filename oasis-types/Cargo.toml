@@ -14,3 +14,6 @@ borsh = "0.2"
 derive_more = "0.15"
 hex = "0.4"
 thiserror = "1.0"
+
+[target.'cfg(not(target_os = "wasi"))'.dependencies]
+anyhow = "1.0"

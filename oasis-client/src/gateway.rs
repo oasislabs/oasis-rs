@@ -25,6 +25,8 @@ pub trait Gateway {
 /// # Example
 ///
 /// ```no_run
+/// use oasis_client::Gateway as _;
+///
 /// let url = "https://gateway.devnet.oasiscloud.io";
 /// let api_key = "AAACL7PMQhh3/rxLr9KJpsAJhz5zBlpAB73uwgAt/6BQ4+Bw";
 /// let gateway = oasis_client::HttpGatewayBuilder::new(url)
@@ -152,36 +154,6 @@ impl HttpGateway {
         }
     }
 
-    pub fn deploy(&self, initcode: &[u8]) -> Result<Address> {
-        let initcode_hex = hex::encode(initcode);
-        info!("deploying service `{}`", &initcode_hex[..32]);
-
-        let body = GatewayRequest::Deploy {
-            data: format!("0x{}", initcode_hex),
-        };
-
-        match &self.post_and_poll(SERVICE_DEPLOY_API, body)? {
-            Event::DeployService { address, .. } => {
-                Ok(Address::from_str(&address[2..] /* strip 0x */)?)
-            }
-            _ => Err(anyhow!("invalid event")),
-        }
-    }
-
-    pub fn rpc(&self, address: Address, data: &[u8]) -> Result<Vec<u8>> {
-        info!("making RPC to {}", address);
-
-        let body = GatewayRequest::Execute {
-            address: address.to_string(),
-            data: format!("0x{}", hex::encode(data)),
-        };
-
-        match &self.post_and_poll(SERVICE_EXECUTE_API, body)? {
-            Event::ExecuteService { output, .. } => Ok(hex::decode(&output[2..])?),
-            e => Err(anyhow!("invalid event {:?}", e)),
-        }
-    }
-
     /// Submit given request asynchronously and poll for results.
     fn post_and_poll(&self, api: DeveloperGatewayApi, body: GatewayRequest) -> Result<Event> {
         let response: AsyncResponse = self.request(api.method, api.url, body)?;
@@ -267,6 +239,44 @@ impl HttpGateway {
         } else {
             Err(anyhow!("gateway returned error: {}", res.status()))
         }
+    }
+}
+
+impl Gateway for HttpGateway {
+    fn deploy(&self, initcode: &[u8]) -> std::result::Result<Address, RpcError> {
+        let initcode_hex = hex::encode(initcode);
+        info!("deploying service `{}`", &initcode_hex[..32]);
+
+        let body = GatewayRequest::Deploy {
+            data: format!("0x{}", initcode_hex),
+        };
+
+        self.post_and_poll(SERVICE_DEPLOY_API, body)
+            .and_then(|event| {
+                match event {
+                    Event::DeployService { address, .. } => {
+                        Ok(Address::from_str(&address[2..] /* strip 0x */)?)
+                    }
+                    e => Err(anyhow!("expecting `DeployService` event. got {:?}", e)),
+                }
+            })
+            .map_err(RpcError::GatewayError)
+    }
+
+    fn rpc(&self, address: Address, payload: &[u8]) -> std::result::Result<Vec<u8>, RpcError> {
+        info!("making RPC to {}", address);
+
+        let body = GatewayRequest::Execute {
+            address: address.to_string(),
+            data: format!("0x{}", hex::encode(payload)),
+        };
+
+        self.post_and_poll(SERVICE_EXECUTE_API, body)
+            .and_then(|event| match event {
+                Event::ExecuteService { output, .. } => Ok(hex::decode(&output[2..])?),
+                e => Err(anyhow!("expecting `ExecuteService` event. got {:?}", e)),
+            })
+            .map_err(RpcError::GatewayError)
     }
 }
 

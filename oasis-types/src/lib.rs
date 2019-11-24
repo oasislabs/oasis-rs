@@ -33,7 +33,11 @@ pub struct Event {
     pub data: Vec<u8>,
 }
 
-#[derive(Clone, Debug, borsh::BorshSerialize, borsh::BorshDeserialize, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
+#[cfg_attr(
+    target_os = "wasi",
+    derive(Clone, borsh::BorshSerialize, borsh::BorshDeserialize)
+)]
 pub enum RpcError {
     /// There was no service at the requested address.
     #[error("invalid callee")]
@@ -56,6 +60,11 @@ pub enum RpcError {
     /// The application returned an error.
     #[error("an application error occurred")]
     Execution(Vec<u8>),
+
+    /// The gateway client encountered an error.
+    #[cfg(not(target_os = "wasi"))]
+    #[error("gateway error. {0}")]
+    GatewayError(anyhow::Error),
 }
 
 impl RpcError {

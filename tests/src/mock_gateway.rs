@@ -27,6 +27,21 @@ impl MockGateway {
             rpcs: RefCell::new(Vec::new()),
         }
     }
+
+    fn clone_outcome<T: Clone>(outcome: &Result<T, RpcError>) -> Result<T, RpcError> {
+        outcome.as_ref().map(|t| t.clone()).map_err(|err| {
+            use RpcError::*;
+            match err {
+                InvalidCallee => InvalidCallee,
+                InsufficientFunds => InsufficientFunds,
+                InsufficientGas => InsufficientGas,
+                InvalidInput => InvalidInput,
+                InvalidOutput(output) => InvalidOutput(output.clone()),
+                Execution(err) => Execution(err.clone()),
+                GatewayError(_) => unreachable!(),
+            }
+        })
+    }
 }
 
 impl oasis_client::gateway::Gateway for MockGateway {
@@ -34,7 +49,7 @@ impl oasis_client::gateway::Gateway for MockGateway {
         let outcome = (self.handlers.deploy)(initcode);
         self.deploys.borrow_mut().push(DeployCall {
             initcode: initcode.to_vec(),
-            outcome: outcome.clone(),
+            outcome: Self::clone_outcome(&outcome),
         });
         outcome
     }
@@ -44,7 +59,7 @@ impl oasis_client::gateway::Gateway for MockGateway {
         self.rpcs.borrow_mut().push(RpcCall {
             callee: address,
             payload: payload.to_vec(),
-            outcome: outcome.clone(),
+            outcome: Self::clone_outcome(&outcome),
         });
         outcome
     }

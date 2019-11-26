@@ -10,7 +10,7 @@ pub mod import;
 #[cfg(feature = "visitor")]
 pub mod visitor;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 pub use idl::*;
 
@@ -32,5 +32,29 @@ impl Interface {
 
     pub fn to_string(&self) -> Result<String> {
         Ok(serde_json::to_string_pretty(self)?)
+    }
+
+    pub fn from_wasm_bytecode(bytecode: &[u8]) -> Result<Self> {
+        wasmparser::ModuleReader::new(bytecode)?
+            .into_iter()
+            .find_map(|section| {
+                if let Ok(wasmparser::Section {
+                    code:
+                        wasmparser::SectionCode::Custom {
+                            name: "oasis-interface",
+                            ..
+                        },
+                    ..
+                }) = section
+                {
+                    let section = section.unwrap();
+                    let mut reader = section.get_binary_reader();
+                    Some(reader.read_bytes(reader.bytes_remaining()).unwrap())
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| anyhow!("missing oasis-interface section"))
+            .and_then(Self::from_slice)
     }
 }

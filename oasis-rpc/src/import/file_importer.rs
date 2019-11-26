@@ -16,15 +16,7 @@ impl ImporterBackend for FileImporter {
     fn import_all(&self) -> Result<Vec<ImportedService>, ImportError> {
         let bytecode = std::fs::read(&self.path)
             .map_err(|err| ImportError::Io(self.path.display().to_string(), err))?;
-        let interface_bytes = match walrus::Module::from_buffer(&bytecode)
-            .map_err(ImportError::Importer)?
-            .customs
-            .remove_raw("oasis-interface")
-        {
-            Some(iface_section) => iface_section.data,
-            None => return Err(ImportError::MissingInterfaceSection),
-        };
-        let interface = Interface::from_slice(&interface_bytes).map_err(ImportError::Importer)?;
+        let interface = Interface::from_wasm_bytecode(&bytecode).map_err(ImportError::Importer)?;
         Ok(vec![ImportedService {
             bytecode,
             interface,

@@ -34,7 +34,7 @@ impl Interface {
         Ok(serde_json::to_string_pretty(self)?)
     }
 
-    pub fn from_wasm_bytecode<'a>(bytecode: &'a [u8]) -> Result<Self> {
+    pub fn from_wasm_bytecode(bytecode: &[u8]) -> Result<Self> {
         wasmparser::ModuleReader::new(bytecode)?
             .into_iter()
             .find_map(|section| {

@@ -8,6 +8,9 @@ use uuid::Uuid;
 #[cfg(not(target_env = "sgx"))]
 use reqwest::Client;
 
+#[cfg(target_env = "sgx")]
+use sgx_https::Client;
+
 use crate::api::*;
 
 pub trait Gateway {

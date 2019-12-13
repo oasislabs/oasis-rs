@@ -35,7 +35,7 @@ pub const SERVICE_POLL_API: DeveloperGatewayApi = DeveloperGatewayApi {
 };
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(untagged, rename_all = "camelCase")]
 pub enum GatewayRequest {
     ///  Used to trigger a service deployment with provided initcode.
     Deploy {

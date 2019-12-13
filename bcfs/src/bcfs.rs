@@ -100,6 +100,18 @@ impl BCFS {
         }
 
         let fd = self.alloc_fd()?;
+        let (buf, dirty) = if !file_exists || open_flags.contains(OpenFlags::TRUNC) {
+            (FileCache::Present(Cursor::new(Vec::new())), true)
+        } else {
+            (
+                FileCache::Absent(if fd_flags.contains(FdFlags::APPEND) {
+                    SeekFrom::End(0)
+                } else {
+                    SeekFrom::Start(0)
+                }),
+                false,
+            )
+        };
         self.files.push(Some(File {
             kind: file_kind,
             flags: fd_flags,
@@ -108,16 +120,8 @@ impl BCFS {
             } else {
                 Some(Self::default_filestat())
             }),
-            buf: RefCell::new(if !file_exists || open_flags.contains(OpenFlags::TRUNC) {
-                FileCache::Present(Cursor::new(Vec::new()))
-            } else {
-                FileCache::Absent(if fd_flags.contains(FdFlags::APPEND) {
-                    SeekFrom::End(0)
-                } else {
-                    SeekFrom::Start(0)
-                })
-            }),
-            dirty: Cell::new(false),
+            buf: RefCell::new(buf),
+            dirty: Cell::new(dirty),
         }));
         Ok(fd)
     }

@@ -64,46 +64,26 @@ impl fmt::LowerHex for Address {
     }
 }
 
-impl borsh::BorshSerialize for Address {
-    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
-        writer.write_all(&self.0)
+#[cfg(feature = "serde")]
+const _IMPL_SERDE_FOR_ADDRESS: () = {
+    impl borsh::BorshSerialize for Address {
+        fn serialize<W: std::io::Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
+            writer.write_all(&self.0)
+        }
     }
-}
 
-impl borsh::BorshDeserialize for Address {
-    fn deserialize<R: std::io::Read>(reader: &mut R) -> Result<Self, std::io::Error> {
-        let mut addr = Address::default();
-        reader.read_exact(&mut addr.0)?;
-        Ok(addr)
+    impl borsh::BorshDeserialize for Address {
+        fn deserialize<R: std::io::Read>(reader: &mut R) -> Result<Self, std::io::Error> {
+            let mut addr = Address::default();
+            reader.read_exact(&mut addr.0)?;
+            Ok(addr)
+        }
     }
-}
+};
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
-
-    use borsh::{BorshDeserialize as _, BorshSerialize as _};
-
-    #[test]
-    fn roundtrip_serialize_address() {
-        let bytes = [1u8; 20];
-        let addr = Address::try_from_slice(&Address(bytes).try_to_vec().unwrap()).unwrap();
-        assert_eq!(addr.0, bytes);
-    }
-
-    #[test]
-    #[should_panic]
-    fn fail_deserialize_address_short() {
-        let bytes = [1u8; 19];
-        Address::try_from_slice(&bytes.try_to_vec().unwrap()).unwrap();
-    }
-
-    #[test]
-    #[should_panic]
-    fn fail_deserialize_address_long() {
-        let bytes = [1u8; 21];
-        Address::try_from_slice(&bytes.as_ref().try_to_vec().unwrap()).unwrap();
-    }
 
     #[test]
     fn convert_str() {
@@ -130,5 +110,33 @@ pub mod tests {
             28,
         ]);
         assert_eq!(unsafe { Address::from_raw(addr.as_ptr()) }, addr);
+    }
+}
+
+#[cfg(all(test, feature = "serde"))]
+mod serde_tests {
+    use super::*;
+
+    use borsh::{BorshDeserialize as _, BorshSerialize as _};
+
+    #[test]
+    fn roundtrip_serialize_address() {
+        let bytes = [1u8; 20];
+        let addr = Address::try_from_slice(&Address(bytes).try_to_vec().unwrap()).unwrap();
+        assert_eq!(addr.0, bytes);
+    }
+
+    #[test]
+    #[should_panic]
+    fn fail_deserialize_address_short() {
+        let bytes = [1u8; 19];
+        Address::try_from_slice(&bytes.try_to_vec().unwrap()).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn fail_deserialize_address_long() {
+        let bytes = [1u8; 21];
+        Address::try_from_slice(&bytes.as_ref().try_to_vec().unwrap()).unwrap();
     }
 }

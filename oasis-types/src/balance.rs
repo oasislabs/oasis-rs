@@ -24,8 +24,10 @@
     MulAssign,
     RemAssign,
     SubAssign,
-    borsh::BorshSerialize,
-    borsh::BorshDeserialize,
+)]
+#[cfg_attr(
+    feature = "borsh",
+    derive(borsh::BorshSerialize, borsh::BorshDeserialize)
 )]
 #[repr(C)]
 pub struct Balance(pub u128);

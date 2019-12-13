@@ -796,6 +796,89 @@ fn tempfile() {
     );
 }
 
+#[test]
+fn regular_file() {
+    macro_rules! file_key {
+        () => {
+            "a-regular-file"
+        };
+    }
+    let file_contents = b"input";
+
+    extern "C" fn test_main(ptxp: memchain::PtxPtr) -> u16 {
+        let ptx = unsafe { &mut **ptxp };
+
+        let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);
+
+        let input = ptx.input().to_vec();
+
+        let fd = bcfs
+            .open(
+                ptx,
+                HOME_DIR_FILENO.into(),
+                &Path::new(file_key!()),
+                if input.is_empty() {
+                    OpenFlags::TRUNC
+                } else {
+                    OpenFlags::CREATE
+                },
+                FdFlags::empty(),
+            )
+            .unwrap();
+
+        bcfs.write_vectored(ptx, fd, &[IoSlice::new(&input)])
+            .unwrap();
+
+        bcfs.flush(ptx, fd).unwrap();
+
+        0
+    }
+
+    let mut bc = create_memchain(vec![None, Some(test_main)]);
+
+    bc.last_block_mut().transact(
+        ADDR_1,
+        ADDR_2,
+        ADDR_1, /* payer */
+        0,      /* value */
+        file_contents,
+        BASE_GAS,
+        GAS_PRICE,
+    );
+
+    assert_eq!(
+        bc.blocks
+            .last()
+            .unwrap()
+            .state
+            .get(&ADDR_2)
+            .unwrap()
+            .storage
+            .get(file_key!().as_bytes())
+            .unwrap(),
+        file_contents
+    );
+
+    bc.last_block_mut().transact(
+        ADDR_1, ADDR_2, ADDR_1, /* payer */
+        0,      /* value */
+        b"", BASE_GAS, GAS_PRICE,
+    );
+
+    assert_eq!(
+        bc.blocks
+            .last()
+            .unwrap()
+            .state
+            .get(&ADDR_2)
+            .unwrap()
+            .storage
+            .get(file_key!().as_bytes())
+            .unwrap(),
+        b""
+    );
+}
+
 testcase!(
     fn flush_preopens(ptx: &mut dyn PendingTransaction) {
         let mut bcfs = BCFS::new(*ptx.address(), CHAIN_NAME);

@@ -11,10 +11,10 @@ keywords = ["oasis"]
 
 [dependencies]
 blockchain-traits = { version = "0.2", path = "../blockchain-traits" }
-borsh = "0.2"
+borsh = { git = "https://github.com/oasislabs/borsh" }
 cfg-if = "0.1"
 oasis-macros = { version = "0.2", path = "../oasis-macros" }
-oasis-types = { version = "0.2", path = "../oasis-types" }
+oasis-types = { version = "0.3", path = "../oasis-types", features = ["serde"] }
 thiserror = "1.0"
 tiny-keccak = "1.4"
 

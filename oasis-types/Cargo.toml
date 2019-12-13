@@ -10,7 +10,7 @@ readme = "README.md"
 keywords = ["blockchain", "oasis"]
 
 [dependencies]
-borsh = "0.2"
+borsh = { git = "https://github.com/oasislabs/borsh" }
 derive_more = "0.15"
 hex = "0.4"
 thiserror = "1.0"

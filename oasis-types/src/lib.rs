@@ -34,9 +34,10 @@ pub struct Event {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[cfg_attr(target_os = "wasi", derive(Clone))]
 #[cfg_attr(
-    target_os = "wasi",
-    derive(Clone, borsh::BorshSerialize, borsh::BorshDeserialize)
+    all(target_os = "wasi", feature = "serde"),
+    derive(borsh::BorshSerialize, borsh::BorshDeserialize)
 )]
 pub enum RpcError {
     /// There was no service at the requested address.

@@ -10,6 +10,7 @@ pub mod import;
 #[cfg(feature = "visitor")]
 pub mod visitor;
 
+#[cfg(feature = "saveload")]
 use anyhow::{anyhow, Result};
 
 pub use idl::*;

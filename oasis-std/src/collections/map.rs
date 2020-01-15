@@ -3,7 +3,7 @@ use std::{
     fmt::{self, Debug},
 };
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use oasis_borsh::{BorshDeserialize, BorshSerialize};
 
 /// `Map` is a data structure with a [`HashMap`](https://doc.rust-lang.org/std/collections/hash_map/struct.HashMap.html)-like API but based on a `Vec`.
 /// It's primarily useful when you care about constant factors or prefer determinism to speed.

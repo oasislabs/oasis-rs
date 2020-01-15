@@ -3,7 +3,7 @@ use std::{
     fmt::{self, Debug},
 };
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use oasis_borsh::{BorshDeserialize, BorshSerialize};
 
 /// `Set` is a data structure with a [`Set`](https://doc.rust-lang.org/std/collections/hash_set/struct.HashSet.html)-like API but based on a `Vec`.
 /// It's primarily useful when you care about constant factors or prefer determinism to speed.

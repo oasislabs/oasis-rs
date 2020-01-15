@@ -26,8 +26,8 @@
     SubAssign,
 )]
 #[cfg_attr(
-    feature = "borsh",
-    derive(borsh::BorshSerialize, borsh::BorshDeserialize)
+    feature = "serde",
+    derive(oasis_borsh::BorshSerialize, oasis_borsh::BorshDeserialize)
 )]
 #[repr(C)]
 pub struct Balance(pub u128);

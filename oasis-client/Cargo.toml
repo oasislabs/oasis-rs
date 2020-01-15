@@ -1,8 +1,13 @@
 [package]
 name = "oasis-client"
 version = "0.1.0"
+license = "Apache-2.0"
+description = "Oasis gateway client"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
+repository = "https://github.com/oasislabs/oasis-rs"
+readme = "README.md"
+keywords = ["oasis", "gateway"]
 
 [dependencies]
 anyhow = "1.0"

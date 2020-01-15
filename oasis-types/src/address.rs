@@ -66,13 +66,13 @@ impl fmt::LowerHex for Address {
 
 #[cfg(feature = "serde")]
 const _IMPL_SERDE_FOR_ADDRESS: () = {
-    impl borsh::BorshSerialize for Address {
+    impl oasis_borsh::BorshSerialize for Address {
         fn serialize<W: std::io::Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
             writer.write_all(&self.0)
         }
     }
 
-    impl borsh::BorshDeserialize for Address {
+    impl oasis_borsh::BorshDeserialize for Address {
         fn deserialize<R: std::io::Read>(reader: &mut R) -> Result<Self, std::io::Error> {
             let mut addr = Address::default();
             reader.read_exact(&mut addr.0)?;
@@ -117,7 +117,7 @@ mod tests {
 mod serde_tests {
     use super::*;
 
-    use borsh::{BorshDeserialize as _, BorshSerialize as _};
+    use oasis_borsh::{BorshDeserialize as _, BorshSerialize as _};
 
     #[test]
     fn roundtrip_serialize_address() {

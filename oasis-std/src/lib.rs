@@ -19,8 +19,8 @@ pub mod collections;
 pub mod exe;
 
 pub mod abi {
-    pub extern crate borsh;
-    pub use borsh::{BorshDeserialize as Deserialize, BorshSerialize as Serialize};
+    pub extern crate oasis_borsh;
+    pub use oasis_borsh::{BorshDeserialize as Deserialize, BorshSerialize as Serialize};
 
     /// Encodes arguments into the format expected by Oasis services.
     ///

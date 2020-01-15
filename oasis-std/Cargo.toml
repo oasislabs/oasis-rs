@@ -1,6 +1,6 @@
 [package]
 name = "oasis-std"
-version = "0.3.1"
+version = "0.3.3"
 license = "Apache-2.0"
 description = "Library for developing on the Oasis platform"
 edition = "2018"
@@ -13,13 +13,13 @@ keywords = ["oasis"]
 blockchain-traits = { version = "0.2", path = "../blockchain-traits" }
 cfg-if = "0.1"
 oasis-borsh = "0.2"
-oasis-macros = { version = "0.2", path = "../oasis-macros" }
+oasis-macros = { version = "0.3", path = "../oasis-macros" }
 oasis-types = { version = "0.3", path = "../oasis-types", features = ["serde"] }
 thiserror = "1.0"
 tiny-keccak = "1.4"
 
 [dev-dependencies]
-oasis-test = { version = "0.2", path = "../oasis-test" }
+oasis-test = { version = "0.3", path = "../oasis-test" }
 rand = "0.7"
 
 [target.'cfg(target_os = "wasi")'.dependencies]
@@ -29,4 +29,4 @@ wasi = "0.7"
 
 [target.'cfg(not(target_os = "wasi"))'.dependencies]
 oasis-client = { version = "0.1", path = "../oasis-client" }
-oasis-test = { version = "0.2", path = "../oasis-test" }
+oasis-test = { version = "0.3", path = "../oasis-test" }

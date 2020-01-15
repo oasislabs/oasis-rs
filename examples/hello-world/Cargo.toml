@@ -9,4 +9,4 @@ publish = false
 oasis-std = "0.3"
 
 [dev-dependencies]
-oasis-test = "0.2"
+oasis-test = "0.3"

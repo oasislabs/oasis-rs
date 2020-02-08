@@ -120,7 +120,7 @@ pub fn ret(ret: &[u8]) -> ! {
 }
 
 pub fn err(err: &[u8]) -> ! {
-    io::stdout().write_all(&err).unwrap();
+    io::stderr().write_all(&err).unwrap();
     std::process::exit(1);
 }
 

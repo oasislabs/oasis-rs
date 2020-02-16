@@ -293,7 +293,7 @@ fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = To
                 ctx: &oasis_std::Context,
                 #(#arg_names: #arg_tys),*
            ) -> Result<#output_ty, oasis_std::RpcError> {
-                let payload = abi_encode!(#func_idx as u32, #(#arg_names),*).unwrap();
+                let payload = abi_encode!(#func_idx as u8, #(#arg_names),*).unwrap();
                 self.rpc(ctx, &payload)
                     .and_then(|output: Vec<u8>| {
                         <_>::try_from_slice(&output)

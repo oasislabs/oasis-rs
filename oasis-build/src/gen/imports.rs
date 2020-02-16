@@ -286,6 +286,36 @@ fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = To
             .unzip();
 
         let output_ty = func.output.as_ref().map(quote_ty).unwrap_or_default();
+        let (output_deserializer, err_deserializer) = match func.output.as_ref() {
+            Some(oasis_rpc::Type::Result(box ok_ty, box err_ty)) => {
+                let quot_ok_ty = quote_ty(ok_ty);
+                let quot_err_ty = quote_ty(err_ty);
+                let output_deserializer = quote! {
+                    Ok(<#quot_ok_ty>::try_from_slice(&output)
+                        .map_err(|_| oasis_std::RpcError::InvalidOutput(output))?)
+                };
+                let err_deserializer = quote! {
+                    Err(<#quot_err_ty>::try_from_slice(&err_output)
+                        .map_err(|_| oasis_std::RpcError::InvalidOutput(err_output))?)
+                };
+                (output_deserializer, err_deserializer)
+            }
+            Some(output_ty) => {
+                let quot_output_ty = quote_ty(output_ty);
+                let output_deserializer = quote! {
+                    <#quot_output_ty>::try_from_slice(&output)
+                        .map_err(|_| oasis_std::RpcError::InvalidOutput(output))?
+                };
+                (
+                    output_deserializer,
+                    quote!(Err(oasis_std::RpcError::Execution(err_output))?),
+                )
+            }
+            None => (
+                quote!(()),
+                quote!(Err(oasis_std::RpcError::Execution(err_output))?),
+            ),
+        };
 
         quote! {
             pub fn #fn_name(
@@ -294,11 +324,15 @@ fn gen_rpcs<'a>(functions: &'a [oasis_rpc::Function]) -> impl Iterator<Item = To
                 #(#arg_names: #arg_tys),*
            ) -> Result<#output_ty, oasis_std::RpcError> {
                 let payload = abi_encode!(#func_idx as u8, #(#arg_names),*).unwrap();
-                self.rpc(ctx, &payload)
-                    .and_then(|output: Vec<u8>| {
-                        <_>::try_from_slice(&output)
-                            .map_err(|_| oasis_std::RpcError::InvalidOutput(output))
-                    })
+                match self.rpc(ctx, &payload) {
+                    Ok(output) => {
+                        Ok(#output_deserializer)
+                    }
+                    Err(oasis_std::RpcError::Execution(err_output)) => {
+                        Ok(#err_deserializer)
+                    }
+                    Err(e) => Err(e),
+                }
             }
         }
     })

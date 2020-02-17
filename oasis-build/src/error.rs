@@ -1,4 +1,4 @@
-use syntax_pos::{MultiSpan, Span};
+use rustc_span::{MultiSpan, Span};
 
 // NB: `failure` won't work on these errors because `Span` isn't `Send`.
 

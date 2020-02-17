@@ -91,7 +91,7 @@ pub fn build(
         );
     }
 
-    rustc_driver::run_compiler(&rustc_args, &mut rustc_driver::DefaultCallbacks, None, None)
+    rustc_driver::run_compiler(&rustc_args, &mut crate::DefaultCallbacks, None, None)
         .map_err(|_| anyhow::format_err!("Could not build `{}`", mod_name))?;
 
     Ok(import)

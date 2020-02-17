@@ -1,6 +1,7 @@
 use proc_macro2::{Literal, TokenStream};
 use quote::quote;
-use syntax::{ast, ptr::P, source_map};
+use rustc_span::{source_map::dummy_spanned, DUMMY_SP};
+use syntax::{ast, node_id::DUMMY_NODE_ID, ptr::P};
 
 #[macro_export]
 macro_rules! format_ident {
@@ -95,50 +96,52 @@ pub fn gen_include_item(include_path: impl AsRef<std::path::Path>) -> P<ast::Ite
     P(ast::Item {
         ident: ast::Ident::from_str(""),
         attrs: Vec::new(),
-        id: ast::DUMMY_NODE_ID,
-        node: ast::ItemKind::Mac(gen_include_mac(include_path)),
-        vis: source_map::dummy_spanned(ast::VisibilityKind::Public),
-        span: syntax_pos::DUMMY_SP,
+        id: DUMMY_NODE_ID,
+        kind: ast::ItemKind::Mac(gen_include_mac(include_path)),
+        vis: dummy_spanned(ast::VisibilityKind::Public),
+        span: DUMMY_SP,
         tokens: None,
     })
 }
 
 pub fn gen_include_mac(include_path: impl AsRef<std::path::Path>) -> ast::Mac {
-    use syntax::parse::token::{LitKind, Token, TokenKind};
+    use syntax::token::{LitKind, Token, TokenKind};
     ast::Mac {
         path: ast::Path::from_ident(ast::Ident::from_str("include")),
-        delim: ast::MacDelimiter::Parenthesis,
-        tts: syntax::tokenstream::TokenTree::Token(Token {
-            kind: TokenKind::lit(
-                LitKind::Str,
-                syntax_pos::Symbol::intern(&format!("{}", include_path.as_ref().display())),
-                None,
-            ),
-            span: syntax_pos::DUMMY_SP,
-        })
-        .into(),
+        args: P(ast::MacArgs::Delimited(
+            syntax::tokenstream::DelimSpan::dummy(),
+            ast::MacDelimiter::Parenthesis,
+            syntax::tokenstream::TokenTree::Token(Token {
+                kind: TokenKind::lit(
+                    LitKind::Str,
+                    rustc_span::Symbol::intern(&format!("{}", include_path.as_ref().display())),
+                    None,
+                ),
+                span: rustc_span::DUMMY_SP,
+            })
+            .into(),
+        )),
         prior_type_ascription: None,
-        span: syntax_pos::DUMMY_SP,
     }
 }
 
-pub fn gen_call_stmt(fn_ident: source_map::symbol::Ident) -> ast::Stmt {
+pub fn gen_call_stmt(fn_ident: rustc_span::source_map::symbol::Ident) -> ast::Stmt {
     let call_ident = ast::Expr {
-        node: ast::ExprKind::Path(None /* qself */, ast::Path::from_ident(fn_ident)),
-        id: ast::DUMMY_NODE_ID,
-        span: syntax_pos::DUMMY_SP,
+        kind: ast::ExprKind::Path(None /* qself */, ast::Path::from_ident(fn_ident)),
+        id: DUMMY_NODE_ID,
+        span: DUMMY_SP,
         attrs: Default::default(),
     };
     let call_expr = ast::Expr {
-        node: ast::ExprKind::Call(P(call_ident), Vec::new() /* args */),
-        id: ast::DUMMY_NODE_ID,
-        span: syntax_pos::DUMMY_SP,
+        kind: ast::ExprKind::Call(P(call_ident), Vec::new() /* args */),
+        id: DUMMY_NODE_ID,
+        span: DUMMY_SP,
         attrs: Default::default(),
     };
     ast::Stmt {
-        node: ast::StmtKind::Semi(P(call_expr)),
-        id: ast::DUMMY_NODE_ID,
-        span: syntax_pos::DUMMY_SP,
+        kind: ast::StmtKind::Semi(P(call_expr)),
+        id: DUMMY_NODE_ID,
+        span: DUMMY_SP,
     }
 }
 

@@ -12,13 +12,13 @@ use std::{
 };
 
 use colored::*;
-use oasis_build::BuildTarget;
+use oasis_build::{BuildTarget, DefaultCallbacks};
 use oasis_rpc::import::ImportLocation;
 use rustc::util::common::ErrorReported;
 
 fn main() {
     rustc_driver::init_rustc_env_logger();
-    let outcome = rustc_driver::report_ices_to_stderr_if_any(move || {
+    let outcome = rustc_driver::catch_fatal_errors(move || {
         let mut args: Vec<String> = std::env::args().collect();
         if args.len() <= 1 {
             return Err(ErrorReported);
@@ -129,7 +129,7 @@ fn main() {
         };
 
         let mut idl8r = oasis_build::BuildPlugin::new(build_target, import_semvers);
-        let mut default_cbs = rustc_driver::DefaultCallbacks;
+        let mut default_cbs = DefaultCallbacks;
         let callbacks: &mut (dyn rustc_driver::Callbacks + Send) = if is_service || is_compiletest {
             &mut idl8r
         } else {

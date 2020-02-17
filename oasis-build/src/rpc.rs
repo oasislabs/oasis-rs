@@ -5,12 +5,10 @@ use oasis_rpc::{
     Constructor, EnumFields, EnumVariant, Field, Function, Import, IndexedField, Interface,
     StateMutability, Type, TypeDef,
 };
-use rustc::{
-    hir::{self, def_id::DefId, Body, FnDecl},
-    ty::{self, subst::SubstsRef, AdtDef, TyCtxt, TyS},
-    util::nodemap::FxHashMap,
-};
-use syntax_pos::symbol::Symbol;
+use rustc::ty::{self, subst::SubstsRef, AdtDef, TyCtxt, TyS};
+use rustc_data_structures::fx::FxHashMap;
+use rustc_hir::{self, def_id::DefId, Body, FnDecl};
+use rustc_span::symbol::Symbol;
 
 use crate::{error::UnsupportedTypeError, visitor::hir::DefinedType};
 
@@ -83,8 +81,8 @@ pub fn convert_interface<'tcx>(
         Err(errs)
     } else {
         Ok(Interface {
-            name: name.as_str().get().to_camel_case(),
-            namespace: tcx.crate_name.as_str().get().to_snake_case(),
+            name: name.as_str().to_camel_case(),
+            namespace: tcx.crate_name.as_str().to_snake_case(),
             version: std::env::var("CARGO_PKG_VERSION").unwrap(),
             imports,
             type_defs,
@@ -104,7 +102,7 @@ fn convert_state_ctor(
 
     let mut inputs = Vec::with_capacity(decl.inputs.len());
     for (arg, ty) in body
-        .arguments
+        .params
         .iter()
         .zip(decl.inputs.iter())
         .skip(1 /* skip ctx */)
@@ -116,11 +114,11 @@ fn convert_state_ctor(
     }
 
     let error = match &decl.output {
-        hir::FunctionRetTy::Return(ty) => match convert_ty(tcx, &ty) {
+        rustc_hir::FunctionRetTy::Return(ty) => match convert_ty(tcx, &ty) {
             Ok(Type::Result(_, box error)) => Some(error),
             _ => None,
         },
-        hir::FunctionRetTy::DefaultReturn(_) => {
+        rustc_hir::FunctionRetTy::DefaultReturn(_) => {
             unreachable!("Syntax pass checks that ctor returns `Self`")
         }
     };
@@ -141,14 +139,14 @@ fn convert_function(
     let mut errs = Vec::new();
 
     let mutability = match decl.implicit_self {
-        hir::ImplicitSelfKind::ImmRef => StateMutability::Immutable,
-        hir::ImplicitSelfKind::MutRef => StateMutability::Mutable,
+        rustc_hir::ImplicitSelfKind::ImmRef => StateMutability::Immutable,
+        rustc_hir::ImplicitSelfKind::MutRef => StateMutability::Mutable,
         _ => unreachable!("Syntax pass should have checked RPCs for `self`."),
     };
 
     let mut inputs = Vec::with_capacity(decl.inputs.len());
     for (arg, ty) in body
-        .arguments
+        .params
         .iter()
         .zip(decl.inputs.iter())
         .skip(2 /* skip self and ctx */)
@@ -160,8 +158,8 @@ fn convert_function(
     }
 
     let output = match &decl.output {
-        hir::FunctionRetTy::DefaultReturn(_) => None,
-        hir::FunctionRetTy::Return(ty) => match convert_ty(tcx, &ty) {
+        rustc_hir::FunctionRetTy::DefaultReturn(_) => None,
+        rustc_hir::FunctionRetTy::Return(ty) => match convert_ty(tcx, &ty) {
             Ok(Type::Tuple(ref tys)) if tys.is_empty() => None,
             Ok(ty) => Some(ty),
             Err(err) => {
@@ -175,7 +173,7 @@ fn convert_function(
         Err(errs)
     } else {
         Ok(Function {
-            name: name.as_str().get().to_snake_case(),
+            name: name.as_str().to_snake_case(),
             mutability,
             inputs,
             output,
@@ -183,12 +181,16 @@ fn convert_function(
     }
 }
 
-fn convert_arg(tcx: TyCtxt, pat: &hir::Pat, ty: &hir::Ty) -> Result<Field, UnsupportedTypeError> {
-    use hir::PatKind;
+fn convert_arg(
+    tcx: TyCtxt,
+    pat: &rustc_hir::Pat,
+    ty: &rustc_hir::Ty,
+) -> Result<Field, UnsupportedTypeError> {
+    use rustc_hir::PatKind;
     convert_ty(tcx, ty).map(|ty| Field {
-        name: match pat.node {
+        name: match pat.kind {
             PatKind::Wild => "_".to_string(),
-            PatKind::Binding(_, _, ident, _) => ident.name.as_str().get().to_snake_case(),
+            PatKind::Binding(_, _, ident, _) => ident.name.as_str().to_snake_case(),
             _ => unreachable!("arg pattern must be wild or ident"),
         },
         ty,
@@ -241,28 +243,28 @@ macro_rules! convert_def {
     }};
 }
 
-fn convert_ty(tcx: TyCtxt, ty: &hir::Ty) -> Result<Type, UnsupportedTypeError> {
-    use hir::TyKind;
-    Ok(match &ty.node {
+fn convert_ty(tcx: TyCtxt, ty: &rustc_hir::Ty) -> Result<Type, UnsupportedTypeError> {
+    use rustc_hir::TyKind;
+    Ok(match &ty.kind {
         TyKind::Slice(ty) => Type::List(box convert_ty(tcx, &ty)?),
         TyKind::Array(ty, len) => {
             let arr_ty = box convert_ty(tcx, &ty)?;
-            match tcx.hir().body(len.body).value.node {
-                hir::ExprKind::Lit(syntax::source_map::Spanned {
+            match tcx.hir().body(len.body).value.kind {
+                rustc_hir::ExprKind::Lit(rustc_span::source_map::Spanned {
                     node: syntax::ast::LitKind::Int(len, _),
                     ..
                 }) => Type::Array(arr_ty, len as u64),
                 _ => Type::List(arr_ty),
             }
         }
-        TyKind::Rptr(_, hir::MutTy { ty, .. }) => convert_ty(tcx, ty)?,
+        TyKind::Rptr(_, rustc_hir::MutTy { ty, .. }) => convert_ty(tcx, ty)?,
         TyKind::Tup(tys) => Type::Tuple(
             tys.iter()
                 .map(|ty| convert_ty(tcx, ty))
                 .collect::<Result<Vec<_>, UnsupportedTypeError>>()?,
         ),
-        TyKind::Path(hir::QPath::Resolved(_, path)) => {
-            use hir::def::{DefKind, Res};
+        TyKind::Path(rustc_hir::QPath::Resolved(_, path)) => {
+            use rustc_hir::def::{DefKind, Res};
             let type_args = crate::utils::get_type_args(&path);
             match path.res {
                 Res::Def(kind, did) => match kind {
@@ -295,12 +297,12 @@ fn convert_ty(tcx: TyCtxt, ty: &hir::Ty) -> Result<Type, UnsupportedTypeError> {
                     }
                 },
                 Res::PrimTy(ty) => match ty {
-                    hir::PrimTy::Int(ty) => convert_int(ty, path.span)?,
-                    hir::PrimTy::Uint(ty) => convert_uint(ty, path.span)?,
-                    hir::PrimTy::Float(ty) => convert_float(ty, path.span)?,
-                    hir::PrimTy::Str => Type::String,
-                    hir::PrimTy::Bool => Type::Bool,
-                    hir::PrimTy::Char => Type::I8,
+                    rustc_hir::PrimTy::Int(ty) => convert_int(ty, path.span)?,
+                    rustc_hir::PrimTy::Uint(ty) => convert_uint(ty, path.span)?,
+                    rustc_hir::PrimTy::Float(ty) => convert_float(ty, path.span)?,
+                    rustc_hir::PrimTy::Str => Type::String,
+                    rustc_hir::PrimTy::Bool => Type::Bool,
+                    rustc_hir::PrimTy::Char => Type::I8,
                 },
                 _ => {
                     return Err(UnsupportedTypeError {
@@ -336,7 +338,7 @@ fn convert_sty_with_arg_at<'tcx>(
     arg_at: impl Fn(ty::subst::SubstsRef<'tcx>, usize) -> Result<Type, UnsupportedTypeError>,
 ) -> Result<Type, UnsupportedTypeError> {
     use ty::TyKind::*;
-    Ok(match ty.sty {
+    Ok(match ty.kind {
         Bool => Type::Bool,
         Char => Type::I8,
         Int(ty) => convert_int(ty, tcx.def_span(did))?,
@@ -348,7 +350,7 @@ fn convert_sty_with_arg_at<'tcx>(
             box convert_sty(tcx, did, ty)?,
             len.val
                 .try_to_scalar()
-                .and_then(|c| c.to_usize(&tcx).ok())
+                .and_then(|c| c.to_u64().ok())
                 .or_else(|| len.try_eval_usize(tcx, ty::ParamEnv::empty()))
                 // The following is a mightily workaround for rustc not evaluating
                 // literal array lengths in structs, for whatever reason.
@@ -385,7 +387,7 @@ fn convert_sty_with_arg_at<'tcx>(
 
 fn convert_int(
     ty: syntax::ast::IntTy,
-    span: syntax_pos::Span,
+    span: rustc_span::Span,
 ) -> Result<Type, UnsupportedTypeError> {
     use syntax::ast::IntTy;
     Ok(match ty {
@@ -395,7 +397,7 @@ fn convert_int(
         IntTy::I64 => Type::I64,
         IntTy::I128 | IntTy::Isize => {
             return Err(UnsupportedTypeError {
-                type_name: ty.to_string(),
+                type_name: ty.name_str().to_string(),
                 span,
             })
         }
@@ -404,7 +406,7 @@ fn convert_int(
 
 fn convert_uint(
     ty: syntax::ast::UintTy,
-    span: syntax_pos::Span,
+    span: rustc_span::Span,
 ) -> Result<Type, UnsupportedTypeError> {
     use syntax::ast::UintTy;
     Ok(match ty {
@@ -414,7 +416,7 @@ fn convert_uint(
         UintTy::U64 => Type::U64,
         UintTy::U128 | UintTy::Usize => {
             return Err(UnsupportedTypeError {
-                type_name: ty.to_string(),
+                type_name: ty.name_str().to_string(),
                 span,
             })
         }
@@ -423,7 +425,7 @@ fn convert_uint(
 
 fn convert_float(
     ty: syntax::ast::FloatTy,
-    _span: syntax_pos::Span,
+    _span: rustc_span::Span,
 ) -> Result<Type, UnsupportedTypeError> {
     use syntax::ast::FloatTy;
     Ok(match ty {

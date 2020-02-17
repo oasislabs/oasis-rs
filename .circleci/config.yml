@@ -6,7 +6,7 @@ executors:
     environment:
       OASIS_BUILD_VERBOSE: 1
     docker:
-      - image: oasislabs/rust:latest
+      - image: oasislabs/rust:next
     resource_class: xlarge
 
 

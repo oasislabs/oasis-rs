@@ -148,7 +148,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
             );
             ret_err!();
         }
-        let ctor = ctors.into_iter().nth(0).unwrap();
+        let ctor = ctors.into_iter().next().unwrap();
 
         let default_fn_spans = rpcs
             .iter()

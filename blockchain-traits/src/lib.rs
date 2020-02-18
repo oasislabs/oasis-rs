@@ -1,5 +1,3 @@
-#![feature(non_exhaustive)]
-
 use oasis_types::{AccountMeta, Address, Event};
 
 pub trait Blockchain {

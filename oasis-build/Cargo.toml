@@ -24,6 +24,6 @@ toml = "0.5"
 walrus = "0.13"
 
 [dev-dependencies]
-compiletest_rs = { version = "=0.3.22", features = ["tmp"] }
+compiletest_rs = { version = "0.4", features = ["tmp"] }
 oasis-std = { version = "0.3", path = "../oasis-std" }
 tests = { path = "../tests" }

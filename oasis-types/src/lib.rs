@@ -1,5 +1,3 @@
-#![feature(non_exhaustive)]
-
 #[macro_use]
 extern crate derive_more;
 
@@ -18,6 +16,18 @@ pub enum ExtStatusCode {
     InsufficientFunds,
     InvalidInput,
     NoAccount,
+}
+
+impl ExtStatusCode {
+    pub fn from_u32(code: u32) -> Option<Self> {
+        Some(match code {
+            0 => ExtStatusCode::Success,
+            1 => ExtStatusCode::InsufficientFunds,
+            2 => ExtStatusCode::InvalidInput,
+            3 => ExtStatusCode::NoAccount,
+            _ => return None,
+        })
+    }
 }
 
 #[derive(Clone, Default, Debug, PartialEq, Eq)]

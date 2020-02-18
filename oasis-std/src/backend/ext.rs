@@ -3,25 +3,25 @@ use oasis_types::{Address, Balance, ExtStatusCode, RpcError};
 /// @see the `blockchain-traits` crate for descriptions of these methods.
 extern "C" {
     #[allow(improper_ctypes)] // u128 is just 2 u64s
-    pub fn oasis_balance(addr: *const Address, balance: *mut u128) -> ExtStatusCode;
+    pub fn oasis_balance(addr: *const Address, balance: *mut u128) -> u32;
 
-    pub fn oasis_code(addr: *const Address, buf: *mut u8) -> ExtStatusCode;
-    pub fn oasis_code_len(addr: *const Address, len: *mut u32) -> ExtStatusCode;
+    pub fn oasis_code(addr: *const Address, buf: *mut u8) -> u32;
+    pub fn oasis_code_len(addr: *const Address, len: *mut u32) -> u32;
 
-    pub fn oasis_fetch_input(buf: *mut u8) -> ExtStatusCode;
-    pub fn oasis_input_len(len: *mut u32) -> ExtStatusCode;
+    pub fn oasis_fetch_input(buf: *mut u8) -> u32;
+    pub fn oasis_input_len(len: *mut u32) -> u32;
 
-    pub fn oasis_ret(buf: *const u8, len: u32) -> ExtStatusCode;
-    pub fn oasis_err(buf: *const u8, len: u32) -> ExtStatusCode;
+    pub fn oasis_ret(buf: *const u8, len: u32) -> u32;
+    pub fn oasis_err(buf: *const u8, len: u32) -> u32;
 
-    pub fn oasis_fetch_ret(buf: *mut u8) -> ExtStatusCode;
-    pub fn oasis_ret_len(len: *mut u32) -> ExtStatusCode;
+    pub fn oasis_fetch_ret(buf: *mut u8) -> u32;
+    pub fn oasis_ret_len(len: *mut u32) -> u32;
 
-    pub fn oasis_fetch_err(buf: *mut u8) -> ExtStatusCode;
-    pub fn oasis_err_len(len: *mut u32) -> ExtStatusCode;
+    pub fn oasis_fetch_err(buf: *mut u8) -> u32;
+    pub fn oasis_err_len(len: *mut u32) -> u32;
 
-    pub fn oasis_fetch_aad(buf: *mut u8) -> ExtStatusCode;
-    pub fn oasis_aad_len(len: *mut u32) -> ExtStatusCode;
+    pub fn oasis_fetch_aad(buf: *mut u8) -> u32;
+    pub fn oasis_aad_len(len: *mut u32) -> u32;
 
     #[allow(improper_ctypes)] // u128 is just 2 u64s
     pub fn oasis_transact(
@@ -29,22 +29,17 @@ extern "C" {
         value: *const u128,
         input: *const u8,
         input_len: u32,
-    ) -> ExtStatusCode;
+    ) -> u32;
 
-    pub fn oasis_address(addr: *mut Address) -> ExtStatusCode;
-    pub fn oasis_sender(addr: *mut Address) -> ExtStatusCode;
-    pub fn oasis_payer(addr: *mut Address) -> ExtStatusCode;
+    pub fn oasis_address(addr: *mut Address) -> u32;
+    pub fn oasis_sender(addr: *mut Address) -> u32;
+    pub fn oasis_payer(addr: *mut Address) -> u32;
     #[allow(improper_ctypes)] // u128 is just 2 u64s
-    pub fn oasis_value(value: *mut u128) -> ExtStatusCode;
+    pub fn oasis_value(value: *mut u128) -> u32;
 
-    pub fn oasis_read(key: *const u8, key_len: u32, value: *mut u8) -> ExtStatusCode;
-    pub fn oasis_read_len(key: *const u8, key_len: u32, value_len: *mut u32) -> ExtStatusCode;
-    pub fn oasis_write(
-        key: *const u8,
-        key_len: u32,
-        value: *const u8,
-        value_len: u32,
-    ) -> ExtStatusCode;
+    pub fn oasis_read(key: *const u8, key_len: u32, value: *mut u8) -> u32;
+    pub fn oasis_read_len(key: *const u8, key_len: u32, value_len: *mut u32) -> u32;
+    pub fn oasis_write(key: *const u8, key_len: u32, value: *const u8, value_len: u32) -> u32;
 
     pub fn oasis_emit(
         topics: *const *const u8,
@@ -52,23 +47,23 @@ extern "C" {
         num_topics: u32,
         data: *const u8,
         data_len: u32,
-    ) -> ExtStatusCode;
+    ) -> u32;
 }
 
-fn unpack_rpc_error(status: ExtStatusCode) -> RpcError {
-    match status {
-        ExtStatusCode::Success => unreachable!(),
-        ExtStatusCode::InsufficientFunds => RpcError::InsufficientFunds,
-        ExtStatusCode::InvalidInput => RpcError::InvalidInput,
-        ExtStatusCode::NoAccount => RpcError::InvalidCallee,
-        _ => RpcError::Execution(fetch_err()),
+fn unpack_rpc_error(status: u32) -> RpcError {
+    match ExtStatusCode::from_u32(status) {
+        Some(ExtStatusCode::Success) => unreachable!(),
+        Some(ExtStatusCode::InsufficientFunds) => RpcError::InsufficientFunds,
+        Some(ExtStatusCode::InvalidInput) => RpcError::InvalidInput,
+        Some(ExtStatusCode::NoAccount) => RpcError::InvalidCallee,
+        Some(_) | None => RpcError::Execution(fetch_err()),
     }
 }
 
 macro_rules! ext {
     ($fn:ident $args:tt ) => {{
         let code = unsafe { $fn$args };
-        if code != ExtStatusCode::Success {
+        if code != ExtStatusCode::Success as u32 {
             Err(code)
         } else {
             Ok(())

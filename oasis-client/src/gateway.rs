@@ -273,7 +273,7 @@ impl Gateway for HttpGateway {
 
         self.post_and_poll(SERVICE_EXECUTE_API, body)
             .and_then(|event| match event {
-                Event::ExecuteService { output, .. } => Ok(hex::decode(&output[2..])?),
+                Event::ExecuteService { output, .. } => Ok(dbg!(hex::decode(&output[2..])?)),
                 e => Err(anyhow!("expecting `ExecuteService` event. got {:?}", e)),
             })
             .map_err(RpcError::GatewayError)

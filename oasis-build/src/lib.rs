@@ -10,12 +10,14 @@
 #![feature(box_patterns, box_syntax, inner_deref, rustc_private)]
 
 extern crate rustc;
+extern crate rustc_ast_pretty;
 extern crate rustc_data_structures;
 extern crate rustc_driver;
+extern crate rustc_hir;
 extern crate rustc_interface;
+extern crate rustc_span;
 extern crate rustc_target;
 extern crate syntax;
-extern crate syntax_pos;
 
 mod error;
 mod gen;
@@ -26,3 +28,6 @@ mod visitor;
 
 pub use gen::{imports, insert_oasis_bindings};
 pub use plugin::{BuildContext, BuildPlugin, BuildTarget};
+
+pub struct DefaultCallbacks;
+impl rustc_driver::Callbacks for DefaultCallbacks {}

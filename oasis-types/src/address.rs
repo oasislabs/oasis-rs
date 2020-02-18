@@ -7,6 +7,10 @@ pub struct Address(pub [u8; 20]);
 
 impl Address {
     /// Creates an `Address` from a little-endian byte array.
+    ///
+    /// # Safety
+    ///
+    /// Requires that `bytes` reference 20 bytes of static memory.
     pub unsafe fn from_raw(bytes: *const u8) -> Self {
         let mut addr = Self::default();
         addr.0

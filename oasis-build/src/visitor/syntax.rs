@@ -1,6 +1,6 @@
-use rustc::util::nodemap::FxHashMap;
-use syntax::{ast, mut_visit, ptr::P, source_map::Span, visit};
-use syntax_pos::symbol::Symbol;
+use rustc_data_structures::fx::FxHashMap;
+use rustc_span::{symbol::Symbol, Span};
+use syntax::{ast, mut_visit, ptr::P, visit};
 
 use crate::error::{RpcError, RpcWarning};
 
@@ -32,7 +32,7 @@ impl<'ast> visit::Visitor<'ast> for ServiceDefFinder {
             let metas = match &meta {
                 Some(ast::MetaItem {
                     path,
-                    node: ast::MetaItemKind::List(metas),
+                    kind: ast::MetaItemKind::List(metas),
                     ..
                 }) if *path == Symbol::intern("derive") => metas,
                 _ => continue,
@@ -46,7 +46,7 @@ impl<'ast> visit::Visitor<'ast> for ServiceDefFinder {
                 if ident != "Event" {
                     return;
                 }
-                if let ast::ItemKind::Struct(variant_data, _) = &item.node {
+                if let ast::ItemKind::Struct(variant_data, _) = &item.kind {
                     let indexed_fields = variant_data
                         .fields()
                         .iter()
@@ -54,7 +54,10 @@ impl<'ast> visit::Visitor<'ast> for ServiceDefFinder {
                             field
                                 .attrs
                                 .iter()
-                                .find(|attr| attr.path == Symbol::intern("indexed"))
+                                .find(|attr| {
+                                    attr.ident().map(|ident| ident.name)
+                                        == Some(Symbol::intern("indexed"))
+                                })
                                 .and_then(|_| field.ident.map(|ident| ident.name))
                         })
                         .collect();
@@ -70,11 +73,11 @@ impl<'ast> visit::Visitor<'ast> for ServiceDefFinder {
         if !crate::utils::path_ends_with(&mac.path, &["oasis_std", "service"]) {
             return;
         }
-        if mac.tts.len() != 1 {
-            return;
-        }
-        if let Some(ident) = mac
-            .tts
+        let mac_tts = match &*mac.args {
+            ast::MacArgs::Delimited(_, _, tts) if tts.len() == 1 => tts,
+            _ => return,
+        };
+        if let Some(ident) = mac_tts
             .trees()
             .next_with_joint()
             .and_then(|(tree, _)| match tree {
@@ -85,7 +88,7 @@ impl<'ast> visit::Visitor<'ast> for ServiceDefFinder {
             .map(|(ident, _)| ident)
         {
             self.services.push(Service {
-                span: mac.span,
+                span: mac.span(),
                 name: ident.name,
             });
         }
@@ -134,7 +137,7 @@ impl ParsedRpcCollector {
 
 impl<'ast> visit::Visitor<'ast> for ParsedRpcCollector {
     fn visit_item(&mut self, item: &'ast ast::Item) {
-        match &item.node {
+        match &item.kind {
             ast::ItemKind::Struct(_, generics) if item.ident.name == self.service_name => {
                 if !generics.params.is_empty() {
                     self.errors.push(RpcError::HasGenerics(generics.span))
@@ -142,11 +145,15 @@ impl<'ast> visit::Visitor<'ast> for ParsedRpcCollector {
 
                 self.struct_span = Some(item.span);
             }
-            ast::ItemKind::Impl(_, _, _, _, None, service_ty, impl_items)
-                if match &service_ty.node {
-                    ast::TyKind::Path(_, p) => *p == self.service_name,
-                    _ => false,
-                } =>
+            ast::ItemKind::Impl {
+                of_trait: None,
+                self_ty: service_ty,
+                items: impl_items,
+                ..
+            } if match &service_ty.kind {
+                ast::TyKind::Path(_, p) => *p == self.service_name,
+                _ => false,
+            } =>
             {
                 for impl_item in impl_items {
                     match ParsedRpc::try_new_maybe(&service_ty, impl_item) {
@@ -155,7 +162,11 @@ impl<'ast> visit::Visitor<'ast> for ParsedRpcCollector {
                             self.rpcs.push(rpc);
 
                             let mut println_finder = PrintlnFinder::default();
-                            syntax::visit::walk_impl_item(&mut println_finder, &impl_item);
+                            syntax::visit::walk_assoc_item(
+                                &mut println_finder,
+                                &impl_item,
+                                syntax::visit::AssocCtxt::Impl,
+                            );
                             self.println_spans.extend(&println_finder.println_spans);
                         }
                         Some(Err(errs)) => self.errors.extend(errs),
@@ -186,7 +197,7 @@ impl<'ast> visit::Visitor<'ast> for PrintlnFinder {
         if crate::utils::path_ends_with(&mac.path, &["std", "println"])
             || crate::utils::path_ends_with(&mac.path, &["std", "print"])
         {
-            self.println_spans.push(mac.span);
+            self.println_spans.push(mac.span());
         }
     }
 }
@@ -196,8 +207,8 @@ pub struct Deborrower;
 
 impl mut_visit::MutVisitor for Deborrower {
     fn visit_ty(&mut self, ty: &mut P<ast::Ty>) {
-        if let ast::TyKind::Rptr(_, ast::MutTy { ty: refd_ty, .. }) = &ty.node {
-            match &refd_ty.node {
+        if let ast::TyKind::Rptr(_, ast::MutTy { ty: refd_ty, .. }) = &ty.kind {
+            match &refd_ty.kind {
                 ast::TyKind::Path(None, path) => {
                     if path.segments.last().unwrap().ident.name == Symbol::intern("str") {
                         *ty = crate::utils::make_ty(ast::TyKind::Path(
@@ -210,7 +221,7 @@ impl mut_visit::MutVisitor for Deborrower {
                     let mut path = ast::Path::from_ident(ast::Ident::from_str("Vec"));
                     path.segments[0].args = Some(P(ast::GenericArgs::AngleBracketed(
                         ast::AngleBracketedArgs {
-                            span: syntax_pos::DUMMY_SP,
+                            span: rustc_span::DUMMY_SP,
                             args: vec![ast::GenericArg::Type(slice_ty.clone())],
                             constraints: Vec::new(),
                         },

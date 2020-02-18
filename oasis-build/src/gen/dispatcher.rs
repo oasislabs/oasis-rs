@@ -2,11 +2,9 @@ use std::path::Path;
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syntax::{
-    ast::{self, Crate, ItemKind, StmtKind},
-    print::pprust,
-};
-use syntax_pos::symbol::Symbol;
+use rustc_ast_pretty::pprust;
+use rustc_span::symbol::Symbol;
+use syntax::ast::{self, Crate, ItemKind, StmtKind};
 
 use crate::{
     format_ident, hash,
@@ -65,7 +63,7 @@ fn generate_rpc_dispatcher(
     rpcs: &[ParsedRpc],
     default_fn: Option<&ParsedRpc>,
 ) -> TokenStream {
-    let service_ident = format_ident!("{}", service_name.as_str().get());
+    let service_ident = format_ident!("{}", service_name);
     let mut any_rpc_returns_result = false;
     let mut rpc_payload_variants = Vec::with_capacity(rpcs.len());
     let rpc_match_arms = rpcs
@@ -220,7 +218,7 @@ fn generate_ctor_fn(service_name: Symbol, ctor: &ParsedRpc) -> TokenStream {
         (quote!(), quote!())
     };
 
-    let service_ident = format_ident!("{}", service_name.as_str().get());
+    let service_ident = format_ident!("{}", service_name);
 
     let ctor_stmt = if ctor.output.is_result() {
         quote! {
@@ -264,14 +262,14 @@ fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
         if item.ident.name != Symbol::intern("main") {
             continue;
         }
-        let main_fn_block = match &mut item.node {
-            ItemKind::Fn(_, _, _, ref mut block) => block,
+        let main_fn_block = match &mut item.kind {
+            ItemKind::Fn(_sig, _generics, Some(ref mut block)) => block,
             _ => continue,
         };
         let oasis_macro_idx = main_fn_block
             .stmts
             .iter()
-            .position(|stmt| match &stmt.node {
+            .position(|stmt| match &stmt.kind {
                 StmtKind::Mac(p_mac) => {
                     crate::utils::path_ends_with(&p_mac.0.path, &["oasis_std", "service"])
                 }
@@ -280,9 +278,9 @@ fn insert_rpc_dispatcher_stub(krate: &mut Crate, include_file: &Path) {
             .unwrap();
         main_fn_block.stmts.splice(
             oasis_macro_idx..=oasis_macro_idx,
-            std::iter::once(common::gen_call_stmt(
-                syntax::source_map::symbol::Ident::from_str("_oasis_dispatcher"),
-            )),
+            std::iter::once(common::gen_call_stmt(rustc_span::symbol::Ident::from_str(
+                "_oasis_dispatcher",
+            ))),
         );
         break;
     }

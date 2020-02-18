@@ -15,7 +15,7 @@ fn find_deps(names: &[&str]) -> Vec<PathBuf> {
             let fname = p.file_name().unwrap().to_str().unwrap();
             match fname.split('-').collect::<Vec<_>>().as_slice() {
                 [lib_name, disambiguator] if disambiguator.ends_with(".rlib") => {
-                    Some((lib_name.to_string(), de.path()))
+                    Some(((*lib_name).to_string(), de.path()))
                 }
                 _ => None,
             }

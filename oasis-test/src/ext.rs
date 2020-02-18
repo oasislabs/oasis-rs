@@ -1,4 +1,4 @@
-#![allow(unused)]
+#![allow(improper_ctypes, unused)] // ExtStatusCode is `repr(u32)` but non-exhaustive
 
 use oasis_types::{Address, ExtStatusCode};
 

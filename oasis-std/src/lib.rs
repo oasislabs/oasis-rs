@@ -1,7 +1,5 @@
 #![feature(
-    bind_by_move_pattern_guards,
     linkage,
-    non_exhaustive,
     proc_macro_hygiene,
     specialization,
     trait_alias,

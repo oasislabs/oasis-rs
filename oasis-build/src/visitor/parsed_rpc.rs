@@ -1,5 +1,5 @@
-use syntax::{ast, mut_visit::MutVisitor as _, ptr::P, source_map::Span};
-use syntax_pos::symbol::Symbol;
+use rustc_span::{symbol::Symbol, Span};
+use syntax::{ast, mut_visit::MutVisitor as _, ptr::P};
 
 use crate::{error::RpcError, visitor::syntax::Deborrower};
 
@@ -8,13 +8,13 @@ pub struct ParsedRpc {
     pub kind: ParsedRpcKind,
     pub span: Span,
     pub output: ReturnType,
-    sig: ast::MethodSig,
+    sig: ast::FnSig,
 }
 
 impl ParsedRpc {
     pub fn try_new_maybe(
         service_ty: &P<ast::Ty>,
-        impl_item: &ast::ImplItem,
+        impl_item: &ast::AssocItem,
     ) -> Option<Result<Self, Vec<RpcError>>> {
         let mut errors = Vec::new();
 
@@ -26,8 +26,8 @@ impl ParsedRpc {
             _ => return None,
         }
 
-        let msig = match &impl_item.node {
-            ast::ImplItemKind::Method(msig, _) => msig,
+        let msig = match &impl_item.kind {
+            ast::AssocItemKind::Fn(msig, _) => msig,
             _ => return None,
         };
         if impl_item
@@ -42,21 +42,21 @@ impl ParsedRpc {
             errors.push(RpcError::HasGenerics(impl_item.generics.span));
         }
 
-        if let ast::IsAsync::Async { .. } = msig.header.asyncness.node {
-            errors.push(RpcError::HasAsync(msig.header.asyncness.span));
+        if let ast::Async::Yes { span, .. } = msig.header.asyncness {
+            errors.push(RpcError::HasAsync(span));
         }
 
-        if let ast::Unsafety::Unsafe = msig.header.unsafety {
+        if let ast::Unsafe::Yes(_) = msig.header.unsafety {
             errors.push(RpcError::Unsafe(impl_item.span));
         }
 
-        match msig.header.abi {
-            rustc_target::spec::abi::Abi::Rust => (),
+        match msig.header.ext {
+            ast::Extern::None | ast::Extern::Implicit => (),
             _ => {
                 // start from the `pub` to the fn ident
                 // then slice from after the `pub ` to before the ` fn `
                 let err_span = impl_item.span.until(impl_item.ident.span);
-                let err_span = err_span.from_inner(syntax_pos::InnerSpan::new(
+                let err_span = err_span.from_inner(rustc_span::InnerSpan::new(
                     4,
                     (err_span.hi().0 - err_span.lo().0) as usize - 4,
                 ));
@@ -65,7 +65,11 @@ impl ParsedRpc {
         }
 
         let default_span = impl_item.attrs.iter().find_map(|attr| {
-            if crate::utils::path_ends_with(&attr.path, &["oasis_std", "default"]) {
+            let attr_path = match &attr.kind {
+                ast::AttrKind::Normal(item) => &item.path,
+                _ => return None,
+            };
+            if crate::utils::path_ends_with(&attr_path, &["oasis_std", "default"]) {
                 Some(attr.span)
             } else {
                 None
@@ -106,7 +110,7 @@ impl ParsedRpc {
             }
         } else {
             for arg in args {
-                match arg.pat.node {
+                match arg.pat.kind {
                     ast::PatKind::Ident(..) => (),
                     _ => errors.push(RpcError::BadArgPat(arg.pat.span)),
                 }
@@ -118,7 +122,7 @@ impl ParsedRpc {
         if is_ctor {
             let mut ret_ty_is_self = false;
             if let Some(ast::Ty {
-                node: ast::TyKind::Path(_, path),
+                kind: ast::TyKind::Path(_, path),
                 ..
             }) = &ret_ty.ty.as_ref().map(|p| &**p)
             {
@@ -159,7 +163,7 @@ impl ParsedRpc {
             ast::SelfKind::Value(mutability)
             | ast::SelfKind::Region(_, mutability)
             | ast::SelfKind::Explicit(_, mutability)
-                if *mutability == ast::Mutability::Mutable =>
+                if *mutability == ast::Mutability::Mut =>
             {
                 true
             }
@@ -168,7 +172,7 @@ impl ParsedRpc {
     }
 
     pub fn arg_names(&self) -> impl Iterator<Item = Symbol> + '_ {
-        self.inputs().map(|arg| match arg.pat.node {
+        self.inputs().map(|arg| match arg.pat.kind {
             ast::PatKind::Ident(_, ident, _) => ident.name,
             _ => unreachable!("Checked during visitation."),
         })
@@ -182,7 +186,7 @@ impl ParsedRpc {
         })
     }
 
-    fn inputs(&self) -> impl Iterator<Item = &ast::Arg> {
+    fn inputs(&self) -> impl Iterator<Item = &ast::Param> {
         self.sig.decl.inputs.iter().skip(match self.kind {
             ParsedRpcKind::Ctor => 1, /* ctx */
             _ => 2,                   /* self, ctx */
@@ -210,12 +214,12 @@ impl ReturnType {
             ty: None,
         };
         if let ast::FunctionRetTy::Ty(ty) = ty {
-            match &ty.node {
+            match &ty.kind {
                 ast::TyKind::Path(_, path) => {
                     let maybe_result = path.segments.last().unwrap();
                     ret_ty.is_result = maybe_result.ident.name == Symbol::intern("Result");
                     if !ret_ty.is_result {
-                        if !ty.node.is_unit() {
+                        if !ty.kind.is_unit() {
                             ret_ty.ty = Some(ty.clone());
                         }
                         return ret_ty;

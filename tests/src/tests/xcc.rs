@@ -15,12 +15,12 @@ fn test_native_client() {
     let b_addr = Address([2u8; 20]);
     let deploy_message = "message";
     let numbers = vec![b::Number(99), b::Number(1)];
-    let rpc_return: Result<_, ()> = Ok(numbers.clone());
+    let rpc_return = numbers.clone();
 
     let encoded_deploy_message = abi_encode!(deploy_message).unwrap();
     let expected_initcode = SERVICE_A_BYTECODE.iter().chain(&encoded_deploy_message);
 
-    let func_idx = 0u32;
+    let func_idx = 0u8;
     let expected_rpc_payload = abi_encode!(func_idx, b_addr).unwrap();
 
     let gateway = MockGateway::new(GatewayHandlers {

@@ -24,4 +24,4 @@ env_logger = "0.7"
 reqwest = "0.9"
 
 [dev-dependencies]
-mockito = "0.21"
+mockito = "0.23"

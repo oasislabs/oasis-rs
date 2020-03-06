@@ -360,8 +360,11 @@ impl HashableChecker {
 
 impl oasis_rpc::visitor::IdlVisitor for HashableChecker {
     fn visit_type(&mut self, ty: &oasis_rpc::Type) {
-        use oasis_rpc::Type::{F32, F64};
-        self.contains_nonhashable |= *ty == F32 || *ty == F64;
+        use oasis_rpc::Type::{Map, Set, F32, F64};
+        self.contains_nonhashable |= match ty {
+            F32 | F64 | Set(_) | Map(_, _) => true,
+            _ => false,
+        };
         oasis_rpc::visitor::walk_type(self, ty);
     }
 }

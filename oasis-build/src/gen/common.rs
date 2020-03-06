@@ -59,12 +59,12 @@ pub fn quote_ty(ty: &oasis_rpc::Type) -> TokenStream {
         }
         Type::Set(ty) => {
             let tyq = quote_ty(ty);
-            quote!(std::collections::HashSet<#tyq>)
+            quote!(oasis_std::collections::Set<#tyq>)
         }
         Type::Map(kty, vty) => {
             let ktyq = quote_ty(kty);
             let vtyq = quote_ty(vty);
-            quote!(std::collections::HashMap<#ktyq, #vtyq>)
+            quote!(oasis_std::collections::Map<#ktyq, #vtyq>)
         }
         Type::Optional(ty) => {
             let tyq = quote_ty(ty);

@@ -34,6 +34,10 @@ impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
         self.input.as_slice()
     }
 
+    fn create(&mut self, _value: u128, _code: &[u8]) -> Box<dyn blockchain_traits::Receipt> {
+        unimplemented!();
+    }
+
     fn transact(
         &mut self,
         callee: Address,
@@ -87,9 +91,7 @@ impl<'bc> blockchain_traits::PendingTransaction for PendingTransaction<'bc> {
             gas_left: self.gas_left - self.base_gas,
         };
 
-        let main_fn = self.state.get(&callee).unwrap().main;
-
-        if let Some(main) = main_fn {
+        if let Some(main) = self.state.get(&callee).unwrap().main {
             let ptx: &mut dyn blockchain_traits::PendingTransaction = &mut pending_transaction;
             let errno = main(unsafe {
                 // Extend the lifetime, as required by the FFI type.

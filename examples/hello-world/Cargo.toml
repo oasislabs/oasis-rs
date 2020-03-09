@@ -6,7 +6,7 @@ edition = "2018"
 publish = false
 
 [dependencies]
-oasis-std = "0.3"
+oasis-std = { version = "0.4", path = "../../oasis-std" }
 
 [dev-dependencies]
-oasis-test = "0.3"
+oasis-test = { version = "0.4", path = "../../oasis-test" }

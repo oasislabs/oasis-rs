@@ -10,7 +10,7 @@ impl Address {
     pub unsafe fn from_raw(bytes: *const u8) -> Self {
         let mut addr = Self::default();
         addr.0
-            .copy_from_slice(std::slice::from_raw_parts(bytes, 20));
+            .copy_from_slice(std::slice::from_raw_parts(bytes, Self::size()));
         addr
     }
 

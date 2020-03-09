@@ -68,6 +68,11 @@ pub trait PendingTransaction {
     /// Returns the input provided by the calling context.
     fn input(&self) -> &[u8];
 
+    /// Creates a new contract with the provided code and initial value.
+    /// The new transaction will inherit the gas parameters and gas payer of the top level
+    /// transaction. The current account will be set as the sender.
+    fn create(&mut self, value: u128, code: &[u8]) -> Box<dyn Receipt>;
+
     /// Executes a balance-transferring RPC to `callee` with provided input and value.
     /// The new transaction will inherit the gas parameters and gas payer of the top level
     /// transaction. The current account will be set as the sender.

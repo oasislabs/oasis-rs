@@ -9,5 +9,6 @@ cfg_if::cfg_if! {
 }
 
 pub use imp::{
-    aad, address, balance, code, emit, err, input, payer, read, ret, sender, transact, value, write,
+    aad, address, balance, code, create, emit, err, input, payer, read, ret, sender, transact,
+    value, write,
 };

@@ -71,6 +71,11 @@ pub extern "C" fn oasis_err_len(len: *mut u32) -> ExtStatusCode {
 }
 
 #[no_mangle]
+pub extern "C" fn oasis_create(value: u128, code: *const u8, code_len: u32) -> ExtStatusCode {
+    ExtStatusCode::Success
+}
+
+#[no_mangle]
 pub extern "C" fn oasis_transact(
     callee: *const Address,
     value: u128,

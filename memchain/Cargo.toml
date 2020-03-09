@@ -1,6 +1,6 @@
 [package]
 name = "memchain"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
 license = "Apache-2.0"
@@ -13,7 +13,7 @@ keywords = ["blockchain", "testing", "ethereum"]
 crate_type = ["rlib", "cdylib"]
 
 [dependencies]
-blockchain-traits = { version = "0.3", path = "../blockchain-traits" }
+blockchain-traits = { version = "0.4", path = "../blockchain-traits" }
 oasis-types = { version = "0.3", path = "../oasis-types" }
 
 [features]

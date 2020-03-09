@@ -5,6 +5,8 @@ use oasis_types::{Address, Event};
 pub struct Receipt {
     pub outcome: TransactionOutcome,
     pub caller: Address,
+    /// `callee` is the address of the contract that was invoked.
+    /// For `create` calls, this will be the address of the new contract.
     pub callee: Address,
     pub value: u128,
     pub gas_used: u64,

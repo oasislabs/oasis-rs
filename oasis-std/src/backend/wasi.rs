@@ -9,11 +9,34 @@ use std::{
 use oasis_types::{Address, Balance, RpcError};
 use wasi::wasi_unstable::raw::{__wasi_errno_t, __wasi_fd_t};
 
+#[link(wasm_import_module = "wasi_unstable")]
+extern "C" {
+    #[link_name = "blockchain_create"]
+    #[allow(improper_ctypes)] // u128 is just 2 u64s
+    fn __wasi_blockchain_create(
+        value: *const u128,
+        code: *const u8,
+        code_len: u64,
+        fd: *mut __wasi_fd_t,
+    ) -> __wasi_errno_t;
+
+    #[link_name = "blockchain_transact"]
+    #[allow(improper_ctypes)]
+    fn __wasi_blockchain_transact(
+        callee_addr: *const u8,
+        value: *const u128,
+        input: *const u8,
+        input_len: u64,
+        fd: *mut __wasi_fd_t,
+    ) -> __wasi_errno_t;
+}
+
 macro_rules! chain_dir {
     ($($ext:literal),*) => {
         concat!("/opt/oasis/", $($ext),*)
     }
 }
+
 fn home<P: AsRef<Path>>(addr: &Address, file: P) -> PathBuf {
     let mut home = PathBuf::from(chain_dir!());
     home.push(addr.path_repr());
@@ -68,17 +91,38 @@ pub fn code(addr: &Address) -> Option<Vec<u8>> {
     })
 }
 
-#[link(wasm_import_module = "wasi_unstable")]
-extern "C" {
-    #[link_name = "blockchain_transact"]
-    #[allow(improper_ctypes)] // u128 is just 2 u64s
-    fn __wasi_blockchain_transact(
-        callee_addr: *const u8,
-        value: *const u128,
-        input: *const u8,
-        input_len: u64,
-        fd: *mut __wasi_fd_t,
-    ) -> __wasi_errno_t;
+pub fn create(value: Balance, code: &[u8]) -> Result<Address, RpcError> {
+    let mut fd: __wasi_fd_t = 0;
+    let errno = unsafe {
+        __wasi_blockchain_create(
+            &value.0 as *const u128,
+            code.as_ptr(),
+            code.len() as u64,
+            &mut fd as *mut _,
+        )
+    };
+    let mut f_out = unsafe { fs::File::from_raw_fd(fd) };
+    let mut out = Vec::new();
+    f_out
+        .read_to_end(&mut out)
+        .unwrap_or_else(|err| panic!(err));
+    use wasi::wasi_unstable::raw::*;
+    match errno {
+        __WASI_ESUCCESS => {
+            if out.len() != Address::size() {
+                Err(RpcError::InvalidOutput(out))
+            } else {
+                let mut addr = Address::default();
+                addr.0.copy_from_slice(&out);
+                Ok(addr)
+            }
+        }
+        __WASI_EFAULT | __WASI_EINVAL => Err(RpcError::InvalidInput),
+        __WASI_ENOENT => Err(RpcError::InvalidCallee),
+        __WASI_EDQUOT => Err(RpcError::InsufficientFunds),
+        __WASI_ECONNABORTED => Err(RpcError::Execution(out)),
+        _ => unreachable!(),
+    }
 }
 
 pub fn transact(callee: &Address, value: Balance, input: &[u8]) -> Result<Vec<u8>, RpcError> {
@@ -98,14 +142,14 @@ pub fn transact(callee: &Address, value: Balance, input: &[u8]) -> Result<Vec<u8
         .read_to_end(&mut out)
         .unwrap_or_else(|err| panic!(err));
     use wasi::wasi_unstable::raw::*;
-    Err(match errno {
-        __WASI_ESUCCESS => return Ok(out),
-        __WASI_EFAULT | __WASI_EINVAL => RpcError::InvalidInput,
-        __WASI_ENOENT => RpcError::InvalidCallee,
-        __WASI_EDQUOT => RpcError::InsufficientFunds,
-        __WASI_ECONNABORTED => RpcError::Execution(out),
+    match errno {
+        __WASI_ESUCCESS => Ok(out),
+        __WASI_EFAULT | __WASI_EINVAL => Err(RpcError::InvalidInput),
+        __WASI_ENOENT => Err(RpcError::InvalidCallee),
+        __WASI_EDQUOT => Err(RpcError::InsufficientFunds),
+        __WASI_ECONNABORTED => Err(RpcError::Execution(out)),
         _ => unreachable!(),
-    })
+    }
 }
 
 pub fn input() -> Vec<u8> {

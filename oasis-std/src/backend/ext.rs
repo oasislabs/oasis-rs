@@ -24,6 +24,9 @@ extern "C" {
     pub fn oasis_aad_len(len: *mut u32) -> ExtStatusCode;
 
     #[allow(improper_ctypes)] // u128 is just 2 u64s
+    pub fn oasis_create(value: *const u128, code: *const u8, code_len: u32) -> ExtStatusCode;
+
+    #[allow(improper_ctypes)]
     pub fn oasis_transact(
         callee: *const Address,
         value: *const u128,
@@ -132,6 +135,37 @@ pub fn code(addr: &Address) -> Option<Vec<u8>> {
     ext!(oasis_code(addr as *const Address, code.as_mut_ptr()))
         .ok()
         .map(|_| code)
+}
+
+pub fn create(value: Balance, code: &[u8]) -> Result<Address, RpcError> {
+    ext!(oasis_create(
+        &value.0 as *const u128,
+        code.as_ptr(),
+        if code.len() > u32::max_value() as usize {
+            return Err(RpcError::InvalidInput);
+        } else {
+            code.len() as u32
+        },
+    ))
+    .map_err(unpack_rpc_error)?;
+
+    let mut ret_len = 0u32;
+    ext!(oasis_ret_len(&mut ret_len as *mut _)).map_err(unpack_rpc_error)?;
+
+    let mut ret = Vec::with_capacity(ret_len as usize);
+    unsafe { ret.set_len(ret_len as usize) };
+
+    ext!(oasis_fetch_ret(ret.as_mut_ptr()))
+        .map_err(unpack_rpc_error)
+        .and_then(|_| {
+            if ret.len() != Address::size() {
+                Err(RpcError::InvalidOutput(ret))
+            } else {
+                let mut addr = Address::default();
+                addr.0.copy_from_slice(&ret);
+                Ok(addr)
+            }
+        })
 }
 
 pub fn transact(callee: &Address, value: Balance, input: &[u8]) -> Result<Vec<u8>, RpcError> {

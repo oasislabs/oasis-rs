@@ -1,0 +1,115 @@
+name: main
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+env:
+  OASIS_BUILD_VERBOSE: 1
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    container: oasislabs/rust:latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Lint
+        run: |
+          cargo fmt -- --check
+          cargo clippy --all-targets --all-features --all --exclude tests -- -D clippy::all
+          cargo clippy -p tests --lib -- -D clippy::all
+
+  unit_test:
+    runs-on: ubuntu-latest
+    container: oasislabs/rust:latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Unit test
+        run: cargo test --all --exclude tests
+
+  build_wasm:
+    runs-on: ubuntu-latest
+    container: oasislabs/rust:latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Build bcfs and memchain for Wasm
+        run: |
+          cargo build --target wasm32-unknown-unknown --all-features -p memchain -p bcfs
+
+  build_oasis_build:
+    runs-on: ubuntu-latest
+    container: oasislabs/rust:latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Cache oasis-build
+        uses: actions/cache@v1
+        id: cache-oasis-build
+        with:
+          path: ~/.cargo/bin/oasis-build
+          key: ${{ runner.os }}-${{ hashFiles('oasis-build/**') }}
+
+      - name: Build oasis-build
+        run: cargo install --debug --path oasis-build
+        if: steps.cache-oasis-build.outputs.cache-hit != 'true'
+
+  build_standalone_examples:
+    needs: build_oasis_build
+    runs-on: ubuntu-latest
+    container:
+      image: oasislabs/rust:latest
+      env:
+        RUSTC_WRAPPER: oasis-build
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Restore oasis-build
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/bin/oasis-build
+          key: ${{ runner.os }}-${{ hashFiles('oasis-build/**') }}
+
+      - name: Build
+        run: |
+          cargo build --release --target=wasm32-wasi \
+          -p ballot \
+          -p erc20 \
+          -p hello-world \
+          -p messaging
+
+  integration_test:
+    needs: build_oasis_build
+    runs-on: ubuntu-latest
+    container:
+      image: oasislabs/rust:latest
+      env:
+        RUSTC_WRAPPER: oasis-build
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Restore oasis-build
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/bin/oasis-build
+          key: ${{ runner.os }}-${{ hashFiles('oasis-build/**') }}
+
+      - name: Build services
+        run: |
+          cargo build -p tests --release --target wasm32-wasi --bin b
+          cargo build -p tests --release --target wasm32-wasi --bins
+
+      - name: Test
+        run: cargo test -p tests --lib

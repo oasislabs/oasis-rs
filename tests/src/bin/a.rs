@@ -1,4 +1,4 @@
-use oasis_std::{Address, Context, Service};
+use oasis_std::{Address, Context, RpcError, Service};
 
 #[derive(Service)]
 pub struct ServiceA;
@@ -9,7 +9,7 @@ impl ServiceA {
         Self
     }
 
-    pub fn call_b(&self, _ctx: &Context, b_addr: Address) -> Result<Vec<b::Number>, ()> {
+    pub fn call_b(&self, _ctx: &Context, b_addr: Address) -> Result<Vec<b::Number>, RpcError> {
         let b = b::ServiceBClient::new(b_addr);
         b.say_hello(
             &Context::default(),
@@ -17,7 +17,7 @@ impl ServiceA {
         )
         .unwrap();
         b.return_ref_struct(&Context::default(), "value").unwrap();
-        Ok(b.random(&Context::default(), b::Number(42)).unwrap())
+        b.random(&Context::default(), b::Number(42))
     }
 }
 

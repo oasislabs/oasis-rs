@@ -45,12 +45,11 @@
             }
           },
           {
-            "type": "tuple",
-            "params": []
+            "type": "rpcError"
           }
         ]
       }
     }
   ],
-  "oasis_build_version": "0.3.0"
+  "oasis_build_version": "0.3.1"
 }

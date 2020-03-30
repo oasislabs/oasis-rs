@@ -221,6 +221,8 @@ macro_rules! convert_def {
                 Type::Address
             } else if ty_str == "Balance" {
                 Type::Balance
+            } else if ty_str == "RpcError" {
+                Type::RpcError
             } else {
                 // this branch includes `sync`, among other things
                 return Err(UnsupportedTypeError {

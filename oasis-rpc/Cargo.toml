@@ -1,6 +1,6 @@
 [package]
 name = "oasis-rpc"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
 license = "Apache-2.0"

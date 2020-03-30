@@ -105,7 +105,7 @@ pub struct Constructor {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Hash)]
-#[serde(rename_all = "lowercase", tag = "type", content = "params")]
+#[serde(rename_all = "camelCase", tag = "type", content = "params")]
 pub enum Type {
     Bool,
     U8,
@@ -122,6 +122,7 @@ pub enum Type {
     String,
     Address,
     Balance,
+    RpcError,
     Defined {
         #[serde(skip_serializing_if = "Option::is_none", default)]
         namespace: Option<Ident>, // `None` if local, otherwise refers to an entry in `Imports`

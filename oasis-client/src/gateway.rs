@@ -260,7 +260,7 @@ impl Gateway for HttpGateway {
                     e => Err(anyhow!("expecting `DeployService` event. got {:?}", e)),
                 }
             })
-            .map_err(RpcError::GatewayError)
+            .map_err(RpcError::Gateway)
     }
 
     fn rpc(&self, address: Address, payload: &[u8]) -> std::result::Result<Vec<u8>, RpcError> {
@@ -276,7 +276,7 @@ impl Gateway for HttpGateway {
                 Event::ExecuteService { output, .. } => Ok(hex::decode(&output[2..])?),
                 e => Err(anyhow!("expecting `ExecuteService` event. got {:?}", e)),
             })
-            .map_err(RpcError::GatewayError)
+            .map_err(RpcError::Gateway)
     }
 }
 

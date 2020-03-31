@@ -12,11 +12,8 @@ keywords = ["blockchain", "oasis"]
 [dependencies]
 derive_more = "0.15"
 hex = "0.4"
-oasis-borsh = { version = "0.2", optional = true }
+oasis-borsh = { version = "0.2" }
 thiserror = "1.0"
-
-[features]
-serde = ["oasis-borsh"]
 
 [target.'cfg(not(target_os = "wasi"))'.dependencies]
 anyhow = "1.0"

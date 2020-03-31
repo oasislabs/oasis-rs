@@ -77,7 +77,7 @@ dependencies = [
 name = "ballot"
 version = "0.1.0"
 dependencies = [
- "oasis-std 0.4.0",
+ "oasis-std 0.4.1",
  "oasis-test 0.4.0",
 ]
 
@@ -344,7 +344,7 @@ dependencies = [
 name = "erc20"
 version = "0.1.0"
 dependencies = [
- "oasis-std 0.4.0",
+ "oasis-std 0.4.1",
  "oasis-test 0.4.0",
 ]
 
@@ -507,7 +507,7 @@ dependencies = [
 name = "hello-world"
 version = "0.1.0"
 dependencies = [
- "oasis-std 0.4.0",
+ "oasis-std 0.4.1",
  "oasis-test 0.4.0",
 ]
 
@@ -731,7 +731,7 @@ dependencies = [
 name = "messaging"
 version = "0.1.0"
 dependencies = [
- "oasis-std 0.4.0",
+ "oasis-std 0.4.1",
  "oasis-test 0.4.0",
 ]
 
@@ -911,7 +911,7 @@ dependencies = [
  "compiletest_rs 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)",
  "heck 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "oasis-rpc 0.3.1",
- "oasis-std 0.4.0",
+ "oasis-std 0.4.1",
  "proc-macro2 1.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.105 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -964,8 +964,9 @@ dependencies = [
 
 [[package]]
 name = "oasis-std"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
+ "anyhow 1.0.27 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "blockchain-traits 0.4.0",
  "cfg-if 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1621,7 +1622,7 @@ version = "0.1.0"
 dependencies = [
  "oasis-client 0.1.0",
  "oasis-rpc 0.3.1",
- "oasis-std 0.4.0",
+ "oasis-std 0.4.1",
  "serde_json 1.0.50 (registry+https://github.com/rust-lang/crates.io-index)",
  "walrus 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]

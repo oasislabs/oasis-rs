@@ -38,7 +38,7 @@ impl MockGateway {
                 InvalidInput => InvalidInput,
                 InvalidOutput(output) => InvalidOutput(output.clone()),
                 Execution(err) => Execution(err.clone()),
-                GatewayError(_) => unreachable!(),
+                Gateway(_) => unreachable!(),
             }
         })
     }

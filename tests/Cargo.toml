@@ -9,7 +9,7 @@ publish = false
 oasis-std = { version = "0.4", path = "../oasis-std" }
 
 [dev-dependencies]
-oasis-rpc = { version = "0.3", path = "../oasis-rpc", features = ["saveload"] }
+oasis-rpc = { version = "0.4", path = "../oasis-rpc", features = ["saveload"] }
 serde_json = "1.0"
 walrus = "0.13"
 

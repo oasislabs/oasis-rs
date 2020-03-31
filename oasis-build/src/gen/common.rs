@@ -34,6 +34,7 @@ pub fn quote_ty(ty: &oasis_rpc::Type) -> TokenStream {
         Type::String => quote!(String),
         Type::Address => quote!(oasis_std::Address),
         Type::Balance => quote!(oasis_std::Balance),
+        Type::RpcError => quote!(oasis_std::RpcError),
         Type::Defined { namespace, ty } => {
             let tyq = format_ident!("{}", ty);
             match namespace {

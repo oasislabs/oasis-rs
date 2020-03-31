@@ -1,6 +1,6 @@
 [package]
 name = "oasis-build"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Oasis Labs <feedback@oasislabs.com>"]
 edition = "2018"
 license = "Apache-2.0"
@@ -14,7 +14,7 @@ publish = false
 anyhow = "1.0"
 colored = "=1.8" # 1.9 doesn't work, for some reason
 heck = "0.3"
-oasis-rpc = { version = "0.3", path = "../oasis-rpc", features = ["resolve", "visitor"] }
+oasis-rpc = { version = "0.4", path = "../oasis-rpc", features = ["resolve", "visitor"] }
 proc-macro2 = "1.0"
 quote = "1.0"
 serde = { version = "1.0", features = ["derive"] }

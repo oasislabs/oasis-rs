@@ -64,7 +64,6 @@ impl fmt::LowerHex for Address {
     }
 }
 
-#[cfg(feature = "serde")]
 const _IMPL_SERDE_FOR_ADDRESS: () = {
     impl oasis_borsh::BorshSerialize for Address {
         fn serialize<W: std::io::Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {

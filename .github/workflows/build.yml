@@ -1,0 +1,31 @@
+name: SDK Build
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  oasis-build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Build oasis-build
+        run: cargo build --release -p oasis-build
+
+      - name: Get target triple
+        id: get-target-triple
+        run: |
+          triple=$(rustc -Z unstable-options --print target-spec-json | jq -r '."llvm-target"')
+          echo "::set-output name=triple::$triple"
+
+      - name: Upload oasis-build artifact
+        uses: actions/upload-artifact@v1
+        with:
+          name: oasis-build-${{ steps.get-target-triple.outputs.triple }}
+          path: target/release/oasis-build

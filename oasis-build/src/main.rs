@@ -39,9 +39,10 @@ fn main() {
             .as_ref()
             .map(|n| n.starts_with("build_script") || n.starts_with('_'))
             .unwrap_or_default();
-        let is_service = is_bin && !is_nonprimary_bin;
-        let is_test = args.iter().any(|arg| arg == "--test");
         let is_wasi = get_arg("--target", &args).map(String::as_str) == Some("wasm32-wasi");
+        let is_service = is_wasi && is_bin && !is_nonprimary_bin;
+        let is_test = args.iter().any(|arg| arg == "--test");
+        let is_app = !is_wasi && is_bin && !is_nonprimary_bin;
         let is_compiletest = args
             .iter()
             .any(|arg| arg == "feature=\"oasis-build-compiletest\"");
@@ -53,7 +54,7 @@ fn main() {
         });
 
         let mut import_semvers = Vec::new(); // for recording dependencies in the IDL
-        if is_service || is_test {
+        if is_service || is_test || is_app {
             let crate_name = crate_name.as_ref().unwrap();
             let out_dir = out_dir.as_ref().unwrap();
             let gen_dir = out_dir.parent().unwrap().join("build/oasis_imports");
@@ -137,7 +138,7 @@ fn main() {
         };
         rustc_driver::run_compiler(&args, callbacks, None, None)?;
 
-        if !(is_service && is_wasi) {
+        if !is_service {
             return Ok(());
         }
 
@@ -211,8 +212,9 @@ fn collect_import_rustc_args(args: &[String]) -> Vec<String> {
 }
 
 #[derive(Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct OasisDependencies {
-    #[serde(default, rename = "dev-dependencies")]
+    #[serde(default)]
     dev_dependencies: Dependencies,
     #[serde(default, flatten)]
     service_configs: BTreeMap<String, ServiceConfig>,

@@ -19,5 +19,5 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly-202
     rustup component add rustfmt clippy rustc-dev && \
     rustup target add wasm32-wasi wasm32-unknown-unknown
 
-RUN curl -sSLf https://github.com/CraneStation/wasi-sdk/releases/download/wasi-sdk-8/wasi-sdk_8.0_amd64.deb -o wasi-sdk_8.0_amd64.deb && \
-    dpkg -i wasi-sdk_8.0_amd64.deb
+RUN curl -sSLf https://github.com/CraneStation/wasi-sdk/releases/download/wasi-sdk-10/wasi-sdk_10.0_amd64.deb -o wasi-sdk_10.0_amd64.deb && \
+    dpkg -i wasi-sdk_10.0_amd64.deb

@@ -3,7 +3,7 @@ mod dispatcher;
 pub mod imports;
 
 pub struct ServiceDefinition {
-    pub name: syntax_pos::symbol::Symbol,
+    pub name: rustc_span::symbol::Symbol,
     pub ctor: crate::visitor::parsed_rpc::ParsedRpc,
     pub rpcs: Vec<crate::visitor::parsed_rpc::ParsedRpc>,
 }

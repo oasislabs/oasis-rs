@@ -112,8 +112,14 @@ jobs:
     steps:
       - checkout
       - run:
+          name: Appease `cargo tarpaulin`
+          command: |
+            rm rust-toolchain
+            sed -i '/\(oasis-build\|oasis-std\|tests\|examples\)/d' Cargo.toml
+      - run:
           name: Tarpaulin code coverage
-          command: docker run --security-opt seccomp=unconfined -v "${PWD}:/volume" xd009642/tarpaulin cargo tarpaulin --ciserver circle-ci --coveralls $COVERALLS_REPO_TOKEN -p bcfs -p oasis-types --ignore-tests --exclude-files oasis-std --exclude-files memchain --exclude-files oasis-build --exclude-files oasis-rpc --exclude-files blockchain-traits
+          command: |
+            docker run --security-opt seccomp=unconfined -v "${PWD}:/volume" xd009642/tarpaulin:latest-nightly cargo tarpaulin --ciserver circle-ci --coveralls $COVERALLS_REPO_TOKEN -p bcfs -p oasis-types --ignore-tests --exclude-files oasis-std --exclude-files memchain --exclude-files oasis-build --exclude-files oasis-rpc --exclude-files blockchain-traits
 
 
 workflows:

@@ -15,6 +15,10 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v2
 
+      - name: Install components
+        run: |
+          rustup component add rustc-dev
+
       - name: Build oasis-build
         run: cargo build --release -p oasis-build
 

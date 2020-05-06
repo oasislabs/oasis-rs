@@ -1,9 +1,7 @@
-use rustc::{
-    hir::{self, def_id::DefId},
-    ty::TyCtxt,
-};
+use rustc::ty::TyCtxt;
+use rustc_hir::{self, def_id::DefId};
+use rustc_span::symbol::Symbol;
 use syntax::ast;
-use syntax_pos::symbol::Symbol;
 
 pub fn is_std(crate_name: Symbol) -> bool {
     let crate_name = crate_name.as_str();
@@ -25,7 +23,7 @@ pub fn def_path(tcx: TyCtxt, did: DefId) -> (Symbol, Vec<String>) {
 }
 
 /// Returns the generic type arguments of a type path.
-pub fn get_type_args(path: &hir::Path) -> Vec<&hir::Ty> {
+pub fn get_type_args<'a>(path: &'a rustc_hir::Path) -> Vec<&'a rustc_hir::Ty<'a>> {
     path.segments
         .last()
         .and_then(|segments| segments.args.as_ref())
@@ -33,7 +31,7 @@ pub fn get_type_args(path: &hir::Path) -> Vec<&hir::Ty> {
             args.args
                 .iter()
                 .filter_map(|arg| match arg {
-                    hir::GenericArg::Type(ty) => Some(ty),
+                    rustc_hir::GenericArg::Type(ty) => Some(ty),
                     _ => None,
                 })
                 .collect()
@@ -42,15 +40,15 @@ pub fn get_type_args(path: &hir::Path) -> Vec<&hir::Ty> {
 }
 
 pub fn is_self_ref(ty: &ast::Ty) -> bool {
-    match &ty.node {
-        ast::TyKind::Rptr(_, mut_ty) => mut_ty.ty.node.is_implicit_self(),
+    match &ty.kind {
+        ast::TyKind::Rptr(_, mut_ty) => mut_ty.ty.kind.is_implicit_self(),
         _ => false,
     }
 }
 
 pub fn is_context_ref(ty: &ast::Ty) -> bool {
-    match &ty.node {
-        ast::TyKind::Rptr(_, mut_ty) => match &mut_ty.ty.node {
+    match &ty.kind {
+        ast::TyKind::Rptr(_, mut_ty) => match &mut_ty.ty.kind {
             ast::TyKind::Path(_, path) => path_ends_with(&path, &["oasis_std", "Context"]),
             _ => false,
         },
@@ -69,10 +67,10 @@ pub fn path_ends_with(path: &ast::Path, suffix: &[&'static str]) -> bool {
     true
 }
 
-pub fn make_ty(node: ast::TyKind) -> syntax::ptr::P<ast::Ty> {
+pub fn make_ty(kind: ast::TyKind) -> syntax::ptr::P<ast::Ty> {
     syntax::ptr::P(ast::Ty {
-        id: ast::DUMMY_NODE_ID,
-        span: syntax_pos::DUMMY_SP,
-        node,
+        id: syntax::node_id::DUMMY_NODE_ID,
+        span: rustc_span::DUMMY_SP,
+        kind,
     })
 }

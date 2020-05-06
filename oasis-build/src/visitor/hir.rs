@@ -4,23 +4,28 @@ use std::{
 };
 
 use rustc::{
-    hir::{
-        self,
-        def::{DefKind, Res},
-        intravisit,
-    },
+    hir::map::Map as HirMap,
     ty::{subst::SubstsRef, AdtDef, TyCtxt, TyKind, TyS},
-    util::nodemap::{FxHashMap, HirIdSet},
 };
-use syntax::source_map::Span;
-use syntax_pos::symbol::Symbol;
+use rustc_data_structures::fx::FxHashMap;
+use rustc_hir::{
+    self,
+    def::{DefKind, Res},
+    hir_id::HirIdSet,
+    intravisit,
+};
+use rustc_span::{symbol::Symbol, Span};
 
 /// Collects public functions defined in `impl #service_name`.
 pub struct AnalyzedRpcCollector<'tcx> {
     tcx: TyCtxt<'tcx>,
     service_name: Symbol,
     rpc_impls: HirIdSet,
-    rpcs: Vec<(Symbol, &'tcx hir::FnDecl, &'tcx hir::Body)>, // the collected RPC fns
+    rpcs: Vec<(
+        Symbol,
+        &'tcx rustc_hir::FnDecl<'tcx>,
+        &'tcx rustc_hir::Body<'tcx>,
+    )>, /* the collected RPC fns */
 }
 
 impl<'tcx> AnalyzedRpcCollector<'tcx> {
@@ -33,15 +38,26 @@ impl<'tcx> AnalyzedRpcCollector<'tcx> {
         }
     }
 
-    pub fn rpcs(&self) -> &[(Symbol, &'tcx hir::FnDecl, &'tcx hir::Body)] {
+    pub fn rpcs(
+        &self,
+    ) -> &[(
+        Symbol,
+        &'tcx rustc_hir::FnDecl<'tcx>,
+        &'tcx rustc_hir::Body<'tcx>,
+    )] {
         self.rpcs.as_slice()
     }
 }
 
-impl<'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx> for AnalyzedRpcCollector<'tcx> {
-    fn visit_item(&mut self, item: &'tcx hir::Item) {
-        if let hir::ItemKind::Impl(_, _, _, _, None /* `trait_ref` */, ty, _) = &item.node {
-            if let hir::TyKind::Path(hir::QPath::Resolved(_, path)) = &ty.node {
+impl<'tcx> rustc_hir::itemlikevisit::ItemLikeVisitor<'tcx> for AnalyzedRpcCollector<'tcx> {
+    fn visit_item(&mut self, item: &'tcx rustc_hir::Item) {
+        if let rustc_hir::ItemKind::Impl {
+            of_trait: None,
+            self_ty: ty,
+            ..
+        } = &item.kind
+        {
+            if let rustc_hir::TyKind::Path(rustc_hir::QPath::Resolved(_, path)) = &ty.kind {
                 if path.segments.last().unwrap().ident.name == self.service_name {
                     self.rpc_impls.insert(item.hir_id);
                 }
@@ -49,8 +65,10 @@ impl<'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx> for AnalyzedRpcCollector<'t
         }
     }
 
-    fn visit_impl_item(&mut self, impl_item: &'tcx hir::ImplItem) {
-        if let hir::ImplItemKind::Method(hir::MethodSig { decl, .. }, body_id) = &impl_item.node {
+    fn visit_impl_item(&mut self, impl_item: &'tcx rustc_hir::ImplItem<'tcx>) {
+        if let rustc_hir::ImplItemKind::Method(rustc_hir::FnSig { decl, .. }, body_id) =
+            &impl_item.kind
+        {
             if impl_item.vis.node.is_pub()
                 && self
                     .rpc_impls
@@ -62,7 +80,7 @@ impl<'tcx> hir::itemlikevisit::ItemLikeVisitor<'tcx> for AnalyzedRpcCollector<'t
         }
     }
 
-    fn visit_trait_item(&mut self, _trait_item: &'tcx hir::TraitItem) {}
+    fn visit_trait_item(&mut self, _trait_item: &'tcx rustc_hir::TraitItem) {}
 }
 
 /// Visits an RPC method's types and collects structs, unions, enums, and type aliases
@@ -86,7 +104,7 @@ impl<'tcx> DefinedTypeCollector<'tcx> {
 
     // called by `<DefinedTypeCollector as intravisit::Visitor>::visit_ty`.
     fn visit_sty(&mut self, ty: &'tcx TyS, originating_span: Span) {
-        if let TyKind::Adt(adt_def, substs) = ty.sty {
+        if let TyKind::Adt(adt_def, substs) = ty.kind {
             substs
                 .types()
                 .for_each(|ty| self.visit_sty(ty, originating_span));
@@ -117,9 +135,11 @@ impl<'tcx> DefinedTypeCollector<'tcx> {
     }
 }
 
-impl<'tcx> hir::intravisit::Visitor<'tcx> for DefinedTypeCollector<'tcx> {
-    fn visit_ty(&mut self, ty: &'tcx hir::Ty) {
-        if let hir::TyKind::Path(hir::QPath::Resolved(_, path)) = &ty.node {
+impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for DefinedTypeCollector<'tcx> {
+    type Map = HirMap<'tcx>;
+
+    fn visit_ty(&mut self, ty: &'tcx rustc_hir::Ty) {
+        if let rustc_hir::TyKind::Path(rustc_hir::QPath::Resolved(_, path)) = &ty.kind {
             if let Res::Def(kind, id) = path.res {
                 match kind {
                     DefKind::Struct | DefKind::Union | DefKind::Enum | DefKind::TyAlias => {
@@ -132,7 +152,9 @@ impl<'tcx> hir::intravisit::Visitor<'tcx> for DefinedTypeCollector<'tcx> {
         intravisit::walk_ty(self, ty);
     }
 
-    fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, 'tcx> {
+    fn nested_visit_map<'this>(
+        &'this mut self,
+    ) -> intravisit::NestedVisitorMap<'this, HirMap<'tcx>> {
         intravisit::NestedVisitorMap::None
     }
 }
@@ -160,16 +182,18 @@ impl<'tcx> EventCollector<'tcx> {
 
 // This visit could be made more robust to other traits/methods named Event/emit by actually
 // checking whether the types implement `oasis_std::exe::Event`, but this should suffice for now.
-impl<'tcx> hir::intravisit::Visitor<'tcx> for EventCollector<'tcx> {
-    fn visit_expr(&mut self, expr: &'tcx hir::Expr) {
-        let emit_arg = match &expr.node {
-            hir::ExprKind::MethodCall(path_seg, _span, args)
+impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for EventCollector<'tcx> {
+    type Map = HirMap<'tcx>;
+
+    fn visit_expr(&mut self, expr: &'tcx rustc_hir::Expr) {
+        let emit_arg = match &expr.kind {
+            rustc_hir::ExprKind::MethodCall(path_seg, _span, args)
                 if path_seg.ident.to_string() == "emit" =>
             {
                 Some(&args[0])
             }
-            hir::ExprKind::Call(func_expr, args) => match &func_expr.node {
-                hir::ExprKind::Path(hir::QPath::Resolved(_, path))
+            rustc_hir::ExprKind::Call(func_expr, args) => match &func_expr.kind {
+                rustc_hir::ExprKind::Path(rustc_hir::QPath::Resolved(_, path))
                     if path.to_string().ends_with("Event::emit") =>
                 {
                     Some(&args[0])
@@ -199,11 +223,11 @@ impl<'tcx> hir::intravisit::Visitor<'tcx> for EventCollector<'tcx> {
                     if let TyKind::Ref(
                         _,
                         TyS {
-                            sty: TyKind::Adt(adt_def, substs),
+                            kind: TyKind::Adt(adt_def, substs),
                             ..
                         },
                         _,
-                    ) = emit_arg_ty.sty
+                    ) = emit_arg_ty.kind
                     {
                         insert_def_ty!(adt_def, substs)
                     }
@@ -213,8 +237,10 @@ impl<'tcx> hir::intravisit::Visitor<'tcx> for EventCollector<'tcx> {
         intravisit::walk_expr(self, expr);
     }
 
-    fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, 'tcx> {
-        intravisit::NestedVisitorMap::OnlyBodies(self.tcx.hir())
+    fn nested_visit_map<'this>(
+        &'this mut self,
+    ) -> intravisit::NestedVisitorMap<'this, HirMap<'tcx>> {
+        intravisit::NestedVisitorMap::OnlyBodies(&self.tcx.hir())
     }
 }
 

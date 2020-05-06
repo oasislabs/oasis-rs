@@ -1,9 +1,10 @@
 use std::collections::BTreeSet; // BTree for reproducibility
 
-use rustc::{hir::intravisit::Visitor, util::nodemap::FxHashMap};
-use rustc_data_structures::sync::Once;
+use rustc_data_structures::{fx::FxHashMap, sync::Once};
 use rustc_driver::Compilation;
-use syntax_pos::symbol::Symbol;
+use rustc_hir::intravisit::Visitor;
+use rustc_interface::{interface::Compiler, Queries};
+use rustc_span::symbol::Symbol;
 
 use crate::visitor::{
     hir::{AnalyzedRpcCollector, DefinedTypeCollector, EventCollector},
@@ -63,7 +64,7 @@ macro_rules! ret_err {
 }
 
 impl rustc_driver::Callbacks for BuildPlugin {
-    fn after_parsing(&mut self, compiler: &rustc_interface::interface::Compiler) -> Compilation {
+    fn after_parsing(&mut self, compiler: &Compiler, queries: &Queries) -> Compilation {
         let gen_dir = compiler
             .output_dir()
             .as_ref()
@@ -73,14 +74,14 @@ impl rustc_driver::Callbacks for BuildPlugin {
         std::fs::create_dir_all(&gen_dir)
             .unwrap_or_else(|_| panic!("Could not create dir: `{}`", gen_dir.display()));
 
-        let crate_name_query = compiler
+        let crate_name_query = queries
             .crate_name()
             .expect("Could not determine crate name");
-        let crate_name = crate_name_query.take();
-        crate_name_query.give(crate_name.clone());
+        let crate_name = crate_name_query.peek().to_string();
+        // crate_name_query.give(crate_name.clone());
 
         let sess = compiler.session();
-        let mut parse = compiler
+        let mut parse = queries
             .parse()
             .expect("`after_parsing` is only called after parsing")
             .peek_mut();
@@ -147,7 +148,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
             );
             ret_err!();
         }
-        let ctor = ctors.into_iter().nth(0).unwrap();
+        let ctor = ctors.into_iter().next().unwrap();
 
         let default_fn_spans = rpcs
             .iter()
@@ -183,9 +184,13 @@ impl rustc_driver::Callbacks for BuildPlugin {
         Compilation::Continue
     }
 
-    fn after_analysis(&mut self, compiler: &rustc_interface::interface::Compiler) -> Compilation {
+    fn after_analysis<'tcx>(
+        &mut self,
+        compiler: &Compiler,
+        queries: &'tcx Queries<'tcx>,
+    ) -> Compilation {
         let sess = compiler.session();
-        let mut global_ctxt = rustc_driver::abort_on_err(compiler.global_ctxt(), sess).peek_mut();
+        let mut global_ctxt = rustc_driver::abort_on_err(queries.global_ctxt(), sess).peek_mut();
 
         let service_name = match self.service_name.try_get() {
             Some(service_name) => service_name,
@@ -218,7 +223,7 @@ impl rustc_driver::Callbacks for BuildPlugin {
                     local_def_tys.insert(def_ty);
                 } else {
                     let crate_name = tcx.original_crate_name(def_ty.adt_def.did.krate);
-                    match self.imports.get(crate_name.as_str().get()) {
+                    match self.imports.get(&*crate_name.as_str()) {
                         Some(version) => {
                             imports.insert((crate_name, version.to_string()));
                         }

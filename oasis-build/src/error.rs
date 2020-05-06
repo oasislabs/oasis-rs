@@ -1,4 +1,5 @@
-use syntax_pos::{MultiSpan, Span};
+use rustc_ast_pretty::pprust;
+use rustc_span::{MultiSpan, Span};
 
 // NB: `failure` won't work on these errors because `Span` isn't `Send`.
 
@@ -39,14 +40,11 @@ impl std::fmt::Display for RpcError {
         match self {
             BadArgPat(..) => write!(f, "Argument name must be a valid identifier."),
             BadStruct(..) => write!(f, "Service state definition must have named fields."),
-            BadCtorReturn { self_ty, .. } => {
-                let self_ty_str = format!("{:?}", self_ty);
-                write!(
-                    f,
-                    "Service constructor must return `Self` (aka `{}`)",
-                    &self_ty_str["type(".len()..(self_ty_str.len() - 1)]
-                )
-            }
+            BadCtorReturn { self_ty, .. } => write!(
+                f,
+                "Service constructor must return `Self` (aka `{}`)",
+                pprust::ty_to_string(self_ty)
+            ),
             CtorIsDefault(..) => write!(f, "Service constructor cannot be the default function."),
             DefaultFnHasArg(..) => {
                 write!(f, "Default function cannot take arguments after `Context`.")

@@ -129,7 +129,7 @@ fn static_account() {
         giga(2),
     );
 
-    let code2 = "\0asm not wasm 2".as_bytes();
+    let code2 = b"\0asm not wasm 2".as_ref();
     assert_eq!(bc.last_block().code_at(&ADDR_2).unwrap(), code2);
 
     let common_key = b"common_key".as_ref();
